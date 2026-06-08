@@ -188,16 +188,16 @@ dataplane:
 When you enable gRPC TLS, the data plane's `xdsTLS.domainName` must match the SAN in the control plane's certificate. A mismatch causes the data plane to reject the connection and fail to start.
 :::
 
-## Production values file
+## Production configuration
 
-The chart includes a `production-values.yaml` that hardens the deployment for production use. It enables TLS, sets resource limits appropriate for production workloads, and locks down security contexts:
+See the [Production Deployment guide](/en/installation/production) for a complete checklist of production-ready settings — resource limits, replica counts, TLS, anti-affinity, PDBs, and more. The settings outlined there should be assembled into a custom values file and passed to Helm:
 
 ```bash
 helm install nantian-gw nantian-gw/nantian-gw \
-  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml
+  -f my-production.yaml
 ```
 
-The production file sets:
+Key production defaults:
 
 - `runAsNonRoot: true` with user/group 65532 for both planes
 - `readOnlyRootFilesystem: true` on all containers
@@ -207,7 +207,7 @@ The production file sets:
 - JSON-format structured logging with `nonBlocking: true`
 - Access logging enabled with a detailed format string
 
-Review the file before deploying. You'll need to update the image registry, tag, and pull secrets to match your environment.
+When building your production values file, remember to configure the image registry, tag, and pull secrets to match your environment.
 
 ## Upgrading
 

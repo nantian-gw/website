@@ -31,12 +31,7 @@ helm show values nantian-gw/nantian-gw
 ```
 
 :::tip[Production configuration]
-For production deployments, reference the included `production-values.yaml` as a starting point. This file enables TLS, configures resource limits appropriate for production workloads, and sets the data plane to connect to the control plane over HTTPS.
-
-```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml
-```
+For production deployments, see the [Production Deployment guide](/en/installation/production) for a complete checklist — resource limits, TLS, replica counts, anti-affinity, and more.
 :::
 
 ## Step 2: Verify the installation

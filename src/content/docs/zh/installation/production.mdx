@@ -4,7 +4,7 @@ title: 生产环境部署
 
 把 Nantian Gateway 跑在生产环境里，意味着要把默认值从"开发友好"加固到"扛得住真实流量"的水平：流量尖峰、节点故障、邻居干扰、偶尔的配置错误把 Pod 搞挂等等。这篇指南列了一个清单，在把网关暴露给线上流量之前，把这些项都过一遍。
 
-Helm chart 自带了一份 `production-values.yaml`，覆盖了清单里的大部分项。把它当起点，然后叠上你环境专属的覆盖值。
+把本指南中的配置项汇总到一个自定义 values 文件（比如 `my-production.yaml`），然后叠加在 chart 默认值之上即可。
 
 ## 生产环境检查清单
 
@@ -43,7 +43,7 @@ dataplane:
 ```
 
 :::tip[数据面不设 CPU 上限]
-生产 values 文件特意不给数据面设 CPU 限制。这样流量尖峰时数据面能 burst 吃满节点上可用的 CPU。内存限制是硬上限，防止一个跑飞的代理吞掉节点内存。
+生产配置特意不给数据面设 CPU 限制。这样流量尖峰时数据面能 burst 吃满节点上可用的 CPU。内存限制是硬上限，防止一个跑飞的代理吞掉节点内存。
 :::
 
 ### 2. 副本数
@@ -282,13 +282,13 @@ dataplane:
     tag: "latest"
 ```
 
-## 直接上生产
+## 部署
 
-用项目自带的 `production-values.yaml`，通过 GitHub 原始地址直接引用：
+把上面这些配置项汇总到一个 values 文件中，作为 Helm 的输入：
 
 ```bash
 helm install nantian-gw nantian-gw/nantian-gw \
-  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml \
+  -f my-production.yaml \
   -n nantian-gw
 ```
 
@@ -296,7 +296,7 @@ helm install nantian-gw nantian-gw/nantian-gw \
 
 ```bash
 helm install nantian-gw nantian-gw/nantian-gw \
-  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml \
+  -f my-production.yaml \
   -f my-cluster-values.yaml \
   -n nantian-gw
 ```

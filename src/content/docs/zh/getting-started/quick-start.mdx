@@ -31,12 +31,7 @@ helm show values nantian-gw/nantian-gw
 ```
 
 :::tip[生产环境配置]
-生产部署请参考项目自带的 `production-values.yaml` 作为起点。该文件启用了 TLS，配置了适用于生产负载的资源限制，并将数据面设置为通过 HTTPS 连接控制面。
-
-```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml
-```
+生产部署请参考[生产环境部署指南](/zh/installation/production)获取完整清单 —— 资源限制、TLS、副本数、反亲和等。
 :::
 
 ## 第二步：验证安装

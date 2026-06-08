@@ -4,7 +4,7 @@ title: Production Deployment
 
 Running Nantian Gateway in production means hardening the defaults against real-world conditions: traffic spikes, node failures, noisy neighbors, and the occasional misconfiguration that takes down a pod. This guide walks through the checklist you should complete before exposing the gateway to live traffic.
 
-The Helm chart ships with a `production-values.yaml` that covers most of these items. Use it as a starting point, then layer your environment-specific overrides on top.
+Put the settings from this guide into a custom values file (e.g. `my-production.yaml`) and layer it on top of the default chart values.
 
 ## Production checklist
 
@@ -43,7 +43,7 @@ dataplane:
 ```
 
 :::tip[No CPU limit on data plane]
-The production values file intentionally omits a CPU limit on the data plane. This lets the data plane burst to use available CPU on the node during traffic spikes. The memory limit is the hard cap that prevents a runaway proxy from exhausting node memory.
+The production settings intentionally omit a CPU limit on the data plane. This lets the data plane burst to use available CPU on the node during traffic spikes. The memory limit is the hard cap that prevents a runaway proxy from exhausting node memory.
 :::
 
 ### 2. Replica counts
@@ -245,11 +245,10 @@ Once you've assembled your values file:
 
 ```bash
 helm install nantian-gw nantian-gw/nantian-gw \
-  -f production-values.yaml \
-  -f my-environment.yaml
+  -f my-production.yaml
 ```
 
-Helm merges the files in order, with later files overriding earlier ones. This lets you keep `production-values.yaml` as the shared baseline and `my-environment.yaml` for cluster-specific settings.
+Helm merges the files in order, with later files overriding earlier ones.
 
 ## Post-deployment verification
 
