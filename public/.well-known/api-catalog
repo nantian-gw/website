@@ -1,0 +1,55 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://nantian.dev/",
+      "service-doc": [
+        {
+          "href": "https://nantian.dev/en/overview/",
+          "type": "text/html"
+        }
+      ],
+      "service-desc": [
+        {
+          "href": "https://nantian.dev/llms.txt",
+          "type": "text/plain"
+        }
+      ]
+    },
+    {
+      "anchor": "https://charts.nantian.dev/",
+      "service-desc": [
+        {
+          "href": "https://charts.nantian.dev/index.yaml",
+          "type": "application/yaml"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://nantian.dev/en/installation/helm/",
+          "type": "text/html"
+        }
+      ]
+    },
+    {
+      "anchor": "https://nantian.dev/en/configuration/controlplane/",
+      "service-doc": [
+        {
+          "href": "https://nantian.dev/en/configuration/controlplane/",
+          "type": "text/html"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://nantian.dev/en/configuration/controlplane/#health",
+          "type": "text/html"
+        }
+      ],
+      "service-desc": [
+        {
+          "href": "https://nantian.dev/en/operations/",
+          "type": "text/html"
+        }
+      ]
+    }
+  ]
+}
