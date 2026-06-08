@@ -80,7 +80,7 @@ images:
     newTag: latest
   - name: nantian-dataplane
     newName: ghcr.io/nantian-gw/dataplane
-    newTag: v0.1.0
+    newTag: latest
 ```
 
 `images` 字段是 Kustomize 内置的一项能力，不用 patch 就能把镜像名和 tag 替换掉。如果你的镜像是从公开仓库拉的，把 `newName` 删掉就行。
