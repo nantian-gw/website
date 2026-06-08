@@ -1,3 +1,7 @@
 /
   Link: </llms.txt>; rel="describedby"
   Link: </sitemap-index.xml>; rel="sitemap"
+
+/.well-known/http-message-signatures-directory
+  Content-Type: application/http-message-signatures-directory+json
+  Access-Control-Allow-Origin: *
