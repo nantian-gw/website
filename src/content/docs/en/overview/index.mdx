@@ -1,0 +1,158 @@
+---
+title: What is Nantian Gateway
+---
+
+Nantian Gateway is a [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) implementation that provides high-performance ingress, traffic management, and API gateway capabilities for cloud-native workloads. It targets the Gateway API v1.5.1 specification with 55 declared supported features.
+
+The project stands out from other gateway implementations through two architectural choices: a **split-plane architecture** where a Go control plane communicates with Rust data planes over gRPC bidirectional xDS streams, and deep **AI gateway capabilities** built in as a first-class concern rather than an afterthought.
+
+## How It Works
+
+At a high level, Nantian Gateway watches Kubernetes resources like `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, and `TLSRoute`. The Go control plane translates these into an internal representation, then streams configuration snapshots to Rust data plane proxies over gRPC/xDS connections.
+
+```text
+Kubernetes Resources → Go Control Plane → gRPC/xDS → Rust Data Plane → Backend Services
+```
+
+The data plane, written in Rust, handles the actual request path: TLS termination, HTTP routing, header manipulation, traffic splitting, rate limiting, and so on. This split between a fast-evolving control plane and a performance-critical data plane lets each component play to its language's strengths.
+
+## Key Concepts
+
+### Gateway API Native
+
+Every routing decision flows through standard Gateway API resources. You configure `HTTPRoutes` the same way you would with any other compliant implementation, which means lower switching costs and a familiar API surface.
+
+### Split-Plane Communication
+
+The control plane doesn't embed the proxy. Instead, it pushes configuration over gRPC bidirectional streams using the xDS protocol. This keeps the data plane lightweight, lets you scale the two planes independently, and makes operational boundaries clearer.
+
+### Custom Resources for AI and Wasm
+
+Nantian Gateway ships with four custom CRDs that extend the Gateway API:
+
+- [**AIService**](../api-reference/crds/) - manages connections to AI model providers including authentication, model routing, and provider configuration
+- [**TokenPolicy**](../api-reference/crds/) - enforces token-based rate limits and quotas on AI API usage
+- [**WasmPlugin**](../api-reference/crds/) - binds Wasm-based extensions at the listener or route level for custom request/response processing
+- [**BackendLBPolicy**](../api-reference/crds/) - configures backend load balancing and session persistence
+
+These CRDs let you manage AI traffic patterns and custom extensions using the same Kubernetes-native workflows you already use for routing.
+
+### Built-in AI Gateway
+
+The Rust data plane includes an AI gateway module that handles protocol adaptation for multiple AI provider formats: OpenAI, Anthropic, and Ollama. It provides token counting, API key management, rate limiting, PII masking, and A/B testing for model deployments, all from within the proxy itself.
+
+### Wasm Runtime
+
+A [wasmtime](https://wasmtime.dev/)-based plugin engine runs at the data plane level, letting you inject custom logic at request and response lifecycle hooks. Plugins are distributed as standard `.wasm` modules and managed through the `WasmPlugin` CRD.
+
+## Core Features
+
+Nantian Gateway's feature set spans routing, traffic management, security, observability, and extensibility.
+
+### Routing
+
+- **HTTP routing** with path-based, header-based, query-param, and method-based matching
+- **gRPC routing** with named route rules for method-level matching
+- **TCP and UDP routing** for non-HTTP workloads
+- **TLS passthrough** and **TLS termination** with mode-mixed support
+- **Host rewrite** and **path rewrite/redirect**
+- **Scheme, port, and status-code redirects** (301, 302, 303, 307, 308)
+
+### Traffic Management
+
+- **Request mirroring** to multiple backends with percentage-based mirroring
+- **Backend timeouts** (request and backend-level)
+- **CORS** configuration at the route level
+- **Header modification** for both requests and responses
+- **Backend protocol support** for HTTP/1.1, HTTP/2 (h2c), gRPC, and WebSocket
+
+### Security
+
+- **Backend TLS policy** with SAN validation and client certificates
+- **Frontend TLS** with client certificate validation and insecure fallback
+- **ReferenceGrant** for cross-namespace backend references
+- **Listener isolation** to prevent cross-listener request leakage
+
+### Service Mesh
+
+Nantian Gateway supports Gateway API Mesh resources, including:
+
+- Consumer routes with cluster-IP matching
+- Mesh-level HTTP route operations (header modification, path rewrite, redirects)
+- Sidecar-free mesh configuration through the Gateway API mesh model
+
+### Observability
+
+- **Prometheus metrics** exposed by both control plane and data plane
+- **Grafana dashboard** templates for cluster-wide visibility
+- **Admin API** for runtime diagnostics and configuration inspection
+- **Health checks and readiness probes** for Kubernetes-native liveness detection
+
+### Extensibility
+
+- **Wasm plugin system** for custom request/response hooks
+- **AI gateway** module for multi-provider AI traffic management
+- **Extension filters** for custom Gateway API filter integrations
+
+## Architecture at a Glance
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Kubernetes Cluster                                   │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
+│  │ Gateway  │  │ HTTPRoute│  │ EndpointSlice     │  │
+│  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
+│       └──────────────┼───────────────┘               │
+│                      │ watch                         │
+│              ┌───────┴────────┐                      │
+│              │  Control Plane  │                     │
+│              │  (Go)           │                     │
+│              │  Translator     │                     │
+│              │  xDS Server     │                     │
+│              └───────┬────────┘                      │
+│                      │ gRPC/xDS                      │
+│              ┌───────┴────────┐                      │
+│              │  Data Plane     │                     │
+│              │  (Rust)         │                     │
+│              │  HTTP / Stream  │                     │
+│              │  Admin API      │                     │
+│              └────────────────┘                      │
+└──────────────────────────────────────────────────────┘
+```
+
+The control plane contains four core components:
+
+| Component | Purpose |
+|-----------|---------|
+| **Translator** | Converts Gateway API resources into the internal IR |
+| **xDS Server** | Serves configuration snapshots to data planes |
+| **Status Manager** | Updates Gateway and Route status conditions |
+| **Admin API** | Exposes runtime state for debugging and inspection |
+
+The data plane is organized as a Rust workspace with twelve crates covering HTTP proxying, stream proxying (TCP/UDP/TLS), xDS client communication, AI gateway features, Wasm plugin hosting, and observability.
+
+## Deployment
+
+Nantian Gateway ships production-ready deployment assets:
+
+- **Helm chart** for templated, parameterized installation
+- **Kustomize overlays** for Kind, production, and kind-hostnetwork profiles
+- **High availability** configuration with Pod Disruption Budgets and anti-affinity rules
+- **Prometheus + Grafana** dashboards for cluster monitoring
+- **HPA addon** for automatic data plane scaling
+
+See the [Installation Overview](../installation/) for detailed instructions.
+
+## Project Status
+
+Nantian Gateway is suitable for continued Gateway API implementation work, internal evaluation, controlled trials, and contributor review. It has a working control plane, data plane, admin interfaces, Kind smoke tests, conformance workflow, production overlay, and open source governance materials.
+
+The project follows standard open source practices: Apache 2.0 license, maintainer governance model, semantic versioning, security disclosure policy, and a code of conduct.
+
+## Next Steps
+
+- [Quick Start (5 minutes)](../getting-started/quick-start/)
+- [Comparison with other gateways](../comparison/)
+- [Real-world use cases](../use-cases/)
+- [Architecture deep dive](../architecture/)
+- [GitHub repository](https://github.com/nantian-gw/gateway)

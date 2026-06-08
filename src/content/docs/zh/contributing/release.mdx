@@ -1,0 +1,217 @@
+---
+title: 发布流程
+---
+
+Nantian Gateway 采用语义化版本控制，通过 GitHub Releases 分发二进制和容器镜像，通过 Helm Chart 仓库分发部署包。本页说明完整的发布流程，供维护者参考。
+
+## 版本策略
+
+### 语义化版本
+
+Nantian Gateway 遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/) 规范。版本号格式为 `MAJOR.MINOR.PATCH`：
+
+| 版本类型 | 变更内容 | 示例 |
+|---------|---------|------|
+| PATCH（修订） | Bug 修复、安全补丁，不影响 API 兼容性 | `v1.2.3` → `v1.2.4` |
+| MINOR（次要） | 新功能，向后兼容的 API 扩展 | `v1.2.0` → `v1.3.0` |
+| MAJOR（主要） | 不兼容的 API 变更，重大架构调整 | `v1.x.x` → `v2.0.0` |
+### 版本号使用场景
+
+- **稳定版**：`v1.2.3` — 推荐生产环境使用
+- **预发布版**：`v1.3.0-alpha.1`、`v1.3.0-beta.1`、`v1.3.0-rc.1` — 功能预览和测试
+- **开发版**：`v0.0.0-dev` — 从 `main` 分支构建的版本
+
+### 支持策略
+
+Nantian Gateway 维护最近两个 MINOR 版本的安全和关键 Bug 修复：
+
+| 版本 | 状态 | 支持截止 |
+|------|------|---------|
+| `v1.3.x` | 当前主要版本 | 下一个 MINOR 发布后 3 个月 |
+| `v1.2.x` | 维护中 | 下一个 MINOR 发布后 3 个月 |
+| `v1.1.x` | 生命周期结束 | 已停止支持 |
+## 发布产物
+
+每次发布生成以下产物：
+
+| 产物 | 说明 | 格式 |
+|------|------|------|
+| 控制面二进制 | Go 编译的静态二进制 | `tar.gz`（Linux amd64/arm64） |
+| 数据面二进制 | Rust 编译的静态二进制 | `tar.gz`（Linux amd64/arm64） |
+| 控制面容器镜像 | 基于 distroless 的 Docker 镜像 | `ghcr.io/nantian-gw/controlplane` |
+| 数据面容器镜像 | 基于 distroless 的 Docker 镜像 | `ghcr.io/nantian-gw/dataplane` |
+| 管理界面镜像 | Next.js 编译的静态站点 | `ghcr.io/nantian-gw/dashboard` |
+| Helm Chart | 部署包 | `tgz` 格式 |
+| 源码归档 | 完整的源码 tar.gz | `tar.gz` |
+## 发布流程
+
+### 1. 准备阶段
+
+```bash
+# 确保在 main 分支且是最新代码
+git checkout main
+git pull upstream main
+
+# 确认所有 CI 检查通过
+# 查看 GitHub Actions: https://github.com/nantian-gw/gateway/actions
+
+# 确认合规性测试通过
+make test-conformance
+```
+
+### 2. 创建发布分支
+
+```bash
+# 创建发布分支
+git checkout -b release/v1.3.0
+
+# 更新版本号
+# 编辑 gateway/VERSION 文件，写入 1.3.0
+echo "1.3.0" > gateway/VERSION
+
+# 更新 Helm Chart 版本
+# 编辑 gateway/deploy/helm/nantian-gw/Chart.yaml
+# 修改 version 和 appVersion 字段
+```
+
+### 3. 更新变更日志
+
+在 `CHANGELOG.md` 中添加新版本的变更记录。使用以下格式：
+
+```markdown
+## [1.3.0] - 2024-06-15
+
+### 新增
+- feat(controlplane): 支持 HTTPRoute 后端协议选择
+- feat(dataplane): 添加 AI 提供方 Ollama 支持
+- feat(crd): 新增 BackendLBPolicy CRD
+
+### 修复
+- fix(dataplane): 修复 TLS 透传时 SNI 匹配问题
+- fix(controlplane): 修复多监听器 Gateway 的端口冲突
+
+### 变更
+- refactor(dataplane): 重构 HTTP 路由匹配引擎，性能提升 15%
+
+### 废弃
+- deprecation(proto): SecretRef 字段将在 v2.0.0 中移除
+
+### 安全
+- security: 修复 gRPC 服务中的输入验证缺陷 (CVE-2024-XXXX)
+```
+
+### 4. 提交并创建标签
+
+```bash
+# 提交版本变更
+git add gateway/VERSION gateway/deploy/helm/ CHANGELOG.md
+git commit -m "chore(release): prepare v1.3.0"
+
+# 推送到 GitHub
+git push origin release/v1.3.0
+
+# 创建 PR 合并到 main
+# 在 GitHub 上创建 Pull Request，标题为 "Release v1.3.0"
+
+# 合并后，在 main 分支上创建标签
+git checkout main
+git pull upstream main
+git tag -a v1.3.0 -m "Release v1.3.0"
+git push upstream v1.3.0
+```
+
+### 5. GitHub Release
+
+标签推送后，GitHub Actions 自动触发发布流程：
+
+1. 编译控制面和数据面二进制
+2. 构建并推送容器镜像到 `ghcr.io`
+3. 打包 Helm Chart
+4. 创建 GitHub Release 并上传所有产物
+
+发布完成后，在 GitHub Release 页面补充发布说明，包括变更日志和升级注意事项。
+
+### 6. 发布 Helm Chart
+
+```bash
+# 打包 Helm Chart
+cd gateway/deploy/helm
+helm package nantian-gw
+
+# 更新 Helm 仓库索引
+helm repo index . --url https://nantian-gw.github.io/charts
+
+# 推送到 Helm Chart 仓库
+git add .
+git commit -m "chore(chart): release v1.3.0"
+git push
+```
+
+## 预发布版本
+
+对于需要社区测试的功能，可以发布预发布版本：
+
+```bash
+# Alpha 版本 — 功能可能不完整
+git tag -a v1.4.0-alpha.1 -m "Pre-release v1.4.0-alpha.1"
+
+# Beta 版本 — 功能基本完整，需要测试
+git tag -a v1.4.0-beta.1 -m "Pre-release v1.4.0-beta.1"
+
+# Release Candidate — 候选发布版本
+git tag -a v1.4.0-rc.1 -m "Pre-release v1.4.0-rc.1"
+```
+
+预发布版本在 GitHub 上标记为 "Pre-release"，不会出现在默认的"Latest Release"中。
+
+## 补丁发布
+
+对于需要紧急修复的 Bug，可以从对应的发布分支创建补丁版本：
+
+```bash
+# 从发布分支创建
+git checkout release/v1.2
+git checkout -b fix/critical-bug
+
+# 修复 Bug 后 cherry-pick 到 main
+git checkout main
+git cherry-pick <commit-hash>
+
+# 创建补丁标签
+git tag -a v1.2.4 -m "Patch release v1.2.4"
+```
+
+## 发布检查清单
+
+发布前确认以下事项：
+
+- [ ] 所有 CI 检查通过（Go test、Rust test、lint、e2e）
+- [ ] Gateway API 合规性测试通过
+- [ ] 变更日志已更新，包含所有面向用户的变更
+- [ ] 版本号已更新（VERSION、Chart.yaml）
+- [ ] 容器镜像已推送到 ghcr.io
+- [ ] Helm Chart 已打包并推送
+- [ ] 文档站对应版本的文档已更新
+- [ ] 升级指南已更新（如有破坏性变更）
+- [ ] 发布说明已撰写，包含升级注意事项
+
+## 升级兼容性
+
+对于 MINOR 和 MAJOR 版本，需要提供升级指南，说明：
+
+- 删除或废弃的 API 字段
+- 行为变更（如默认值变化）
+- 新增的必需配置项
+- 数据迁移步骤（如有）
+
+升级指南放在 `docs/upgrade/` 目录下，以版本号命名，如 `docs/upgrade/v1.2-to-v1.3.md`。
+
+:::caution[破坏性变更]
+MAJOR 版本中的破坏性变更必须在发布前在 `CHANGELOG.md` 中明确标注，并在升级指南中提供详细的迁移步骤。建议在正式发布前至少提供一个 RC 版本供社区测试。
+:::
+
+## 下一步
+
+- 查看 [测试指南](/zh/contributing/testing) 了解 CI 流水线
+- 查看 [开发环境](/zh/contributing/development) 了解本地编译构建
+- 查看 [贡献概述](/zh/contributing/) 了解完整的贡献流程

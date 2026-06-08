@@ -1,0 +1,325 @@
+---
+title: Gateway API 资源
+---
+
+Nantian Gateway 实现了 [Kubernetes Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) 规范，声明支持 55 个特性。本页列出所有支持的资源类型、核心字段和特性覆盖情况。
+
+## 资源清单
+
+| 资源 | API 版本 | 用途 |
+|------|---------|------|
+| `GatewayClass` | `gateway.networking.k8s.io/v1` | 定义网关实现类型，由控制面认领 |
+| `Gateway` | `gateway.networking.k8s.io/v1` | 定义监听器，配置端口、协议和 TLS |
+| `HTTPRoute` | `gateway.networking.k8s.io/v1` | HTTP 和 HTTPS 流量路由 |
+| `GRPCRoute` | `gateway.networking.k8s.io/v1` | gRPC 流量路由，支持方法级匹配 |
+| `TCPRoute` | `gateway.networking.k8s.io/v1alpha2` | TCP 流量路由 |
+| `UDPRoute` | `gateway.networking.k8s.io/v1alpha2` | UDP 流量路由 |
+| `TLSRoute` | `gateway.networking.k8s.io/v1alpha2` | TLS 透传路由 |
+| `BackendTLSPolicy` | `gateway.networking.k8s.io/v1alpha3` | 后端 TLS 验证策略 |
+| `ReferenceGrant` | `gateway.networking.k8s.io/v1beta1` | 跨命名空间引用授权 |
+## GatewayClass
+
+`GatewayClass` 是集群级别的资源，定义网关的实现类型。Nantian Gateway 的控制面会监听并认领 `spec.controllerName` 为 `gateway.networking.k8s.io/nantian-gw` 的 GatewayClass。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nantian-gw
+spec:
+  controllerName: gateway.networking.k8s.io/nantian-gw
+```
+
+一旦 `GatewayClass` 被控制面认领，`status.conditions` 中会显示 `Accepted=True`，表示该 GatewayClass 已就绪，引用它的 `Gateway` 资源可以被处理。
+
+## Gateway
+
+`Gateway` 定义一组监听器，每个监听器指定端口、协议和可选的 TLS 配置。路由资源通过 `parentRefs` 字段绑定到特定的 `Gateway` 和监听器上。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: example-gateway
+  namespace: default
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.example.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: example-tls
+      allowedRoutes:
+        namespaces:
+          from: All
+```
+
+### 支持的监听器协议
+
+| 协议 | 说明 |
+|------|------|
+| `HTTP` | HTTP/1.1 和 HTTP/2（h2c） |
+| `HTTPS` | TLS 终结 + HTTP/1.1 和 HTTP/2 |
+| `TLS` | TLS 透传模式 |
+| `TCP` | TCP 流代理 |
+| `UDP` | UDP 流代理 |
+### 支持的 TLS 模式
+
+| 模式 | 说明 |
+|------|------|
+| `Terminate` | 在网关层终结 TLS，使用证书引用中的密钥 |
+| `Passthrough` | TLS 流量透传到后端，网关不解密 |
+## HTTPRoute
+
+`HTTPRoute` 是使用最频繁的路由资源，负责 HTTP 和 HTTPS 流量的路由决策。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: example-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: example-gateway
+  hostnames:
+    - "api.example.com"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1
+          headers:
+            - name: x-version
+              value: v2
+          method: GET
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            add:
+              - name: x-gateway
+                value: nantian-gw
+        - type: URLRewrite
+          urlRewrite:
+            hostname: internal.example.com
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /api
+      backendRefs:
+        - name: backend-v1
+          port: 8080
+          weight: 80
+        - name: backend-v2
+          port: 8080
+          weight: 20
+      timeouts:
+        request: 30s
+        backendRequest: 10s
+```
+
+### 支持的路由匹配
+
+| 匹配类型 | 说明 |
+|---------|------|
+| `path` | 路径匹配，支持 `Exact`、`PathPrefix`、`RegularExpression` |
+| `headers` | 请求头匹配，支持 `Exact`、`RegularExpression` |
+| `queryParams` | 查询参数匹配，支持 `Exact`、`RegularExpression` |
+| `method` | HTTP 方法匹配（GET、POST、PUT、DELETE 等） |
+### 支持的过滤器
+
+| 过滤器 | 说明 |
+|--------|------|
+| `RequestHeaderModifier` | 修改请求头（添加、设置、删除） |
+| `ResponseHeaderModifier` | 修改响应头（添加、设置、删除） |
+| `URLRewrite` | URL 重写，支持 hostname 和 path 重写 |
+| `RequestRedirect` | 请求重定向，支持 301、302、303、307、308 状态码 |
+| `RequestMirror` | 请求镜像，按百分比将请求复制到其他后端 |
+| `ExtensionRef` | 自定义扩展过滤器，可引用 Wasm 插件等 |
+### 支持的后端协议
+
+| 协议 | 说明 |
+|------|------|
+| `HTTP/1.1` | 标准 HTTP |
+| `HTTP/2` (h2c) | 明文 HTTP/2 |
+| `gRPC` | gRPC over HTTP/2 |
+| `WebSocket` | WebSocket 升级 |
+## GRPCRoute
+
+`GRPCRoute` 提供 gRPC 流量的精确路由，支持服务名和方法名的匹配。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-example
+  namespace: default
+spec:
+  parentRefs:
+    - name: example-gateway
+  hostnames:
+    - "grpc.example.com"
+  rules:
+    - matches:
+        - method:
+            service: "example.v1.UserService"
+            method: "GetUser"
+      backendRefs:
+        - name: user-service
+          port: 50051
+    - matches:
+        - method:
+            service: "example.v1.OrderService"
+      backendRefs:
+        - name: order-service
+          port: 50051
+```
+
+### 支持的 gRPC 匹配
+
+| 匹配类型 | 说明 |
+|---------|------|
+| `service` | 精确匹配 gRPC 服务名 |
+| `method` | 精确匹配 gRPC 方法名 |
+| `headers` | 请求头匹配（gRPC metadata） |
+## TCPRoute 和 UDPRoute
+
+`TCPRoute` 和 `UDPRoute` 处理非 HTTP 的流式流量，匹配规则基于端口号。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: tcp-example
+  namespace: default
+spec:
+  parentRefs:
+    - name: example-gateway
+  rules:
+    - backendRefs:
+        - name: tcp-backend
+          port: 9090
+```
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: udp-example
+  namespace: default
+spec:
+  parentRefs:
+    - name: example-gateway
+  rules:
+    - backendRefs:
+        - name: udp-backend
+          port: 5353
+```
+
+## TLSRoute
+
+`TLSRoute` 处理 TLS 透传流量，基于 SNI 主机名路由。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: tls-example
+  namespace: default
+spec:
+  parentRefs:
+    - name: example-gateway
+  hostnames:
+    - "tls.example.com"
+  rules:
+    - backendRefs:
+        - name: tls-backend
+          port: 9443
+```
+
+## BackendTLSPolicy
+
+`BackendTLSPolicy` 定义网关到后端服务的 TLS 连接策略，包括证书验证、SAN 校验和 TLS 版本限制。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+  namespace: default
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: secure-backend
+  validation:
+    hostname: secure-backend.example.com
+    caCertificateRefs:
+      - name: backend-ca
+        group: ""
+        kind: ConfigMap
+    wellKnownCACertificates: "System"
+```
+
+## 特性支持矩阵
+
+Nantian Gateway 声明支持 Gateway API v1.5.1 规范中的 55 个特性。以下按类别列出关键特性：
+
+### 核心特性
+
+| 特性 | 状态 |
+|------|------|
+| GatewayClass | 支持 |
+| Gateway | 支持 |
+| HTTPRoute | 支持 |
+| ReferenceGrant | 支持 |
+### 扩展特性
+
+| 特性 | 状态 |
+|------|------|
+| HTTPRouteQueryParamMatch | 支持 |
+| HTTPRouteMethodMatch | 支持 |
+| HTTPRouteRequestMirror | 支持 |
+| HTTPRouteRequestTimeout | 支持 |
+| HTTPRouteBackendTimeout | 支持 |
+| HTTPRouteParentRefPort | 支持 |
+| HTTPRouteHostRewrite | 支持 |
+| HTTPRoutePathRewrite | 支持 |
+| HTTPRouteRequestRedirect | 支持 |
+| HTTPRouteResponseHeaderModification | 支持 |
+| HTTPRouteBackendProtocolH2C | 支持 |
+| HTTPRouteBackendProtocolWebSocket | 支持 |
+| GRPCRoute | 支持 |
+| GRPCRouteMethodMatch | 支持 |
+| TCPRoute | 支持 |
+| UDPRoute | 支持 |
+| TLSRoute | 支持 |
+| GatewayPort8080 | 支持 |
+| GatewayStaticAddresses | 支持 |
+| BackendTLSPolicy | 支持 |
+| GatewayInfrastructurePropagation | 支持 |
+### Mesh 特性
+
+| 特性 | 状态 |
+|------|------|
+| MeshRoute | 支持 |
+| MeshConsumerRoute | 支持 |
+| MeshClusterIPMatching | 支持 |
+:::tip[完整特性列表]
+完整的特性支持列表和每个特性的实现细节，请参考 [Gateway API 合规报告](https://github.com/nantian-gw/gateway/blob/main/conformance-report.yaml)。
+:::
+
+## 下一步
+
+- 查看 [自定义 CRD](/zh/api-reference/crds) 了解 Nantian Gateway 的扩展资源
+- 查看 [快速开始](/zh/getting-started/quick-start) 部署第一个网关
+- 查看 [第一个路由](/zh/getting-started/first-route) 创建你的第一条路由规则

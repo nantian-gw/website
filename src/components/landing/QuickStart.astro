@@ -1,0 +1,299 @@
+---
+export interface Props {
+  lang?: 'en' | 'zh';
+}
+
+const { lang = 'en' } = Astro.props;
+const isZh = lang === 'zh';
+
+const heading = isZh ? '快速开始' : 'Quick Start';
+const subtitle = isZh
+  ? '三条命令，即刻部署'
+  : 'Three commands to get started';
+
+const commands = [
+  'helm repo add nantian https://charts.nantian.dev',
+  'helm install nantian-gw nantian/nantian-gw --namespace nantian-gw --create-namespace',
+  'kubectl apply -f https://raw.githubusercontent.com/nantian-gw/gateway/main/examples/hello-world.yaml',
+];
+
+const copyLabel = isZh ? '复制' : 'Copy';
+const copiedLabel = isZh ? '已复制' : 'Copied';
+---
+
+<section class="quickstart" aria-label={heading}>
+  <div class="quickstart-container">
+    <header class="quickstart-header">
+      <h2 class="quickstart-heading gradient-text">{heading}</h2>
+      <p class="quickstart-subtitle">{subtitle}</p>
+    </header>
+
+    <div class="quickstart-code-block">
+      <div class="code-header">
+        <div class="code-dots" aria-hidden="true">
+          <span class="code-dot code-dot--red"></span>
+          <span class="code-dot code-dot--yellow"></span>
+          <span class="code-dot code-dot--green"></span>
+        </div>
+        <span class="code-label">Terminal</span>
+      </div>
+
+      <pre class="code-body"><code>
+        {commands.map((cmd) => (
+          <span class="code-line">
+            <span class="code-prompt" aria-hidden="true">$ </span>
+            <span class="code-text">{cmd}</span>
+            <button
+              class="code-copy-btn"
+              type="button"
+              data-copy={cmd}
+              aria-label={`${copyLabel}: ${cmd}`}
+            >
+              <svg class="code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span class="code-copy-label">{copyLabel}</span>
+            </button>
+          </span>
+        ))}
+      </code></pre>
+    </div>
+  </div>
+</section>
+
+<script>
+  function initQuickStartCopy() {
+    const buttons = document.querySelectorAll('.code-copy-btn');
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        const cmd = btn.getAttribute('data-copy');
+        if (!cmd) return;
+
+        try {
+          await navigator.clipboard.writeText(cmd);
+
+          const label = btn.querySelector('.code-copy-label');
+          const allText = btn.textContent || '';
+
+          btn.classList.add('copied');
+          if (label) {
+            label.textContent = '${copiedLabel}';
+          }
+
+          setTimeout(function () {
+            btn.classList.remove('copied');
+            if (label) {
+              label.textContent = '${copyLabel}';
+            }
+          }, 2000);
+        } catch (e) {
+          // Fallback for older browsers
+          const textarea = document.createElement('textarea');
+          textarea.value = cmd;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+      });
+    });
+  }
+
+  initQuickStartCopy();
+</script>
+
+<style>
+  .quickstart {
+    padding: 5rem 1.5rem;
+    background: var(--color-bg-base);
+  }
+
+  .quickstart-container {
+    max-width: 48rem;
+    margin: 0 auto;
+  }
+
+  .quickstart-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .quickstart-heading {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.75rem;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  .quickstart-subtitle {
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  /* ===== Code Block ===== */
+  .quickstart-code-block {
+    background: var(--color-bg-code);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .code-dots {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .code-dot {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 50%;
+    display: block;
+  }
+
+  .code-dot--red {
+    background: #ef4444;
+  }
+
+  .code-dot--yellow {
+    background: #f59e0b;
+  }
+
+  .code-dot--green {
+    background: #10b981;
+  }
+
+  .code-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-family: var(--sl-font-mono, 'JetBrains Mono', monospace);
+  }
+
+  .code-body {
+    margin: 0;
+    padding: 1.25rem 0;
+    overflow-x: auto;
+    font-family: var(--sl-font-mono, 'JetBrains Mono', monospace);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+
+  .code-body code {
+    display: block;
+    background: transparent;
+    color: var(--color-text-primary);
+    padding: 0;
+  }
+
+  .code-line {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 1rem;
+    transition: background 0.15s ease;
+  }
+
+  .code-line:hover {
+    background: rgba(6, 182, 212, 0.06);
+  }
+
+  .code-prompt {
+    color: var(--color-accent-light);
+    margin-right: 0.5rem;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .code-text {
+    color: var(--color-text-secondary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .code-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    margin-left: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    opacity: 0;
+  }
+
+  .code-line:hover .code-copy-btn {
+    opacity: 1;
+  }
+
+  .code-copy-btn:hover {
+    color: var(--color-text-primary);
+    background: rgba(6, 182, 212, 0.1);
+    border-color: var(--color-accent);
+  }
+
+  .code-copy-btn.copied {
+    color: var(--color-success);
+    border-color: var(--color-success);
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .code-copy-icon {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+  }
+
+  .code-copy-label {
+    white-space: nowrap;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    .quickstart {
+      padding: 3rem 1rem;
+    }
+
+    .quickstart-heading {
+      font-size: 1.5rem;
+    }
+
+    .code-body {
+      font-size: 0.75rem;
+    }
+
+    .code-line {
+      padding: 0.25rem 0.75rem;
+    }
+
+    .code-copy-btn {
+      opacity: 1;
+    }
+  }
+</style>

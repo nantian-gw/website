@@ -1,0 +1,358 @@
+---
+title: 告警规则
+---
+
+Nantian Gateway 的告警规则覆盖控制面和数据面的关键健康指标。规则以 Prometheus 原生格式和 PrometheusRule CRD 两种形式提供。
+
+## 数据面告警
+
+数据面告警规则定义在 `prometheusrule-dataplane.yaml`（Prometheus Operator）或 `prometheus-dataplane-rules.yaml`（原生 Prometheus）。这些规则依赖 Recording Rules 预计算的指标和 cAdvisor 数据。
+
+### 推荐告警规则
+
+以下告警规则覆盖了数据面运行中的关键异常场景。你可以根据实际环境调整阈值。
+
+#### 数据面不可用
+
+```yaml
+- alert: NantianDataplaneDown
+  expr: nantian_gateway_dataplane_not_ready_replicas > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "数据面 Pod 未就绪"
+    description: "命名空间 {{ $labels.namespace }} 中有 {{ $value }} 个数据面 Pod 未就绪，持续超过 5 分钟。"
+```
+
+当 `nantian_gateway_dataplane_not_ready_replicas` 大于 0 且持续 5 分钟时触发。这个指标来自 Recording Rule，通过 `nantian_gateway_dataplane_runtime_supervisor_http_states == 0` 计算。
+
+#### 数据面副本不足
+
+```yaml
+- alert: NantianDataplaneInsufficientReplicas
+  expr: nantian_gateway_dataplane_targets < 2
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "数据面可用副本不足"
+    description: "仅有 {{ $value }} 个数据面抓取目标，可能影响高可用性。"
+```
+
+#### 高错误率
+
+```yaml
+- alert: NantianDataplaneHigh5xxRate
+  expr: |
+    sum(rate(nantian_gateway_dataplane_traffic_response_flags_total{flag!="none"}[5m]))
+    /
+    sum(rate(nantian_gateway_dataplane_traffic_request_events_total[5m]))
+    > 0.05
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "数据面 5xx 错误率超过 5%"
+    description: "当前 5xx 错误率为 {{ $value | humanizePercentage }}，持续超过 5 分钟。"
+```
+
+5% 是一个保守的阈值。对于生产环境，建议根据实际基线调整为更严格的值（如 1%）。
+
+#### 高延迟
+
+```yaml
+- alert: NantianDataplaneHighLatency
+  expr: |
+    histogram_quantile(0.99,
+      sum(rate(nantian_gateway_dataplane_traffic_response_duration_seconds_bucket[5m]))
+      by (le)
+    ) > 1
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "数据面 P99 延迟超过 1 秒"
+    description: "P99 延迟为 {{ $value }} 秒，持续超过 10 分钟。"
+```
+
+#### CPU 限流
+
+```yaml
+- alert: NantianDataplaneCPUThrottlingHigh
+  expr: nantian_gateway_dataplane_container_cpu_throttle_ratio > 0.1
+  for: 15m
+  labels:
+    severity: warning
+  annotations:
+    summary: "数据面 CPU 限流比例超过 10%"
+    description: "Pod {{ $labels.pod }} 的 CPU 限流比例为 {{ $value | humanizePercentage }}，持续超过 15 分钟。"
+```
+
+CPU 限流比例由 Recording Rule 计算，使用 `container_cpu_cfs_throttled_periods_total / container_cpu_cfs_periods_total`。
+
+#### 内存高使用
+
+```yaml
+- alert: NantianDataplaneMemoryHigh
+  expr: |
+    nantian_gateway_dataplane_container_memory_working_set_bytes
+    / nantian_gateway_dataplane_container_memory_limit_bytes
+    > 0.85
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "数据面内存使用超过 85%"
+    description: "Pod {{ $labels.pod }} 内存工作集为限制的 {{ $value | humanizePercentage }}。"
+```
+
+#### 无就绪数据面
+
+当没有任何数据面实例就绪时告警，这意味着所有流量都无法处理。
+
+```yaml
+- alert: NantianNoReadyDataplanes
+  expr: nantian_gateway_dataplane_ready_replicas == 0
+  for: 1m
+  labels:
+    severity: critical
+  annotations:
+    summary: "没有任何 Nantian Gateway 数据面就绪"
+    description: "零个数据面实例处于就绪状态，所有入站请求都将失败。请立即检查数据面部署状态。"
+```
+
+#### 后端健康恶化
+
+当后端端点不健康时告警，表明上游服务可能出现问题。
+
+```yaml
+- alert: NantianBackendUnhealthy
+  expr: nantian_gateway_dataplane_runtime_endpoint_health == 0
+  for: 2m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Nantian Gateway 后端端点不健康"
+    description: "后端端点 {{ $labels.endpoint }} 健康检查失败。请检查后端服务状态。"
+```
+
+## 控制面告警
+
+控制面没有单独的 PrometheusRule 文件。推荐基于控制面指标创建以下告警规则：
+
+#### 快照构建失败
+
+```yaml
+- alert: NantianControlplaneBuildFailure
+  expr: increase(nantian_gateway_controlplane_build_failures[5m]) > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "控制面快照构建失败"
+    description: "过去 5 分钟内控制面快照构建失败，数据面配置可能未更新。"
+```
+
+#### xDS 流异常
+
+```yaml
+- alert: NantianControlplaneXDSStreamTerminations
+  expr: increase(nantian_gateway_controlplane_xds_stream_terminations_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "控制面 xDS 流异常终止"
+    description: "过去 5 分钟内有 xDS 流终止，数据面可能无法接收配置更新。"
+```
+
+#### 快照发布延迟
+
+```yaml
+- alert: NantianControlplaneSnapshotAckLag
+  expr: |
+    histogram_quantile(0.95,
+      sum(rate(nantian_gateway_controlplane_xds_publish_ack_lag_seconds_bucket[5m]))
+      by (le)
+    ) > 30
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "控制面快照 ACK 延迟过高"
+    description: "P95 快照 ACK 延迟为 {{ $value }} 秒，数据面同步可能滞后。"
+```
+
+#### Reconciler 失败
+
+```yaml
+- alert: NantianControlplaneReconcilerFailure
+  expr: increase(nantian_gateway_controlplane_reconciler_runner_failures_total[10m]) > 0
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "控制面 Reconciler 运行失败"
+    description: "过去 10 分钟内 Reconciler 运行失败，Gateway API 状态可能未更新。"
+```
+
+#### 快照未发布
+
+当近期没有快照发布时告警，可能表示 Translator 卡住或 Syncer 未运行。
+
+```yaml
+- alert: NantianNoRecentSnapshot
+  expr: rate(nantian_gateway_controlplane_published_total[10m]) == 0
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Nantian Gateway 近期没有发布快照"
+    description: "过去 10 分钟内没有快照发布。可能表示 Syncer 卡住或没有 Kubernetes 资源变更。请检查控制面日志。"
+```
+
+#### 快照构建耗时过长
+
+当快照构建耗时异常增长时告警，这会延迟配置向数据面的传播。
+
+```yaml
+- alert: NantianSlowSnapshotBuild
+  expr: |
+    histogram_quantile(0.99,
+      sum(rate(nantian_gateway_controlplane_snapshot_build_duration_seconds_bucket[5m]))
+      by (le)
+    ) > 10
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Nantian Gateway 快照构建耗时过长"
+    description: "P99 快照构建耗时超过 10 秒。可能表示资源数量过多或 Translator 存在性能问题。请检查快照资源计数和控制面 CPU 使用率。"
+```
+
+#### xDS 推送超时
+
+当快照推送超时时告警，意味着数据面未收到配置更新。
+
+```yaml
+- alert: NantianXDSSendTimeouts
+  expr: rate(nantian_gateway_controlplane_xds_snapshot_send_timeouts_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Nantian Gateway xDS 快照推送超时"
+    description: "数据面 xDS 流因快照推送超时而断开。请检查控制面与数据面之间的网络连通性，并审查 xDS keepalive 配置。"
+```
+
+#### xDS ACK 超时
+
+当数据面未确认快照时告警，可能表示数据面未应用配置。
+
+```yaml
+- alert: NantianXDSAckTimeouts
+  expr: rate(nantian_gateway_controlplane_xds_snapshot_ack_timeouts_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Nantian Gateway xDS ACK 超时"
+    description: "数据面 xDS 流因未收到 ACK 而断开。可能表示数据面在处理上一个快照时卡住或过载。"
+```
+
+#### 节点状态更新丢弃
+
+当节点状态更新因持久化队列满而被丢弃时告警。
+
+```yaml
+- alert: NantianNodeStatusDropping
+  expr: rate(nantian_gateway_controlplane_node_status_persist_dropped_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Nantian Gateway 正在丢弃节点状态更新"
+    description: "节点状态持久化更新因有界队列已满而被丢弃。可能表示 Kubernetes API Server 响应缓慢或持久化 Worker 卡住。"
+```
+
+## 部署告警规则
+
+### 原生 Prometheus
+
+将告警规则添加到 Prometheus 配置的 `rule_files` 中：
+
+```yaml
+rule_files:
+  - /etc/prometheus/rules/nantian-dataplane-alerts.yaml
+  - /etc/prometheus/rules/nantian-controlplane-alerts.yaml
+```
+
+### Prometheus Operator
+
+创建 `PrometheusRule` 资源：
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nantian-gateway
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: nantian-dataplane
+      rules:
+        - alert: NantianDataplaneDown
+          # ...
+    - name: nantian-controlplane
+      rules:
+        - alert: NantianControlplaneBuildFailure
+          # ...
+```
+
+## 告警通知
+
+告警规则触发后，需要配置 Alertmanager 将告警路由到通知渠道。示例 Alertmanager 配置：
+
+```yaml
+route:
+  receiver: default
+  routes:
+    - match:
+        severity: critical
+      receiver: pagerduty-critical
+    - match:
+        severity: warning
+      receiver: slack-warnings
+
+receivers:
+  - name: default
+    webhook_configs:
+      - url: http://webhook-service/
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - routing_key: <your-pagerduty-key>
+  - name: slack-warnings
+    slack_configs:
+      - api_url: <your-slack-webhook-url>
+        channel: "#alerts-nantian-gw"
+```
+
+:::tip
+建议为 `critical` 和 `warning` 级别的告警配置不同的通知渠道。Critical 告警（如数据面不可用、高错误率）应触发即时通知（PagerDuty、电话），Warning 告警（如 CPU 限流、内存高使用）可以通过 Slack 或邮件通知。
+:::
+
+## 告警严重级别指南
+
+| 级别 | 使用场景 |
+|----------|-------------|
+| `critical` | 流量受影响，需要立即唤醒值班人员处理。 |
+| `warning` | 服务有所降级但流量仍在正常处理，可在工作时间调查。 |
+
+## 下一步
+
+- [故障排查](/zh/operations/troubleshooting) —— 告警触发后的处理方法
+- [指标参考](/zh/operations/metrics) —— 告警规则中使用的所有指标的完整目录
+- [备份与恢复](/zh/operations/backup) —— 灾难恢复流程

@@ -1,0 +1,270 @@
+---
+title: Troubleshooting
+---
+
+This page covers common issues you might encounter while running Nantian Gateway and how to resolve them. Each section includes diagnostic commands, likely causes, and resolution steps.
+
+## Diagnostic commands
+
+Before diving into specific issues, run these commands to gather a baseline of your gateway's state:
+
+```bash
+# Check pod status
+kubectl get pods -n nantian-gw -o wide
+
+# Get control plane logs (last 100 lines)
+kubectl logs -n nantian-gw -l app=nantian-controlplane --tail=100
+
+# Get data plane logs (last 100 lines)
+kubectl logs -n nantian-gw -l app=nantian-dataplane --tail=100
+
+# Check gateway summary via Admin API
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18081/v1/summary | jq .
+
+# Check connected nodes
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18081/v1/nodes | jq .
+
+# Check Prometheus metrics
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep nantian_gateway_snapshot_last_build_success
+```
+
+## Control plane issues
+
+### Control plane pod won't start
+
+**Symptoms**: Pod is in `CrashLoopBackOff` or `Error` state.
+
+**Diagnostic commands**:
+```bash
+kubectl describe pod -n nantian-gw -l app=nantian-controlplane
+kubectl logs -n nantian-gw -l app=nantian-controlplane --tail=50
+```
+
+**Common causes**:
+
+- **Configuration file is missing or invalid**: The control plane looks for the config at the path specified by `--config`. Verify the ConfigMap is mounted correctly.
+- **Kubernetes API connection failed**: The control plane needs a valid service account and RBAC permissions. Check that the service account has the necessary ClusterRoles.
+- **Leader election configuration error**: If `leaderElection.id` conflicts with another controller in the same namespace, the control plane will fail to start.
+- **Admin auth token resolution failed**: If `adminAuth.bearerTokenFile` points to a non-existent file or `adminAuth.bearerToken` is configured but the env var is empty, startup fails.
+
+**Resolution**: Check the control plane logs for the specific error message. The startup sequence logs each step with a `"component"` field. The error message will indicate which component failed.
+
+### Snapshot builds are failing
+
+**Symptoms**: The `nantian_gateway_snapshot_last_build_success` metric is 0. Data planes are serving stale configuration. New routes or backends are not being picked up.
+
+**Diagnostic commands**:
+```bash
+# Check build success
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep nantian_gateway_snapshot_last_build_success
+
+# Check build failures
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep nantian_gateway_snapshot_build_failures_total
+
+# Check control plane logs for translation errors
+kubectl logs -n nantian-gw -l app=nantian-controlplane | grep -i "error\|fail\|translator"
+```
+
+**Common causes**:
+
+- **Resource limits exceeded**: The translator has limits on maximum input objects, snapshot objects, and endpoints. If your configuration exceeds these limits, the build fails. Check the `translatorLimits` in your control plane config.
+- **Invalid resource configuration**: A Gateway API resource with invalid syntax or conflicting rules can cause translation to fail. The control plane logs will include the specific resource and error.
+- **RBAC issues**: The control plane service account may have lost permission to read certain resource types. Check the ClusterRole bindings.
+
+**Resolution**: If resource limits are exceeded, increase the limits in the control plane config. If a specific resource is causing the failure, fix the resource or delete it. If RBAC is the issue, restore the necessary permissions.
+
+### Data plane not connecting
+
+**Symptoms**: `GET /v1/nodes` shows zero connected nodes. Data plane pods are running but not connecting to the control plane.
+
+**Diagnostic commands**:
+```bash
+# Check connected nodes
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18081/v1/nodes | jq '.[] | {name, connected, ready}'
+
+# Check data plane logs for connection errors
+kubectl logs -n nantian-gw -l app=nantian-dataplane | grep -i "connect\|grpc\|xds\|error"
+
+# Check xDS stream terminations
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep xds_stream_terminations_total
+```
+
+**Common causes**:
+
+- **Network connectivity**: The data plane cannot reach the control plane's gRPC address. Verify the data plane config points to the correct control plane service address and port.
+- **TLS misconfiguration**: If gRPC TLS or mTLS is enabled, mismatched certificates or CA bundles will prevent the connection. Check the TLS configuration on both sides.
+- **Firewall or network policy**: A NetworkPolicy or firewall rule may be blocking the gRPC port (default `:18080`).
+- **Control plane not ready**: The control plane may not be accepting gRPC connections if it hasn't finished startup. Check the control plane readiness.
+
+**Resolution**: Verify the data plane's `controlPlaneAddress` config points to the correct service. Test TCP connectivity from a data plane pod to the control plane service. Check TLS certificates if mTLS is enabled. Review NetworkPolicies in the namespace.
+
+### Leader election flapping
+
+**Symptoms**: Frequent leader transitions visible in control plane logs. Metrics show gaps or inconsistent values.
+
+**Diagnostic commands**:
+```bash
+# Check leader election status
+kubectl get leases -n nantian-gw
+
+# Check control plane logs for leader election events
+kubectl logs -n nantian-gw -l app=nantian-controlplane | grep -i "leader\|election"
+```
+
+**Common causes**:
+
+- **Control plane is overloaded**: If the leader's CPU is maxed out, it may fail to renew the lease in time. Increase CPU limits or reduce the translation workload.
+- **Lease duration is too short**: The default `15s` lease duration with `10s` renew deadline may be too tight for a busy cluster. Increase `leaderElection.leaseDuration`.
+- **Network latency**: High latency between the control plane and the Kubernetes API server can cause lease renewal failures.
+
+**Resolution**: Increase `leaderElection.leaseDuration` and `leaderElection.renewDeadline`. Ensure the control plane has sufficient CPU resources. Check network latency between the control plane and the API server.
+
+## Data plane issues
+
+### Data plane not serving traffic
+
+**Symptoms**: Requests to the data plane fail with connection refused or timeout. The data plane pod is running but not ready.
+
+**Diagnostic commands**:
+```bash
+# Check data plane readiness
+kubectl get pods -n nantian-gw -l app=nantian-dataplane
+
+# Check data plane logs
+kubectl logs -n nantian-gw -l app=nantian-dataplane --tail=50
+
+# Check data plane metrics
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep nantian_gateway_dataplane_ready
+```
+
+**Common causes**:
+
+- **No configuration received**: The data plane hasn't received an initial snapshot from the control plane. It won't start serving traffic until configuration is applied.
+- **xDS stream broken**: The gRPC stream to the control plane is disconnected. The data plane continues serving with the last configuration but can't receive updates.
+- **Listener port conflict**: The data plane listener port conflicts with another process on the node.
+- **Resource exhaustion**: The data plane is out of memory or CPU and can't process requests.
+
+**Resolution**: Verify the data plane is connected to the control plane. Check the data plane logs for xDS stream errors. Ensure listener ports are not conflicting with host-level services. Increase resource limits if the data plane is resource-constrained.
+
+### High request latency
+
+**Symptoms**: The P99 latency metric is elevated. Clients report slow responses.
+
+**Diagnostic commands**:
+```bash
+# Check request latency
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep request_duration_seconds
+
+# Check backend connection errors
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18082/metrics | grep backend_connection_errors_total
+
+# Check data plane resource usage
+kubectl top pods -n nantian-gw -l app=nantian-dataplane
+```
+
+**Common causes**:
+
+- **Slow backends**: The backend services are responding slowly. Check backend health and response times.
+- **Data plane CPU throttling**: The data plane is hitting CPU limits. Check the CPU throttle metric.
+- **Connection pool exhaustion**: The data plane has exhausted its connection pool to backends. Increase connection pool limits.
+- **Network congestion**: Network bandwidth between the data plane and backends is saturated.
+
+**Resolution**: Investigate backend service response times. Increase data plane CPU limits if throttling is detected. Increase backend connection pool sizes. Check network utilization.
+
+### Backend health check failures
+
+**Symptoms**: Backend endpoints are marked unhealthy. Requests to those backends fail.
+
+**Diagnostic commands**:
+```bash
+# Check backend health
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s http://localhost:18081/v1/backends | jq '.[] | {name, endpoints: [.endpoints[] | {address, healthy}]}'
+
+# Check backend services
+kubectl get endpoints -n <your-namespace>
+```
+
+**Common causes**:
+
+- **Backend service is down**: The Kubernetes Service has no ready endpoints.
+- **Health check configuration mismatch**: The health check path or port does not match what the backend expects.
+- **Network policy blocking health checks**: A NetworkPolicy in the backend namespace blocks traffic from the data plane.
+- **TLS issues**: The data plane cannot establish TLS connections to the backend for health checks.
+
+**Resolution**: Verify the backend pods are running and ready. Check that the Service's label selector matches the backend pods. Test connectivity from a data plane pod to the backend. Review NetworkPolicies. Verify TLS configuration if BackendTLSPolicy is in use.
+
+## Configuration issues
+
+### Routes not matching
+
+**Symptoms**: A configured HTTPRoute is not matching requests. Requests return 404 or are routed to the wrong backend.
+
+**Diagnostic commands**:
+```bash
+# Check routes in the snapshot
+kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
+  curl -s "http://localhost:18081/v1/routes?kind=HTTPRoute" | jq .
+
+# Check listener status
+kubectl get gateway -A -o yaml | grep -A 20 "status:"
+```
+
+**Common causes**:
+
+- **Route not accepted by the gateway**: The Gateway resource's listener may not match the route's parentRef. Check the route's status for acceptance conditions.
+- **Hostname mismatch**: The route's hostname doesn't match the listener's hostname or the request's Host header.
+- **Route priority**: Another route with higher priority is matching first. Routes are evaluated in order within each listener.
+- **Namespace mismatch**: The route is in a namespace that the gateway doesn't allow (missing ReferenceGrant for cross-namespace routes).
+
+**Resolution**: Check the route's status conditions on the Kubernetes resource. Verify hostname matching. Review the listener's `allowedRoutes` configuration. For cross-namespace routes, ensure a ReferenceGrant exists.
+
+### TLS certificate not loading
+
+**Symptoms**: TLS listeners fail with certificate errors. Clients see TLS handshake failures.
+
+**Diagnostic commands**:
+```bash
+# Check listener status
+kubectl get gateway -A -o yaml | grep -A 30 "listeners:"
+
+# Check that the referenced Secret exists
+kubectl get secret -n <namespace> <secret-name>
+```
+
+**Common causes**:
+
+- **Secret does not exist**: The Secret referenced by the Gateway listener's TLS configuration doesn't exist in the namespace.
+- **Secret missing required keys**: The Secret must contain `tls.crt` and `tls.key` keys with PEM-encoded certificate and private key.
+- **Certificate expired**: The TLS certificate has expired. Check the certificate validity period.
+- **Cross-namespace reference**: The Secret is in a different namespace and no ReferenceGrant permits access.
+
+**Resolution**: Create or fix the Secret. Ensure it contains valid PEM-encoded certificate and key. Renew expired certificates. Create a ReferenceGrant for cross-namespace Secret references.
+
+## When to escalate
+
+If none of the above resolves your issue, gather the following before escalating:
+
+1. **Control plane logs** with `log.level` set to `debug` for the last 5 minutes
+2. **Data plane logs** with tracing filter set to `debug` for the last 5 minutes
+3. **Full Admin API summary** output from `GET /v1/summary`
+4. **Snapshot dump** from `GET /v1/snapshot` (redact secrets if sharing externally)
+5. **Prometheus metrics** snapshot from `:18082/metrics`
+6. **Kubernetes resource listing** for all Gateway API resources in the namespace
+7. **Control plane and data plane configuration** files (redact tokens and secrets)
+
+## What's next
+
+- [Backup & Recovery](/en/operations/backup) -- procedures for disaster recovery
+- [Alerting Rules](/en/operations/alerting) -- configure alerts to catch issues before they escalate
+- [Configuration](/en/configuration/) -- review configuration options that affect troubleshooting

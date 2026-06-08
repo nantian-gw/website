@@ -1,0 +1,120 @@
+---
+title: 理解 Gateway API
+---
+
+Kubernetes Gateway API 是一个用于在 Kubernetes 集群中配置 HTTP 和 TCP 路由的规范。它提供了一种面向角色、可扩展的模型，将基础设施管理与应用路由配置分离。
+
+本页解释 Gateway API 的资源模型以及 Nantian Gateway 如何实现它。
+
+## 为什么需要 Gateway API？
+
+在 Gateway API 出现之前，Kubernetes 提供了 Ingress 资源来暴露 HTTP 服务。Ingress 虽然完成了其使命，但存在显著局限：
+
+- **表达能力有限** — Ingress 只能基于主机名和路径进行路由，不支持基于请求头的路由、流量分割或请求重写
+- **无角色分离** — 基础设施运维人员和应用开发者共享同一资源，导致配置冲突
+- **实现特定的注解** — 每个 Ingress 控制器需要不同的注解来实现相同的行为，造成供应商锁定
+
+Gateway API 通过多资源模型解决了这些限制，将关注点分离，并提供更丰富的路由能力作为社区标准。
+
+## 资源模型
+
+Gateway API 定义了三种主要资源类型，每种具有不同的角色：
+
+### GatewayClass（网关类）
+
+GatewayClass 定义了一类网关实现 — 例如 `nantian-gateway` 或 `envoy-gateway`。它通常由基础设施运维人员配置，被 Gateway 资源引用以确定由哪个控制器管理。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nantian
+spec:
+  controllerName: gateway.nantian.io/gateway-controller
+```
+
+### Gateway（网关）
+
+Gateway 资源代表一个网络接入点 — 在特定地址和端口上接受连接的监听器。Gateway 由基础设施运维人员管理，定义流量入口的*形态*，而非路由规则。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: external-gateway
+spec:
+  gatewayClassName: nantian
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: tls-cert
+```
+
+### Route（路由）
+
+Route 资源定义如何匹配流量并将其转发到后端服务。不同的路由类型处理不同的协议：
+
+| 路由类型 | 协议 | 使用场景 |
+|-----------|----------|----------|
+| `HTTPRoute` | HTTP/HTTPS | Web 应用、REST API、gRPC-web |
+| `GRPCRoute` | gRPC | 需要方法级路由的 gRPC 服务 |
+| `TCPRoute` | TCP | 非 HTTP 协议、数据库连接 |
+| `TLSRoute` | TLS 透传 | 自行处理 TLS 的服务 |
+| `UDPRoute` | UDP | DNS、流媒体、游戏 |
+
+基于路径前缀路由的 HTTPRoute 示例：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app-routes
+spec:
+  parentRefs:
+    - name: external-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api-service
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /web
+      backendRefs:
+        - name: web-service
+          port: 3000
+```
+
+## 面向角色的设计
+
+Gateway API 的资源模型按组织角色刻意分离：
+
+- **基础设施提供商** 定义 GatewayClass 资源（*如何*实现）
+- **集群运维人员** 创建 Gateway 资源（*在哪里*部署）
+- **应用开发者** 定义 Route 资源（*什么*规则）
+
+这种分离意味着应用团队可以为其服务定义路由规则，而无需了解网关的部署方式或使用的实现。基础设施团队可以更换底层网关实现，而无需应用团队更新其路由配置。
+
+## Nantian Gateway 实现
+
+Nantian Gateway 以 Gateway API v1.5.1 规范为目标，声明支持 55 项特性。包括：
+
+- **核心特性**：HTTPRoute、Gateway、GatewayClass、ReferenceGrant
+- **扩展特性**：HTTP 请求头匹配、查询参数匹配、请求镜像、流量分割、URL 重写、CORS 等
+- **Mesh 特性**：用于服务网格配置的 Gateway API Mesh 资源
+
+完整支持特性列表请参阅 [API 参考](/zh/api-reference/)。
+
+## 下一步
+
+- [分离式平面架构](/zh/concepts/split-plane) — 了解 Nantian Gateway 内部如何处理 Gateway API 资源
+- [快速开始](/zh/getting-started/quick-start) — 部署您的第一个 Gateway API 资源
+- [API 参考：Gateway API 资源](/zh/api-reference/gateway-api) — 详细资源参考

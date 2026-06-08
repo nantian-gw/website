@@ -1,0 +1,169 @@
+---
+title: 升级指南
+---
+
+Nantian Gateway 的升级走的是标准的 Helm 工作流。控制面和数据面都用滚动更新，升级期间流量不会中断。两个平面在滚动窗口内可以容忍短暂的版本偏差。
+
+这篇指南覆盖了 Helm 升级、版本兼容规则，以及出问题怎么回退。
+
+## 升级前检查
+
+跑升级之前，先过一遍这些检查：
+
+```bash
+# 确认当前版本
+helm list -n nantian-gw
+
+# 确认所有 Pod 都健康
+kubectl get pods -n nantian-gw
+
+# 确认 GatewayClass 还在
+kubectl get gatewayclass nantian-gw
+
+# 看看有没有卡住或失败的 Gateway 资源
+kubectl get gateways -A
+
+# 把当前 values 存下来
+helm get values nantian-gw -n nantian-gw > pre-upgrade-values.yaml
+```
+
+最后一步尤其重要。`helm get values` 抓的是当前 release 的计算值，包括你没显式设过的默认值。如果升级改了某个默认值，你会想参考这份文件。
+
+## 版本兼容
+
+Nantian Gateway 遵循以下兼容规则：
+
+| 组件 | 兼容性 |
+|------|--------|
+| 控制面和数据面 | 允许小版本偏差（如 CP v0.1.0 搭配 DP v0.1.1） |
+| Gateway API 版本 | 必须和集群里装的 Gateway API CRD 版本一致 |
+| Kubernetes 版本 | 要求 1.24+ |
+
+控制面和数据面走 gRPC/xDS 通信，协议设计上允许小版本偏差。控制面可以把配置推给略新或略旧的数据面，只要 xDS 协议版本兼容就行。
+
+:::caution[破坏性变更]
+升级前一定看 release notes。Helm chart values 的 schema 变更、xDS 协议变更或者 Gateway API CRD 版本变更都会在 release notes 里显式标注。如果 release notes 标了 breaking change，你可能需要先更新 values 文件或者先装新的 CRD，再升级网关组件。
+:::
+
+## 标准升级流程
+
+### 第一步：拉最新版本
+
+如果你装了 Helm repo：
+
+```bash
+helm repo update
+```
+
+如果你从本地 chart 目录装，先拉最新代码：
+
+```bash
+git pull origin main
+```
+
+### 第二步：diff 变更
+
+在真正 apply 之前，先看看会变什么：
+
+```bash
+helm diff upgrade nantian-gw nantian-gw/nantian-gw \
+  -f my-values.yaml \
+  -n nantian-gw
+```
+
+这需要装 [helm-diff](https://github.com/databus23/helm-diff) 插件。如果没装过：
+
+```bash
+helm plugin install https://github.com/databus23/helm-diff
+```
+
+diff 输出会列出所有将要创建、更新和删除的资源。重点看 ConfigMap 和 Secret 的变更，这些直接影响到运行中的配置。
+
+### 第三步：执行升级
+
+```bash
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  -f my-values.yaml \
+  -n nantian-gw
+```
+
+Helm 会触发滚动更新。控制面 Pod 先更新，再更新数据面 Pod。整个过程应该没有流量中断，因为数据面用现有的配置快照继续处理请求，新 Pod 起来后再接管。
+
+### 第四步：验证升级
+
+```bash
+# 看 Pod 状态，确认都起来了
+kubectl get pods -n nantian-gw -w
+
+# 确认版本号
+helm list -n nantian-gw
+
+# 确认 GatewayClass 没问题
+kubectl get gatewayclass nantian-gw
+
+# 看控制面日志，确认没有启动错误
+kubectl logs -n nantian-gw -l app.kubernetes.io/component=controlplane --tail=50
+```
+
+## 升级顺序
+
+如果你同时升级控制面和数据面（Helm 默认行为），滚动更新的顺序是控制面先更新，再数据面。控制面在滚动更新期间，Leader 选举会切到新版本的控制面。
+
+如果你想分步升级，可以把控制面和数据面拆开：
+
+```bash
+# 只升级控制面
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  -f my-values.yaml \
+  --set dataplane.image.tag=current-version \
+  -n nantian-gw
+
+# 确认控制面稳定后，再升级数据面
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  -f my-values.yaml \
+  -n nantian-gw
+```
+
+大多数情况下一次性升级就够了。分步升级在升级跨度很大（比如跳了好几个小版本）时更有意义。
+
+## 回滚
+
+如果升级出了问题，Helm 回滚能回到上一个 release：
+
+```bash
+# 看历史记录
+helm history nantian-gw -n nantian-gw
+
+# 回滚到上一个版本
+helm rollback nantian-gw -n nantian-gw
+```
+
+回滚同样是滚动更新，流量不会中断。回滚完后记得确认所有 Pod 都回到了上一个版本，并且 GatewayClass 状态正常。
+
+## 升级前备份
+
+虽然 Helm 回滚很强，但最稳妥的做法还是升级前手动备份：
+
+```bash
+# 备份当前 values
+helm get values nantian-gw -n nantian-gw > backup-values.yaml
+
+# 备份 Helm release 元数据
+kubectl get secret -n nantian-gw -l owner=helm,status=deployed \
+  -o yaml > backup-release-secrets.yaml
+
+# 备份你的 Gateway API 资源（可选，但推荐）
+kubectl get gateways,httproutes,grpcroutes,tcproutes,udproutes,tlsroutes \
+  -A -o yaml > backup-gateway-resources.yaml
+```
+
+## 升级后的清理
+
+升级完成后，确认一切正常，然后清理旧版本的资源：
+
+```bash
+# 如果升级引入了新的 CRD 版本，删除旧的 CRD 版本
+# 具体哪些 CRD 要删，看 release notes 里的说明
+```
+
+一般来说升级后不需要手动清理。Helm 会处理 ConfigMap、Secret 和 Deployment 的版本管理。旧 ReplicaSet 会保留一段时间供回滚使用，这是正常的 Kubernetes 行为。

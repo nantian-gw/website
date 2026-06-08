@@ -1,0 +1,191 @@
+---
+title: Data Plane Design
+---
+
+The data plane is the workhorse of Nantian Gateway. Written in Rust, it receives configuration from the control plane over gRPC/xDS, applies it to a high-performance proxy runtime, and handles every byte of request traffic. It runs as a standalone binary that connects to the control plane, downloads its configuration, and then operates independently.
+
+## Architecture
+
+The data plane is built around a proxy core that applies xDS configuration to an HTTP and TCP/UDP proxy stack. The xDS client maintains a persistent bidirectional gRPC stream to the control plane. When a new configuration snapshot arrives, the client deserializes the protobuf, validates it, and applies it to the proxy runtime atomically.
+
+```
++-----------------------------+
+
+|  Rust Data Plane             |
+|                              |
+|  +-----------------------+   |
+|  |  xDS Client            |   |  gRPC stream to control plane
+|  |  - Connection mgmt     |   |  Control plane addr (default: :18080)
+|  |  - Proto deserialization|  |
+|  |  - Snapshot validation  |   |
+|  +-----------+------------+   |
+|              |                |
+|              v                |
+|  +-----------+------------+   |
+|  |  Proxy Runtime          |   |
+|  |                          |   |
+|  |  +--------+ +--------+  |   |
+|  |  | HTTP   | | Stream |  |   |
+|  |  | Proxy  | | Proxy  |  |   |
+|  |  +----+---+ +----+---+  |   |
+|  |       |          |      |   |
+|  |  +----v----------v--+  |   |
+|  |  |  Backend Pool     |  |   |
+|  |  |  - Load balancing |  |   |
+|  |  |  - Health checks  |  |   |
+|  |  |  - Circuit break  |  |   |
+|  |  +-------------------+  |   |
+|  +--------------------------+   |
+|              |                |
+|  +-----------v------------+   |
+|  |  Wasm Runtime           |   |  Optional WebAssembly extensions
+|  |  - Plugin loading       |   |
+|  |  - Request/Response     |   |
+|  +------------------------+   |
++-----------------------------+
+```
+
+## xDS client
+
+The xDS client is the data plane's only connection to the outside world for configuration. It implements the client side of the `ConfigurationDiscoveryService` gRPC service. The client:
+
+1. **Connects** to the control plane's gRPC address
+2. **Sends a `DiscoveryRequest`** identifying itself by node ID (derived from the pod name or a configured identifier)
+3. **Receives the initial snapshot** as a `DiscoveryResponse` containing the full IR serialized as protobuf
+4. **Applies the snapshot** to the proxy runtime atomically
+5. **Acknowledges** with an ACK (or NACK if validation fails)
+6. **Receives delta updates** as subsequent `DiscoveryResponse` messages on the same stream
+7. **Sends status reports** (`DataplaneStatusReport`) back to the control plane, including proxy health, active listeners, route counts, and backend connectivity
+
+The client handles reconnection transparently. If the gRPC stream breaks, the client retries with exponential backoff. During reconnection, the proxy continues serving traffic with the last known configuration.
+
+### Connection state
+
+```
+ IDLE  -->  CONNECTING  -->  HANDSHAKE  -->  ACTIVE
+  ^                                            |
+
+  |                                            |
+  +--------  DISCONNECTED  <-------------------+
+```
+
+- **IDLE**: Initial state, no connection attempted
+- **CONNECTING**: TCP connection to the control plane in progress
+- **HANDSHAKE**: gRPC stream handshake, node registration
+- **ACTIVE**: Stream established, receiving configuration
+- **DISCONNECTED**: Stream broken, retry timer running
+
+## HTTP proxy
+
+The HTTP proxy handles all L7 traffic: HTTP/1.1, HTTP/2, and gRPC requests. It applies the routing, filtering, and backend selection rules defined in the IR snapshot.
+
+### Request processing pipeline
+
+```
+ Request  -->  TLS Termination  -->  Header Parser  -->  Route Matcher
+                                                              |
+                                                              v
+ Client  <--  Response Writer  <--  Backend Proxy  <--  Filter Chain
+                                                              |
+                                                              v
+                                                     Rate Limiter
+                                                     Circuit Breaker
+                                                     Load Balancer
+                                                     Health Check
+```
+
+### Routing
+
+Routes are configured per listener. Each listener binds to an address and port, and routes are evaluated in priority order. The first matching route wins. Route matching supports:
+
+- **Path matching**: Exact, prefix, and regular expression
+- **Header matching**: Exact and regular expression on header values
+- **Query parameter matching**: Exact and regular expression on query values
+- **Method matching**: HTTP method constraints
+
+### TLS termination
+
+The data plane terminates TLS at the listener level. Each listener can be configured with one or more TLS certificates, referenced from Kubernetes Secrets. The proxy supports:
+
+- **Server-side TLS**: Terminating client connections with server certificates
+- **Mutual TLS (mTLS)**: Requiring client certificates for authentication
+- **Backend TLS**: Originating TLS connections to backend services with BackendTLSPolicy configuration
+- **SNI-based routing**: Selecting certificates based on the client's Server Name Indication
+
+Certificates from the IR are hot-reloaded. When a Kubernetes Secret changes, the new certificate appears in the next IR snapshot and the data plane applies it to the running listener without restarting.
+
+### Filters and middleware
+
+The HTTP proxy applies a filter chain to each request. Filters can modify the request before it reaches the backend and the response before it reaches the client:
+
+- **Request header modification**: Add, set, or remove HTTP headers on the request
+- **Response header modification**: Add, set, or remove HTTP headers on the response
+- **Request redirect**: Return HTTP redirects directly from the proxy
+- **URL rewrite**: Modify the request path or hostname before forwarding
+- **Rate limiting**: Enforce per-route or per-backend rate limits
+- **Wasm plugins**: Execute custom WebAssembly modules that can inspect and modify requests and responses
+
+## Stream proxy
+
+The stream proxy handles L4 traffic: TCP and UDP connections. It operates at the transport layer, forwarding bytes between the client and the backend without inspecting application-layer protocols.
+
+### TCP proxying
+
+TCP routes are configured per listener and matched by port. The stream proxy accepts a TCP connection on the listener, selects a backend from the configured backend pool, and establishes a TCP connection to the backend. Data is proxied bidirectionally until either side closes the connection.
+
+### UDP proxying
+
+UDP routes work similarly but handle datagram-oriented traffic. The proxy binds a UDP socket on the listener port, receives datagrams, and forwards them to backends. UDP session tracking keeps related datagrams (from the same source) routed to the same backend.
+
+## Backend pool
+
+Backends are grouped into pools, each representing a `Service` or `AIService` from the IR. The backend pool manages:
+
+### Load balancing
+
+The data plane supports multiple load balancing algorithms configured via BackendLBPolicy:
+
+- **Round robin**: Distributes requests evenly across healthy backends
+- **Least connections**: Sends requests to the backend with the fewest active connections
+- **Random**: Selects backends randomly, weighted by endpoint weight
+- **Consistent hash**: Hashes a request attribute (source IP, header, cookie) to consistently route to the same backend
+
+### Session persistence
+
+Session persistence, configured via BackendLBPolicy, ensures requests from the same client are routed to the same backend for a configurable duration. The proxy uses cookie-based or header-based affinity.
+
+### Health checking
+
+Backends are monitored with active and passive health checks:
+
+- **Active health checks**: The proxy periodically sends HTTP or TCP probes to each backend. Unhealthy backends are temporarily removed from the pool.
+- **Passive health checks**: The proxy tracks connection and request failures. When failures exceed a threshold, the backend is marked unhealthy.
+
+### Circuit breaking
+
+Circuit breakers protect backend services from overload. Each backend pool can be configured with maximum connection limits, maximum pending requests, and per-connection limits. When a circuit opens, the proxy rejects requests with a `503 Service Unavailable` response rather than forwarding them to the overloaded backend.
+
+## Wasm runtime
+
+The Wasm runtime executes WebAssembly plugins at configurable points in the request pipeline. Plugins are loaded from the WasmPlugin CRD and applied at the listener or route level.
+
+Plugin execution points:
+
+- **HTTP request headers**: Modify or inspect request headers before routing
+- **HTTP request body**: Inspect or transform the request body
+- **HTTP response headers**: Modify or inspect response headers before the client sees them
+- **HTTP response body**: Inspect or transform the response body
+
+Plugins run in a sandboxed WebAssembly environment with limited access to host resources. They communicate with the proxy via a well-defined ABI (application binary interface) that provides functions for header manipulation, body access, and logging.
+
+## Observability
+
+The data plane emits structured logs using Rust's `tracing` framework, Prometheus metrics via a dedicated HTTP endpoint, and optional OpenTelemetry traces. Log levels are configurable per module using tracing filter directives (e.g., `info,hyper=warn` for verbose proxy debugging without noise from the HTTP library).
+
+The metrics endpoint exposes data plane-specific counters for request volume, latency histograms, backend health, connection counts, and error rates. These are scraped by Prometheus and visualized in the bundled Grafana dashboard.
+
+## What's next
+
+- [Admin API](/en/architecture/admin-api) -- API for inspecting and managing the gateway
+- [Metrics Reference](/en/operations/metrics) -- complete Prometheus metrics catalog
+- [Configuration: Data Plane](/en/configuration/dataplane) -- all configuration parameters

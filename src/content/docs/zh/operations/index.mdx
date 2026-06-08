@@ -1,0 +1,235 @@
+---
+title: 运维概述
+---
+
+运维 Nantian Gateway 涉及四个主要方面：监控、告警、故障排查和备份恢复。本章的组织方式围绕这些主题展开，你可以按顺序阅读，也可以直接跳转到需要的章节。
+
+## Nantian Gateway 的运维模型
+
+Nantian Gateway 的控制面与数据面分离架构对运维有直接影响。控制面和数据面是两个独立的部署单元，各自有独立的监控指标、健康检查和扩缩策略。
+
+```
++---------------------------------------------------------------+
+
+|                     Kubernetes Cluster                          |
+|                                                                |
+|  +---------------------+    +-----------------------------+    |
+|  | Control Plane Pods   |    | Data Plane Pods              |    |
+|  | (1 active + N standby)|   | (N replicas)                 |    |
+|  |                      |    |                              |    |
+|  | - Metrics :19080     |    | - Metrics :19080             |    |
+|  | - Admin :19080       |    | - Admin :19080               |    |
+|  | - gRPC xDS :18000    |    | - xDS client :18000          |    |
+|  | - Health :19080      |    | - Health :19080              |    |
+|  +---------------------+    +-----------------------------+    |
+|           |                            |                       |
+|           v                            v                       |
+|  +------------------------------------------------------+     |
+|  |              Prometheus + Grafana                      |     |
+|  +------------------------------------------------------+     |
++---------------------------------------------------------------+
+```
+
+## 监控栈
+
+Nantian Gateway 的监控栈基于 Prometheus 和 Grafana：
+
+- **控制面指标**：翻译构建、快照发布、xDS 流状态、Admin API 请求
+- **数据面指标**：请求速率、延迟、错误率、连接数、运行时状态
+- **容器资源指标**：CPU 使用、内存、CPU 限流比例（需要 cAdvisor 和 kube-state-metrics）
+
+部署时，你需要配置 Prometheus 抓取控制面和数据面的指标端点，然后导入 Grafana 仪表盘模板。详细配置见[指标参考](./metrics)和 [Grafana 仪表盘](./grafana)。
+
+## 监控指标解读
+
+监控 Nantian Gateway 时，重点关注以下两类指标：
+
+### 控制面指标
+
+控制面负责将 Gateway API 配置翻译为内部 IR 并下发给数据面，以下指标反映控制面的工作状态：
+
+- **翻译延迟** (`nantian_gw_translator_duration_seconds`)：从配置变更到 IR 快照生成完毕的耗时。P99 持续超过 5 秒说明翻译逻辑存在瓶颈，通常是路由规则数量过多或复杂匹配条件导致
+- **快照推送速率** (`nantian_gw_snapshot_push_total`)：控制面向数据面推送快照的频率。正常运行时每分钟数次到数十次不等，如果持续为零说明 xDS 推送链路上存在阻塞
+- **xDS 流状态** (`nantian_gw_xds_stream_count`)：当前活跃的 xDS 连接数。骤降通常说明数据面批量断连或网络分区
+
+### 数据面指标
+
+数据面是流量入口，以下指标直接反映服务质量：
+
+- **请求速率** (`nginx_ingress_controller_requests_total`)：按 VirtualServer、路由规则等标签分组的请求计数，用于发现流量突增或异常下降
+- **错误率**：关注 4xx 和 5xx 的占比。5xx 错误率超过 1% 需要立即排查后端服务或数据面自身的健康状态
+- **延迟分位数**：P50、P90、P99 三个分位值配合使用。P50 与 P99 差距过大说明存在长尾请求，可能是后端个别实例响应慢
+- **连接数** (`nginx_ingress_controller_connections`)：活跃连接数和已处理连接数，用于判断是否需要扩容数据面
+
+## 日志分析
+
+两个平面的日志均以结构化 JSON 格式输出到 stdout，方便对接 Loki、Elasticsearch 等日志聚合系统。
+
+### 控制面日志格式
+
+```json
+{"time":"2026-06-06T12:00:00Z","level":"INFO","msg":"snapshot published","component":"controlplane","version":"abc123"}
+```
+
+关键字段：`level`（日志级别）、`msg`（事件摘要）、`component`（触发组件）、`version`（快照版本号）。
+
+### 数据面日志格式
+
+```json
+{"timestamp":"2026-06-06T12:00:00.000Z","level":"INFO","target":"nantian_core::proxy","message":"configuration applied","version":"abc123"}
+```
+
+关键字段：`level`、`target`（产生日志的模块路径）、`message`、`version`。
+
+### 常见日志模式
+
+| 日志模式 | 含义 | 处理建议 |
+|---------|------|---------|
+| `snapshot published` | 控制面成功生成并推送了新的 IR 快照 | 正常，不需要处理 |
+| `configuration applied` | 数据面已加载最新配置 | 正常，不需要处理 |
+| `xDS stream disconnected` | 数据面与控制面的 xDS 连接断开 | 检查网络连通性，确认数据面 Pod 是否重启 |
+| `translation failed` | 控制面翻译配置失败 | 检查 Gateway API 资源是否合法，查看详细错误信息 |
+| `upstream connection refused` | 数据面无法连接后端服务 | 排查后端 Pod 状态和服务端口 |
+
+### 日志级别
+
+生产环境默认使用 `INFO` 级别。排查问题时可以临时切换到 `DEBUG` 级别，会输出翻译过程的详细 diff、gRPC 流事件和代理级别的请求信息。
+
+:::caution
+DEBUG 日志量远大于 INFO，排查完成后务必切回 `INFO`。长时间开启 DEBUG 会显著增加日志存储成本，还可能拖慢控制面性能。
+:::
+
+## 告警
+
+告警规则覆盖以下场景：
+
+- 数据面就绪副本数低于预期
+- 控制面快照构建失败
+- xDS 流异常断开
+- 请求错误率（5xx）超过阈值
+- 请求延迟（P99）超过阈值
+- 数据面 CPU 限流比例过高
+- 数据面内存使用接近限制
+
+告警规则以 PrometheusRule 资源或原生 Prometheus 规则文件的形式提供。详细内容见[告警规则](./alerting)。
+
+## 日常运维检查清单
+
+以下检查项覆盖日常运维中最常见的关注点，建议按天或按周固定执行：
+
+### 每日检查
+
+| 检查项 | 方法 | 预期结果 |
+|-------|------|---------|
+| 控制面 Pod 状态 | `kubectl get pods -n nantian-gw -l app=nantian-controlplane` | 期望副本全部 Running，leader 处于 Ready 状态 |
+| 数据面 Pod 状态 | `kubectl get pods -n nantian-gw -l app=nantian-dataplane` | 期望副本全部 Running 且 Ready |
+| GatewayClass 状态 | `kubectl get gatewayclass` | `ACCEPTED` 为 True，表示控制面认可该 GatewayClass |
+| 告警面板检查 | 打开 Grafana 或 Prometheus Alertmanager | 24 小时内无未恢复的告警 |
+
+### 每周检查
+
+| 检查项 | 方法 | 预期结果 |
+|-------|------|---------|
+| P99 延迟趋势 | Grafana 中查看一周趋势图 | 无明显持续上涨趋势 |
+| 错误率趋势 | Grafana 中对比本周与上周数据 | 5xx 错误率无明显增长 |
+| 数据面 CPU 限流 | Grafana 资源面板 | CPU throttling 占比低于 10% |
+| 控制面快照生成频率 | 查看 `nantian_gw_snapshot_push_total` 指标 | 推送频率正常，无长时间停顿 |
+| 日志中 ERROR 数量 | 在日志聚合平台中按 `level:ERROR` 过滤 | 无新增或持续出现的 ERROR 日志 |
+
+## 常见运维场景
+
+### 扩容数据面
+
+当流量增长或 CPU/内存资源紧张时，增加数据面副本数即可：
+
+```bash
+kubectl scale deployment/nantian-gw-dataplane -n nantian-gw --replicas=5
+```
+
+新 Pod 启动后会自动连接控制面，从 xDS 流中拉取最新快照并开始接流量。整个过程不需要重启控制面或其他数据面副本。
+
+### 数据面滚动重启
+
+数据面完全无状态，随时可以滚动重启：
+
+```bash
+kubectl rollout restart deployment/nantian-gw-dataplane -n nantian-gw
+```
+
+每个 Pod 按 `maxUnavailable` 策略逐个替换，重启期间其他副本继续服务，已有连接不会中断。
+
+### 排空节点
+
+如果需要对某个 Kubernetes 节点进行维护，先驱逐节点上的数据面 Pod：
+
+```bash
+kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data
+```
+
+Kubernetes 会在其他节点上重新调度数据面 Pod。新 Pod 上线并通过就绪检查后才会开始接流量，因此不会丢请求。
+
+### 升级控制面
+
+控制面升级采用滚动更新策略。升级过程中 standby 副本先替换，完成后触发 leader 选举：
+
+```bash
+kubectl set image deployment/nantian-gw-controlplane -n nantian-gw \
+  nantian-controlplane=registry.example.com/nantian-gw:new-version
+```
+
+在 leader 切换的短暂窗口（默认 15 秒租约）内，数据面仍使用上一次收到的快照继续工作，流量不受影响。建议在低峰时段执行升级。
+
+## 故障排查
+
+故障排查从 Admin API 开始。`/v1/summary`、`/v1/snapshot-sync` 和 `/v1/nodes` 端点可以帮助你快速定位问题：
+
+- 控制面是否正常翻译配置？检查 `/v1/summary` 中的快照生成时间
+- 数据面节点是否同步了最新配置？检查 `/v1/snapshot-sync` 中的漂移节点
+- 数据面是否健康？检查 `/v1/nodes` 中的就绪状态
+
+常见问题和排查步骤见[故障排查](./troubleshooting)。
+
+## 故障恢复流程
+
+当发生生产故障时，建议按以下流程处理，避免慌乱中引入二次问题：
+
+```
+检测 (Detect) → 隔离 (Isolate) → 诊断 (Diagnose) → 修复 (Fix) → 验证 (Verify)
+```
+
+1. **检测**：通过 Prometheus 告警或用户反馈获知异常。确认告警是否误报，记录故障开始时间
+2. **隔离**：如果故障影响范围明确（特定路由或特定数据面副本），先缩小影响范围；必要时暂停该路由或摘除问题副本的流量
+3. **诊断**：按顺序排查——先看 Admin API 的 `/v1/summary` 和 `/v1/nodes` 确认控制面和数据面状态；再查 Prometheus 指标定位异常时间段的指标变化；最后查看日志中的 ERROR 级别记录
+4. **修复**：根据诊断结果采取对应措施。常见修复手段包括回滚配置、重启数据面、扩容、切换 leader
+5. **验证**：确认告警已恢复、指标回到正常基线、业务方反馈问题已解决。记录故障原因和处理过程，便于后续复盘
+
+## 备份策略
+
+Nantian Gateway 不存储持久状态，备份的对象是你自己的配置和部署参数。
+
+### Helm Values 备份
+
+所有部署参数都记录在 `values.yaml` 或自定义的 values override 文件中。建议：
+
+- 将 `values.yaml` 纳入 Git 版本管理
+- 每次变更前提交当前版本，变更后提交新版本
+- 将 Git 仓库纳入常规备份流程（Git 远端本身已天然多副本，但多一层异地备份更安全）
+
+### CRD 清单备份
+
+Gateway API 资源和自定义 CRD 是网关配置的真实来源。推荐使用以下方式之一进行备份：
+
+- **GitOps 工作流**（推荐）：将所有 CRD 清单放在 Git 仓库中，通过 ArgoCD 或 Flux 同步到集群。Git 历史和远端仓库本身就是天然的备份
+- **定时导出**：如果尚未采用 GitOps，可以用 cronjob 定时执行 `kubectl get <crd> --all-namespaces -o yaml` 并上传到对象存储
+
+除此之外，不需要备份 Nantian Gateway 本身的任何内部状态。控制面重启后会自动从 Kubernetes API 重建所有配置，数据面重启后从控制面拉取最新快照。
+
+## 备份与恢复
+
+Nantian Gateway 的配置完全来源于 Kubernetes 资源（Gateway API CRD 和自定义 CRD）。备份策略的核心是备份这些 Kubernetes 资源，而不是备份网关的内部状态。
+
+推荐使用 GitOps 工作流管理 Gateway 配置，结合 Kubernetes 原生的 etcd 备份。如果使用了自定义 AI 服务配置或 Wasm 插件，也需要将这些工件纳入备份范围。详细策略见[备份与恢复](./backup)。
+
+:::tip
+如果你是初次运维 Nantian Gateway，建议按以下顺序阅读：指标参考 -> Grafana 仪表盘 -> 告警规则 -> 故障排查 -> 备份与恢复。
+:::

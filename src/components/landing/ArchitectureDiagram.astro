@@ -1,0 +1,88 @@
+---
+import architectureSvg from '../../assets/architecture.svg';
+
+export interface Props {
+  lang?: 'en' | 'zh';
+}
+
+const { lang = 'en' } = Astro.props;
+const isZh = lang === 'zh';
+
+const sectionTitle = isZh ? '架构' : 'Architecture';
+const sectionSubtitle = isZh
+  ? '分离式控制面与数据面，通过 gRPC xDS 协议通信'
+  : 'Split-plane control plane and data plane communicating over gRPC xDS';
+---
+
+<section class="architecture" aria-label={sectionTitle}>
+  <div class="architecture-container">
+    <header class="architecture-header">
+      <h2 class="architecture-heading gradient-text">{sectionTitle}</h2>
+      <p class="architecture-subtitle">{sectionSubtitle}</p>
+    </header>
+
+    <div class="architecture-diagram">
+      <img
+        src={architectureSvg.src}
+        alt={isZh ? 'Nantian Gateway 架构图' : 'Nantian Gateway Architecture Diagram'}
+        class="architecture-svg"
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  .architecture {
+    background: var(--color-bg-base);
+    padding: 5rem 1.5rem;
+  }
+
+  .architecture-container {
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+
+  .architecture-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .architecture-heading {
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.75rem;
+  }
+
+  .architecture-subtitle {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  .architecture-diagram {
+    display: flex;
+    justify-content: center;
+  }
+
+  .architecture-svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  @media (max-width: 640px) {
+    .architecture {
+      padding: 3rem 1rem;
+    }
+
+    .architecture-heading {
+      font-size: 1.75rem;
+    }
+
+    .architecture-header {
+      margin-bottom: 2rem;
+    }
+  }
+</style>

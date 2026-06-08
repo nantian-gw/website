@@ -1,0 +1,142 @@
+---
+title: 快速开始
+---
+
+本指南介绍在本地 Kind 集群上安装 Nantian Gateway 的完整流程。完成以下步骤后，控制面、数据面和仪表盘将全部运行。
+
+预计耗时：约五分钟。
+
+## 开始之前
+
+请先完成[环境要求](/zh/getting-started/prerequisites)中的步骤：
+
+- 一个运行中的 Kubernetes 集群（本地开发推荐 Kind）
+- `kubectl` 和 `helm` 已安装并可在 `PATH` 中访问
+- Gateway API CRD 已安装到集群
+
+## 第一步：安装 Helm Chart
+
+Nantian Gateway 以 Helm Chart 形式分发。Chart 通过 Helm 仓库 `nantian-gw/nantian-gw` 提供。
+
+本地开发可直接从 Chart 目录安装：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw
+```
+
+安装前查看默认配置：
+
+```bash
+helm show values nantian-gw/nantian-gw
+```
+
+:::tip[生产环境配置]
+生产部署请参考项目自带的 `production-values.yaml` 作为起点。该文件启用了 TLS，配置了适用于生产负载的资源限制，并将数据面设置为通过 HTTPS 连接控制面。
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml
+```
+:::
+
+## 第二步：验证安装
+
+Helm 安装完成后，验证所有 Pod 均在运行：
+
+```bash
+kubectl get pods -n nantian-gw
+```
+
+预期输出：
+
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          30s
+nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          20s
+nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          25s
+nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          15s
+nantian-gw-dashboard-xxxxxxxxx-xxxxx     1/1     Running   0          10s
+```
+
+部署应包含两个控制面副本、两个数据面副本和一个仪表盘 Pod。每个 Pod 的 READY 列应显示 `1/1`，STATUS 列显示 `Running`。
+
+:::note[启动顺序]
+数据面 Pod 通常比控制面需要更长时间达到就绪状态。数据面必须先与控制面建立 gRPC 流并接收初始配置快照，然后才能接受流量。此过程通常在 10 至 30 秒内完成。
+:::
+
+验证 GatewayClass 资源已创建：
+
+```bash
+kubectl get gatewayclass
+```
+
+预期输出：
+
+```
+NAME               CONTROLLER                                    ACCEPTED   AGE
+nantian-gateway    gateway.nantian.io/gateway-controller         True       1m
+```
+
+## 第三步：部署示例应用
+
+Chart 包含一个示例应用，用于演示 Gateway API 路由模型。部署它以验证端到端连通性：
+
+```bash
+kubectl apply -f gateway/examples/httpbin.yaml
+```
+
+此清单为 [httpbin](https://httpbin.org) 测试应用创建 Deployment、Service 和 HTTPRoute。
+
+验证路由已创建：
+
+```bash
+kubectl get httproute
+```
+
+预期输出：
+
+```
+NAME                   HOSTNAMES   AGE
+httpbin-route                               1m
+```
+
+## 第四步：测试网关
+
+通过网关向示例应用发送请求：
+
+```bash
+curl -s http://localhost:18080/get
+```
+
+预期响应：
+
+```json
+{
+  "args": {},
+  "headers": {
+    "Accept": "*/*",
+    "Host": "httpbin.example.com",
+    "User-Agent": "curl/8.0.0"
+  },
+  "origin": "127.0.0.1",
+  "url": "http://httpbin.example.com/get"
+}
+```
+
+响应确认请求已通过数据面到达后端服务。`Host` 请求头由网关设置，`origin` 反映数据面的 IP 地址。
+
+## 部署内容
+
+Helm 安装创建了以下组件：
+
+- **控制面**（2 副本） — 监听 Kubernetes 资源，转换配置，并通过 gRPC xDS 推送至数据面实例
+- **数据面**（2 副本） — 处理客户端流量，终止 TLS，执行路由，并将请求转发至后端服务
+- **仪表盘**（1 副本） — 提供基于 Web 的管理界面，用于监控和配置
+- **GatewayClass** — 定义网关控制器实现
+- **Gateway** — 配置 HTTP 和 HTTPS 流量的监听器
+
+## 下一步
+
+- [第一个路由](/zh/getting-started/first-route) — 为您的服务定义自定义路由规则
+- [核心概念](/zh/concepts/) — 了解 Gateway API 资源模型和分离式平面架构
+- [配置概述](/zh/configuration/) — 为您的环境自定义网关

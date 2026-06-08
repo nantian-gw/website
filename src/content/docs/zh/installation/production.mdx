@@ -1,0 +1,329 @@
+---
+title: 生产环境部署
+---
+
+把 Nantian Gateway 跑在生产环境里，意味着要把默认值从"开发友好"加固到"扛得住真实流量"的水平：流量尖峰、节点故障、邻居干扰、偶尔的配置错误把 Pod 搞挂等等。这篇指南列了一个清单，在把网关暴露给线上流量之前，把这些项都过一遍。
+
+Helm chart 自带了一份 `production-values.yaml`，覆盖了清单里的大部分项。把它当起点，然后叠上你环境专属的覆盖值。
+
+## 生产环境检查清单
+
+按顺序逐项过。每一项都针对开发默认值退不掉的故障模式。
+
+### 1. 资源限制
+
+默认的 CPU 和内存请求/限制是为了开发环境调的。生产环境需要余地。
+
+| 组件 | 请求 CPU | 请求内存 | 限制 CPU | 限制内存 |
+|------|----------|----------|----------|----------|
+| 控制面 | 200m | 256Mi | 1 | 1Gi |
+| 数据面 | 2 | 512Mi | (不设) | 2Gi |
+
+数据面是扛流量的，CPU 请求应该反映预期吞吐。内存限制对数据面尤其重要，因为 Rust 的分配器在 GC 周期之间会持有内存，不设上限有可能吃光节点内存。
+
+在 values 文件里设这些值：
+
+```yaml
+controlplane:
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+dataplane:
+  resources:
+    requests:
+      cpu: "2"
+      memory: "512Mi"
+    limits:
+      memory: "2Gi"
+```
+
+:::tip[数据面不设 CPU 上限]
+生产 values 文件特意不给数据面设 CPU 限制。这样流量尖峰时数据面能 burst 吃满节点上可用的 CPU。内存限制是硬上限，防止一个跑飞的代理吞掉节点内存。
+:::
+
+### 2. 副本数
+
+控制面至少跑两个副本，数据面至少跑三个。控制面用主备选举，所以同时只有一个副本在干活，备用的负责故障接管。数据面每个副本都接流量，共享负载。
+
+```yaml
+controlplane:
+  replicas: 2
+
+dataplane:
+  replicas: 3
+```
+
+### 3. Pod 反亲和
+
+没有反亲和，调度器可能把所有数据面 Pod 堆到一个节点上。这个节点一挂，整个数据面就没了。
+
+```yaml
+dataplane:
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: dataplane
+          topologyKey: kubernetes.io/hostname
+```
+
+控制面同理：
+
+```yaml
+controlplane:
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: controlplane
+          topologyKey: kubernetes.io/hostname
+```
+
+### 4. Pod 中断预算（PDB）
+
+PDB 防止运维操作（比如节点排水）同时踢掉太多 Pod：
+
+```yaml
+controlplane:
+  pdb:
+    minAvailable: 1
+
+dataplane:
+  pdb:
+    minAvailable: 2
+```
+
+数据面设 `minAvailable: 2`，意味着在任何时候至少有两个 Pod 在接流量。发了三个副本，允许放掉一个去做滚动更新或者节点维护。
+
+### 5. 拓扑分散
+
+在跨可用区部署时，拓扑分散确保数据面 Pod 均匀分布。一个区挂了，其他区的 Pod 继续接流量：
+
+```yaml
+dataplane:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: dataplane
+```
+
+### 6. 全链路 TLS
+
+生产环境里，每条连接都应该加密。Chart 支持三层 TLS：
+
+**gRPC TLS**：数据面和控制面之间的连接。控制面提供 TLS 证书，数据面验证它的有效性。还可以开启 mTLS，让控制面也认证数据面的身份。
+
+```yaml
+controlplane:
+  grpcTLS:
+    enabled: true
+    existingSecret: "nantian-grpc-tls"
+    requireClientCert: true
+
+dataplane:
+  xdsTLS:
+    enabled: true
+    domainName: "nantian-controlplane-grpc.nantian-gw.svc.cluster.local"
+```
+
+Secret 必须包含 `tls.crt`、`tls.key`，还可以包含 `ca.crt`。如果开启了 mTLS，数据面还需要通过 xDS 客户端配置客户端证书。
+
+**Downstream TLS**：进入网关的流量加密。通过 Gateway API 的 Listener 配置，不通过 Helm chart。详见 [TLS 配置指南](/zh/configuration/tls)。
+
+**Upstream TLS**：通往后端服务的流量加密。通过 BackendTLSPolicy 资源按路由配置。
+
+关于 TLS 配置的完整细节，参考 [TLS / mTLS](/zh/configuration/tls) 一节。
+
+### 7. 安全上下文
+
+锁定容器运行时环境：
+
+```yaml
+controlplane:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+
+dataplane:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+      add: [NET_BIND_SERVICE]
+```
+
+数据面需要 `NET_BIND_SERVICE` 来绑定特权端口（1024 以下）。其他所有 capabilities 全部丢弃。控制面绑定的是高端口（18080+），不需要任何特殊 capabilities。
+
+### 8. 日志与可观测性
+
+生产环境切换到结构化 JSON 日志。日志聚合系统解析 JSON 比文本格式更可靠。
+
+```yaml
+dataplane:
+  config:
+    log:
+      level: "info,nantian_core::connectors=off"
+      format: "json"
+      nonBlocking: true
+      nonBlockingBufferedLines: 65536
+      dropWhenFull: true
+```
+
+`nonBlocking: true` 防止数据面因慢速日志写入而卡顿。`dropWhenFull: true` 在极端负载下丢弃日志行而不是阻塞线程。
+
+开启访问日志，格式里包含你监控需要的字段：
+
+```yaml
+dataplane:
+  config:
+    accessLog:
+      enabled: true
+      path: "/var/log/nantian-gw/access.log"
+      mode: "text"
+```
+
+如果你在用 Prometheus operator，开启 ServiceMonitor 资源：
+
+```yaml
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+```
+
+### 9. 就绪探针和存活探针
+
+默认的探针配置可以在生产环境直接用，但如果你对数据面设了更长的启动时间，可能需要调一下 `initialDelaySeconds`：
+
+```yaml
+controlplane:
+  probes:
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+
+dataplane:
+  probes:
+    readiness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 20
+```
+
+数据面的 `initialDelaySeconds` 给 gRPC 流建立和初始配置拉取留了足够时间。
+
+### 10. 节点选择和容忍
+
+如果你有专门的 Infra 节点，把网关组件钉到这些节点上：
+
+```yaml
+controlplane:
+  nodeSelector:
+    node-role.kubernetes.io/infra: ""
+  tolerations:
+    - key: "node-role.kubernetes.io/infra"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+dataplane:
+  nodeSelector:
+    node-role.kubernetes.io/infra: ""
+  tolerations:
+    - key: "node-role.kubernetes.io/infra"
+      operator: "Exists"
+      effect: "NoSchedule"
+```
+
+### 11. 私有镜像仓库
+
+生产环境部署应该从你控制的私有仓库拉取镜像：
+
+```yaml
+global:
+  imagePullSecrets:
+    - my-registry-secret
+
+controlplane:
+  image:
+    registry: "registry.example.com"
+    repository: "nantian-gw/controlplane"
+    tag: "v0.1.0"
+
+dataplane:
+  image:
+    registry: "registry.example.com"
+    repository: "nantian-gw/dataplane"
+    tag: "v0.1.0"
+```
+
+## 直接上生产
+
+用项目自带的 `production-values.yaml`，通过 GitHub 原始地址直接引用：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml \
+  -n nantian-gw
+```
+
+如果你有环境专属的覆盖值，可以叠多个 `-f` 参数，Helm 按顺序合并，后面的覆盖前面的：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml \
+  -f my-cluster-values.yaml \
+  -n nantian-gw
+```
+
+## 部署后验证
+
+安装完成后，逐项检查清单里每一项：
+
+```bash
+# 检查副本是否都在运行
+kubectl get pods -n nantian-gw
+
+# 验证反亲和（每个 Pod 在不同节点上）
+kubectl get pods -n nantian-gw -o wide -l app.kubernetes.io/component=dataplane
+
+# 确认 TLS 已激活（在控制面日志里找 TLS 握手）
+kubectl logs -n nantian-gw deployment/nantian-gw-controlplane | grep -i tls
+
+# 检查 PDB
+kubectl get pdb -n nantian-gw
+
+# 验证安全上下文
+kubectl get pods -n nantian-gw -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].securityContext}{"\n"}{end}'
+```
+
+如果有不匹配的项，修正 values 文件后升级：
+
+```bash
+helm upgrade nantian-gw nantian-gw/nantian-gw -f my-environment.yaml
+```

@@ -1,0 +1,423 @@
+---
+title: 第一个路由
+---
+
+Nantian Gateway 跑起来之后，我们来创建一个 Gateway 资源和 HTTPRoute，把流量代理到后端服务上。这就是你日常暴露服务时要走的流程。
+
+走完这篇指南，你会有一个能用的 HTTP 路由，监听 10080 端口，把请求转发到一个示例应用。
+
+## 概念速览
+
+Kubernetes Gateway API 定义了三个协作的资源：
+
+1. **GatewayClass**：定义一类网关控制器。Nantian Gateway 安装时自动创建一个，控制器名是 `gateway.networking.k8s.io/nantian-gw`。
+2. **Gateway**：申请一个流量入口，告诉网关在某个端口上开始监听。
+3. **HTTPRoute**：定义 HTTP 流量的匹配规则和转发目标。你在这里指定路径、请求头和最终要发到的后端 Service。
+
+流程是这样：GatewayClass 指定哪个控制器处理请求，Gateway 打开监听端口，HTTPRoute 把进来的请求映射到后端 Pod。
+
+## 第一步：部署一个示例后端
+
+先部署一个简单的回显服务器，用来响应 HTTP 请求，这样我们才有东西可以路由。
+
+新建文件 `echo-server.yaml`：
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: echo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-server
+  namespace: echo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: echo-server
+  template:
+    metadata:
+      labels:
+        app: echo-server
+    spec:
+      containers:
+        - name: echo-server
+          image: ealen/echo-server:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-server
+  namespace: echo
+spec:
+  selector:
+    app: echo-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+```
+
+应用它：
+
+```bash
+kubectl apply -f echo-server.yaml
+```
+
+期望输出：
+
+```
+namespace/echo created
+deployment.apps/echo-server created
+service/echo-server created
+```
+
+确认回显服务器在跑：
+
+```bash
+kubectl get pods -n echo
+```
+
+期望输出：
+
+```
+NAME                           READY   STATUS    RESTARTS   AGE
+echo-server-xxxxxxxxx-xxxxx    1/1     Running   0          30s
+echo-server-xxxxxxxxx-xxxxx    1/1     Running   0          25s
+```
+
+## 第二步：创建 Gateway
+
+现在创建 Gateway 资源，告诉 Nantian Gateway 开始监听 HTTP 流量。Gateway 引用安装时创建的 GatewayClass。
+
+新建文件 `gateway.yaml`：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: echo
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+应用它：
+
+```bash
+kubectl apply -f gateway.yaml
+```
+
+期望输出：
+
+```
+gateway.gateway.networking.k8s.io/my-gateway created
+```
+
+查看 Gateway 状态：
+
+```bash
+kubectl get gateway -n echo
+```
+
+期望输出：
+
+```
+NAME         CLASS        ADDRESS          PROGRAMMED   AGE
+my-gateway   nantian-gw   <pending>        True         10s
+```
+
+`PROGRAMMED` 列显示 `True` 就表示控制面已经处理了这个 Gateway。`ADDRESS` 列可能暂时显示 `<pending>`，这是正常的，非云环境里要等到数据面分配地址。
+
+:::note[Gateway 状态]
+控制面调和 Gateway 资源，然后通过 gRPC 把配置推送到数据面。数据面接到配置之后打开对应的监听端口。控制面成功处理完 Gateway 配置时，`PROGRAMMED` 状态变成 `True`。
+:::
+
+你也可以详细查看 Gateway：
+
+```bash
+kubectl describe gateway my-gateway -n echo
+```
+
+看 `Status` 那段。一个健康的 Gateway 长这样：
+
+```
+Status:
+  Addresses:
+  Conditions:
+    Last Transition Time:  ...
+    Message:               ...
+    Observed Generation:   1
+    Reason:                Programmed
+    Status:                True
+    Type:                  Programmed
+  Listeners:
+    Attached Routes:  0
+    Conditions:
+      Last Transition Time:  ...
+      Message:               ...
+      Observed Generation:   1
+      Reason:                Programmed
+      Status:                True
+      Type:                  Programmed
+    Name:  http
+```
+
+## 第三步：创建 HTTPRoute
+
+现在创建 HTTPRoute，把进来的请求匹配后转发到回显服务器。
+
+新建文件 `httproute.yaml`：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: echo
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: echo-server
+          port: 80
+```
+
+应用它：
+
+```bash
+kubectl apply -f httproute.yaml
+```
+
+期望输出：
+
+```
+httproute.gateway.networking.k8s.io/echo-route created
+```
+
+查看路由状态：
+
+```bash
+kubectl get httproute -n echo
+```
+
+期望输出：
+
+```
+NAME         HOSTNAMES   AGE
+echo-route               10s
+```
+
+用 `describe` 确认路由已被接受：
+
+```bash
+kubectl describe httproute echo-route -n echo
+```
+
+`Status` 那段应该是这样：
+
+```
+Status:
+  Parents:
+    Conditions:
+      Last Transition Time:  ...
+      Message:               ...
+      Observed Generation:   1
+      Reason:                Accepted
+      Status:                True
+      Type:                  Accepted
+    Controller Name:  gateway.networking.k8s.io/nantian-gw
+    Parent Ref:
+      Kind:       Gateway
+      Name:       my-gateway
+      Namespace:  echo
+```
+
+`Accepted` 条件显示 `True`，说明控制面校验了这条路由，已经推送到数据面了。
+
+:::tip[路由排错]
+如果路由显示 `Accepted: False`，先检查父级 Gateway 是不是存在、是不是在同一个命名空间。再确认后端 Service 是否存在、端口号对不对。状态里的 `Message` 字段会告诉你具体哪里出了问题。
+:::
+
+## 第四步：验证流量
+
+数据面在集群内监听 `10080` 端口。根据你的 Kind 集群配置方式，有几种访问方法。
+
+### 方案 A：端口映射（Kind extraPortMappings）
+
+如果你用的是带端口映射的标准 Kind 配置，网关在宿主机的 `18080` 端口上可访问：
+
+```bash
+curl http://localhost:18080/
+```
+
+### 方案 B：端口转发
+
+如果你没有配端口映射，把数据面 Service 的端口转到本地：
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:10080
+```
+
+然后另开一个终端：
+
+```bash
+curl http://localhost:8080/
+```
+
+### 方案 C：集群内测试
+
+在集群里跑一个临时 Pod 来测试：
+
+```bash
+kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
+  curl -s http://nantian-gw-dataplane.nantian-gw.svc:10080/
+```
+
+### 期望返回
+
+回显服务器返回请求详情的 JSON：
+
+```json
+{
+  "host": {
+    "hostname": "localhost",
+    "ip": "::ffff:10.244.x.x",
+    "ips": []
+  },
+  "http": {
+    "method": "GET",
+    "baseUrl": "",
+    "originalUrl": "/",
+    "protocol": "http"
+  },
+  "request": {
+    "params": {
+      "0": "/"
+    },
+    "query": {},
+    "cookies": {},
+    "body": {},
+    "headers": {
+      "host": "localhost:18080",
+      "user-agent": "curl/8.x.x",
+      "accept": "*/*"
+    }
+  },
+  "environment": {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "HOSTNAME": "echo-server-xxxxxxxxx-xxxxx",
+    "NODE_VERSION": "x.x.x"
+  }
+}
+```
+
+返回结果说明请求确实穿过了 Nantian Gateway 的数据面，到达了回显服务器后端。`HOSTNAME` 字段显示具体哪个 echo-server Pod 处理了这个请求，`host` 头部反映的是原始请求内容。
+
+## 第五步：试试按路径路由
+
+再加一条路由，演示路径匹配的效果。部署另一个后端：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: echo
+spec:
+  selector:
+    app: whoami
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+```
+
+应用这个后端，然后更新 HTTPRoute，加上路径规则：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: echo
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /whoami
+      backendRefs:
+        - name: whoami
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: echo-server
+          port: 80
+```
+
+应用更新后的路由：
+
+```bash
+kubectl apply -f httproute.yaml
+```
+
+现在验证路由效果：
+
+```bash
+# 到 /whoami 的请求被路由到 whoami 服务
+curl http://localhost:18080/whoami
+
+# 其他所有请求还是走 echo-server
+curl http://localhost:18080/
+```
+
+路径匹配规则按顺序评估，所以 `/whoami` 会优先命中前面的规则。如果调换顺序，`/` 会吞掉所有请求，后面那条 `/whoami` 规则就永远不生效了。
+
+就这么几步，你已经有了一个运行中的 Nantian Gateway，配着两个后端，按路径把流量分发到不同的服务。接下来的文档会深入到 TLS 终端、gRPC 路由、AI 网关配置等更高级的话题。

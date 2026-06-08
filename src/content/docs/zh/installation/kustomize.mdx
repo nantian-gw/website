@@ -1,0 +1,239 @@
+---
+title: Kustomize 安装
+---
+
+Kustomize 是一种声明式、面向 patch 的部署方式。你定义一个基础（base）的清单集合，然后在上面叠环境专属的补丁（overlay）。不用模板，不用变量替换，每个变更都是一个 Git commit。这条路径和 Argo CD、Flux 这类 GitOps 工具配合得尤其紧密。
+
+这篇指南假定你熟悉 Kustomize 的基本概念。如果还没用过，[Kustomize 官方文档](https://kustomize.io/) 是个不错的起点。
+
+## 目录结构
+
+一个典型的 Nantian Gateway Kustomize 布局长这样：
+
+```
+deploy/
+├── base/
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── gatewayclass.yaml
+│   ├── controlplane/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   ├── rbac.yaml
+│   │   └── pdb.yaml
+│   ├── dataplane/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   └── pdb.yaml
+│   └── dashboard/
+│       ├── deployment.yaml
+│       └── service.yaml
+└── overlays/
+    ├── dev/
+    │   └── kustomization.yaml
+    ├── staging/
+    │   └── kustomization.yaml
+    └── production/
+        ├── kustomization.yaml
+        ├── controlplane-patch.yaml
+        ├── dataplane-patch.yaml
+        └── tls-secret.yaml
+```
+
+`base/` 目录放所有环境共享的资源定义。`overlays/` 下面每一个子目录对应一个部署环境，通过 patch 在 base 之上做增量修改。
+
+## Base kustomization
+
+base 层的 `kustomization.yaml` 声明了所有资源和公共标签：
+
+```yaml
+# deploy/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nantian-gw
+
+resources:
+  - namespace.yaml
+  - gatewayclass.yaml
+  - controlplane/deployment.yaml
+  - controlplane/service.yaml
+  - controlplane/configmap.yaml
+  - controlplane/rbac.yaml
+  - controlplane/pdb.yaml
+  - dataplane/deployment.yaml
+  - dataplane/service.yaml
+  - dataplane/configmap.yaml
+  - dataplane/pdb.yaml
+  - dashboard/deployment.yaml
+  - dashboard/service.yaml
+
+commonLabels:
+  app.kubernetes.io/name: nantian-gw
+  app.kubernetes.io/part-of: nantian-gw
+
+images:
+  - name: nantian-controlplane
+    newName: ghcr.io/nantian-gw/controller
+    newTag: v0.1.0
+  - name: nantian-dataplane
+    newName: ghcr.io/nantian-gw/dataplane
+    newTag: v0.1.0
+```
+
+`images` 字段是 Kustomize 内置的一项能力，不用 patch 就能把镜像名和 tag 替换掉。如果你的镜像是从公开仓库拉的，把 `newName` 删掉就行。
+
+## 控制面 ConfigMap
+
+控制面的配置通过 ConfigMap 注入。base 里来一份完整的默认配置：
+
+```yaml
+# deploy/base/controlplane/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nantian-controlplane-config
+data:
+  config.yaml: |
+    grpcAddr: ":18080"
+    adminAddr: ":18081"
+    metricsAddr: ":18082"
+    healthProbeAddr: ":18083"
+    controllerName: "gateway.networking.k8s.io/nantian-gw"
+    statusAddress: "127.0.0.1"
+    namespace: "nantian-gw"
+    syncPeriod: 30s
+    log:
+      level: "info"
+      format: "json"
+      addSource: false
+    leaderElection:
+      enabled: true
+      id: "nantian-controlplane-leader"
+      leaseDuration: "15s"
+      renewDeadline: "10s"
+      retryPeriod: "2s"
+    grpcTLS:
+      enabled: false
+      certPath: ""
+      keyPath: ""
+      clientCAPath: ""
+      requireClientCert: false
+    dashboardApi:
+      enabled: true
+      basePath: "/api/dashboard"
+```
+
+在 overlay 里你可以用 `patchesStrategicMerge` 或 `patchesJson6902` 只改某个字段，不用把整份 ConfigMap 重写一遍。
+
+## Production overlay
+
+生产 overlay 在 base 的基础上加了更高副本数、生产级别的资源限制、反亲和策略和 TLS：
+
+```yaml
+# deploy/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - tls-secret.yaml
+
+patches:
+  - path: controlplane-patch.yaml
+  - path: dataplane-patch.yaml
+
+nameSuffix: -production
+
+commonLabels:
+  environment: production
+```
+
+控制面补丁：副本数、资源限制、日志级别和 TLS：
+
+```yaml
+# deploy/overlays/production/controlplane-patch.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nantian-controlplane
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: controlplane
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nantian-controlplane-config
+data:
+  config.yaml: |
+    log:
+      level: "warn"
+    grpcTLS:
+      enabled: true
+      certPath: "/etc/nantian/tls/tls.crt"
+      keyPath: "/etc/nantian/tls/tls.key"
+      clientCAPath: "/etc/nantian/tls/ca.crt"
+      requireClientCert: true
+```
+
+数据面补丁：副本数、资源限制、反亲和、TLS 传输：
+
+```yaml
+# deploy/overlays/production/dataplane-patch.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nantian-dataplane
+spec:
+  replicas: 3
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/component: dataplane
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: dataplane
+          resources:
+            requests:
+              cpu: "2"
+              memory: "512Mi"
+            limits:
+              memory: "2Gi"
+```
+
+## 部署
+
+Kustomize 部署非常简单：
+
+```bash
+# 部署 base（开发/测试环境）
+kubectl apply -k deploy/base
+
+# 部署生产 overlay
+kubectl apply -k deploy/overlays/production
+```
+
+如果你用的是 Argo CD，直接把 `deploy/overlays/production` 配成 Application 的路径就行了。每次 Git commit 之后 Argo CD 会自动同步，不需要手动介入。
+
+## 各组件单独管理
+
+Kustomize 也支持按组件拆开管理，这在大型集群里更有弹性。你可以把控制面、数据面和管理界面的 base 分别放在 `base/controlplane/`、`base/dataplane/` 和 `base/dashboard/` 下面，每个组件有自己的 kustomization.yaml。overlay 里按需引用这些 base。
+
+这样做的好处是升级某个组件时，其他组件不受影响。数据面升级只更新数据面的 overlay，控制面完全不动。不过代价是初始搭建的分类要更细一点。

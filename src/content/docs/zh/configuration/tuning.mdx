@@ -1,0 +1,95 @@
+---
+title: 性能调优
+---
+
+本页介绍影响数据面吞吐量、延迟和资源使用的配置选项。默认值适用于中等流量（每秒数百至数千请求）。对于更高吞吐量场景或资源受限环境，以下参数可在性能、内存消耗和运维安全之间进行权衡。
+
+## 线程与并发
+
+数据面使用基于 Tokio 的异步运行时。以下设置控制工作在线程间的分配方式：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `runtimeTuning.httpCapacity.workerThreads` | int | `0` | 工作线程数（0 = CPU 核心数） |
+| `runtimeTuning.httpCapacity.acceptConcurrency` | int | `16` | 并发 TCP accept 操作数 |
+
+### 工作线程
+
+默认值 `0` 使运行时为每个可用 CPU 核心创建一个工作线程。此配置对于 CPU 密集型工作负载（TLS 终止、请求头操作和 Wasm 过滤器执行均受益于并行 CPU 访问）是最优的。
+
+对于大部分时间在等待上游响应的 I/O 密集型工作负载，减少工作线程数可为其他进程释放 CPU 资源。当代理主要转发请求且转换操作极少时，将此值设置为低于 CPU 核心数。
+
+### Accept 并发
+
+`acceptConcurrency` 控制可同时调用监听 socket 的 `accept()` 的线程数。默认值 16 可有效处理连接突发。对于极高连接速率的工作负载（每秒数万新连接），增加此值。如果性能分析显示 accept 相关竞争，则降低此值。
+
+## 连接池
+
+复用上游服务连接可避免每次请求的 TCP 握手和 TLS 协商开销。连接池对于延迟敏感型工作负载至关重要。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `runtimeTuning.httpCapacity.upstreamKeepalivePoolSize` | int | `32768` | 上游池中保持的最大空闲连接数 |
+
+上游 keepalive 池维护与后端服务的空闲连接。当数据面需要转发请求时，先检查池中是否有可用连接，然后再建立新连接。每个空闲连接消耗少量内存（数 KB 的 socket 缓冲区），因此内存成本随池大小线性增长。
+
+:::tip[池大小估算指南]
+池大小估算的实用起点：`poolSize = 后端数量 × 每后端平均并发数 × 0.5`。0.5 系数考虑了并非所有连接同时空闲的情况。监控 `upstream_keepalive_pool_hits` 和 `upstream_keepalive_pool_misses` 指标以验证或调整配置。
+:::
+
+## 缓冲区大小
+
+缓冲区大小直接影响代理数据的内存使用和吞吐量：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `runtimeTuning.buffer.limit` | int | `65536` | 最大缓冲区大小（字节） |
+| `runtimeTuning.buffer.initialCapacity` | int | `8192` | 初始缓冲区容量（字节） |
+
+缓冲区限制设定了单个请求或响应可缓冲的最大数据量。对于大负载工作负载（文件上传、流式响应），增加此值。内存影响为 `limit × 并发请求数`，因此提高限制会按比例增加峰值内存。
+
+`initialCapacity` 设置起始缓冲区大小。将其设置为接近预期平均负载大小可减少因重复缓冲区增长而产生的分配开销。对于响应大小可预测的 API（具有已知 schema 的 JSON API），将初始容量与典型负载大小匹配可提高吞吐量。
+
+## 超时
+
+超时配置可防止资源泄漏，确保代理不会无限期持有连接：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `runtimeTuning.timeout.requestHeader` | duration | `"10s"` | 接收请求头的最大时间 |
+| `runtimeTuning.timeout.requestBody` | duration | `"30s"` | 接收请求体的最大时间 |
+| `runtimeTuning.timeout.responseHeader` | duration | `"60s"` | 接收上游响应头的最大时间 |
+| `runtimeTuning.timeout.responseBody` | duration | `"0s"` | 接收完整上游响应的最大时间（0 = 无限制） |
+| `runtimeTuning.timeout.idleConnection` | duration | `"300s"` | 关闭客户端连接前的最大空闲时间 |
+
+将 `responseBody` 设置为 `0` 禁用响应体超时，适用于长连接（如 WebSocket 或 SSE 流）。对于标准 HTTP API，设置合理的值以防止停滞的上游连接消耗代理资源。
+
+## TLS 调优
+
+TLS 配置影响握手延迟和 CPU 消耗：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `runtimeTuning.tls.sessionCacheSize` | int | `2048` | 用于会话恢复的 TLS 会话缓存条目数 |
+| `runtimeTuning.tls.sessionCacheLifetime` | duration | `"10m"` | 缓存的 TLS 会话生存期 |
+
+TLS 会话缓存启用会话恢复，通过复用先前协商的参数降低重复握手的 CPU 成本。当大量客户端与相同后端服务建立短连接时，此功能尤为有益。
+
+当数据面连接大量支持会话恢复的不同后端时，增加 `sessionCacheSize`。每个缓存条目消耗少量内存。
+
+## 性能分析与监控
+
+在调整调优参数之前，使用可用指标建立性能基线：
+
+1. **延迟分布** — 通过数据面指标端点跟踪 p50、p95 和 p99 响应时间
+2. **错误率** — 监控 HTTP 5xx 响应和连接错误
+3. **资源使用** — 观察当前流量水平下的 CPU 和内存消耗
+4. **连接池效率** — 跟踪 `upstream_keepalive_pool_hits` 与 `upstream_keepalive_pool_misses` 的比率
+
+逐步调整参数，在每次调整后测量对各项指标的影响，然后再进行下一次调整。记录基线和每次变更以供将来参考。
+
+## 下一步
+
+- [可观测性](/zh/configuration/observability) — 配置用于监控的指标、日志和链路追踪
+- [指标参考](/zh/operations/metrics) — 详细指标说明
+- [生产环境部署](/zh/installation/production/) — 生产资源规模指南

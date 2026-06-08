@@ -1,0 +1,73 @@
+---
+import '../styles/custom.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+import '@fontsource/inter/800.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+
+export interface Props {
+  title?: string;
+  description?: string;
+  lang?: string;
+  canonical?: string;
+}
+const {
+  title = 'Nantian Gateway',
+  description = 'Kubernetes Gateway API implementation with split-plane architecture',
+  lang = 'en',
+  canonical = 'https://nantian.dev/',
+} = Astro.props;
+const altLang = lang === 'en' ? 'zh-CN' : 'en';
+const altUrl = lang === 'en' ? 'https://nantian.dev/zh/' : 'https://nantian.dev/';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  'name': 'Nantian Gateway',
+  'url': 'https://nantian.dev/',
+  'description': description,
+  'inLanguage': lang === 'zh-CN' ? 'zh' : 'en',
+  'potentialAction': {
+    '@type': 'SearchAction',
+    'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
+    'query-input': 'required name=search_term_string',
+  },
+};
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang={lang} href={canonical} />
+    <link rel="alternate" hreflang={altLang} href={altUrl} />
+    <link rel="alternate" hreflang="x-default" href="https://nantian.dev/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={lang} />
+    <meta property="og:site_name" content="Nantian Gateway" />
+    <meta property="og:image" content="https://nantian.dev/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="https://nantian.dev/og-image.png" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <slot name="head" />
+  </head>
+  <body class="bg-[var(--color-bg-base)] text-[var(--color-text-primary)] antialiased">
+    <slot />
+  </body>
+</html>

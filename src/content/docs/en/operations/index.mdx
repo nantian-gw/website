@@ -1,0 +1,144 @@
+---
+title: Operations Overview
+---
+
+This chapter covers the day-to-day operational concerns of running Nantian Gateway in production. You'll find reference material for metrics, dashboards, alerting rules, troubleshooting procedures, and backup and recovery.
+
+## Operational model
+
+Nantian Gateway runs as a set of Kubernetes workloads. The control plane is a Deployment (typically two replicas with leader election), the data plane is a separate Deployment (scaled independently), and the dashboard is a single-replica Deployment. All three are managed through the Helm chart or Kustomize overlays.
+
+The operational surface is intentionally small. There's no database to manage, no external coordination service to maintain, and no persistent state outside of Kubernetes itself. The control plane stores node status in Kubernetes Lease objects. Everything else is in-memory and rebuilt from the Kubernetes API on restart.
+
+## Monitoring stack
+
+Nantian Gateway ships with a pre-built observability stack:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Prometheus metrics | Control plane `:18082`, Data plane admin | Scrape targets for time-series metrics |
+| Grafana dashboard | `deploy/observability/grafana/` | Pre-built dashboard with executive overview, control plane panels, and data plane panels |
+| Prometheus rules | `deploy/observability/prometheus/` | Recording rules for data plane metrics, both native and Prometheus Operator formats |
+| Structured logs | stdout (JSON format) | Log aggregation with Loki, Elasticsearch, or Datadog |
+| OpenTelemetry traces | Configurable | Distributed tracing for request flows |
+### Metrics architecture
+
+```
++------------------+     scrape     +------------------+
+
+| Control Plane    |  <----------   | Prometheus       |
+| :18082/metrics   |                |                  |
++------------------+                +--------+---------+
+                                              |
++------------------+     scrape     +---------v---------+
+
+| Data Plane       |  <----------   | Grafana           |
+| admin/metrics    |                | Dashboard         |
++------------------+                +-------------------+
+```
+
+The control plane exposes metrics on `:18082` by default. The data plane exposes metrics through its admin API, which can be scraped directly or aggregated through the control plane's data plane aggregation feature.
+
+### Logging
+
+Both planes emit structured JSON logs to stdout. In Kubernetes, these are captured by the container runtime and can be collected by any log aggregation system that supports the container log format.
+
+**Control plane** log format:
+```json
+{"time":"2026-06-06T12:00:00Z","level":"INFO","msg":"snapshot published","component":"controlplane","version":"abc123"}
+```
+
+**Data plane** log format:
+```json
+{"timestamp":"2026-06-06T12:00:00.000Z","level":"INFO","target":"nantian_core::proxy","message":"configuration applied","version":"abc123"}
+```
+
+Set `log.level` to `debug` for troubleshooting. Debug logs include reconciliation details, snapshot diffs, gRPC stream events, and proxy-level request information. Debug logging generates significantly more output and should not be left enabled in production.
+
+## Health checks
+
+The control plane exposes Kubernetes-compatible health probes:
+
+| Probe | Endpoint | Port | Description |
+|-------|----------|------|-------------|
+| Liveness | `GET /livez` | `:18083` | Returns 200 if the process is alive |
+| Readiness | `GET /readyz` | `:18083` | Returns 200 when the startup gate is open |
+
+The readiness probe is gated by the lifecycle supervisor's startup gate. The gate remains closed until all components (manager, admin server, metrics server, gRPC server) have started successfully. This prevents Kubernetes from routing traffic to a control plane that hasn't finished initializing.
+
+The Admin API also provides `/livez` and `/readyz` endpoints on the admin port (`:18081`). These are used by the dashboard and external monitoring tools.
+
+## Common operational tasks
+
+### Checking gateway health
+
+```bash
+# Check control plane status via Admin API
+curl -s http://localhost:18081/v1/summary | jq .
+
+# Check connected data plane nodes
+curl -s http://localhost:18081/v1/nodes | jq .
+
+# Check Prometheus metrics
+curl -s http://localhost:18082/metrics | grep nantian_gateway
+```
+
+### Viewing the current configuration
+
+```bash
+# Full IR snapshot
+curl -s http://localhost:18081/v1/snapshot | jq .
+
+# Listeners and attached routes
+curl -s http://localhost:18081/v1/listeners | jq .
+
+# Routes by kind
+curl -s "http://localhost:18081/v1/routes?kind=HTTPRoute" | jq .
+```
+
+### Restarting a data plane
+
+Data planes are stateless. You can restart them at any time without losing configuration:
+
+```bash
+kubectl rollout restart deployment/nantian-gw-dataplane -n nantian-gw
+```
+
+The restarted data plane will reconnect to the control plane, receive the current snapshot, and resume serving traffic. Existing connections to other data plane replicas are unaffected.
+
+### Restarting the control plane
+
+The control plane is also stateless. Restarting the leader triggers a leader election. The standby replica takes over within the lease duration (default 15 seconds):
+
+```bash
+kubectl rollout restart deployment/nantian-gw-controlplane -n nantian-gw
+```
+
+During the transition, the data plane continues serving traffic with the last received configuration. No traffic interruption occurs.
+
+## Resource requirements
+
+Recommended resource allocations for production workloads:
+
+| Component | CPU Request | CPU Limit | Memory Request | Memory Limit |
+|-----------|-------------|-----------|----------------|--------------|
+| Control plane | 100m | 500m | 128Mi | 512Mi |
+| Data plane | 500m | 2 | 256Mi | 1Gi |
+| Dashboard | 50m | 200m | 64Mi | 256Mi |
+
+The data plane's resource usage scales with traffic volume. More connections, higher throughput, and more complex routing rules all increase CPU and memory consumption. Monitor the Grafana dashboard's resource panels and adjust limits accordingly.
+
+## Chapter structure
+
+| Page | Covers |
+|------|--------|
+| [Metrics Reference](/en/operations/metrics) | Complete catalog of Prometheus metrics emitted by both planes |
+| [Grafana Dashboard](/en/operations/grafana) | How to import and customize the bundled Grafana dashboard |
+| [Alerting Rules](/en/operations/alerting) | Recommended Prometheus alerting rules for production |
+| [Troubleshooting](/en/operations/troubleshooting) | Common issues, diagnostic commands, and resolution steps |
+| [Backup & Recovery](/en/operations/backup) | What to back up and how to recover from failures |
+## What's next
+
+- [Metrics Reference](/en/operations/metrics) -- every metric, label, and what it means
+- [Grafana Dashboard](/en/operations/grafana) -- set up the pre-built dashboard
+- [Alerting Rules](/en/operations/alerting) -- alerts you should configure

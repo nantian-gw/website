@@ -1,0 +1,275 @@
+---
+title: Custom CRDs
+---
+
+Nantian Gateway defines four custom resources (CRDs) on top of the standard Gateway API, extending capabilities for AI service management, token quota control, Wasm plugin injection, and custom load balancing. All CRDs are under the `gateway.nantian.io/v1alpha1` API group.
+
+:::caution[Experimental]
+These CRDs are currently **experimental** (`v1alpha1`). APIs may change incompatibly in future releases. Evaluate risks before using in production.
+:::
+
+## Overview
+
+| CRD | Purpose | Scope |
+|-----|---------|-------|
+| `AIService` | Manage connection configuration for AI model providers, including authentication, model routing, provider selection, and timeout control | Namespaced |
+| `TokenPolicy` | Rate-limit and quota-control AI API calls based on token count | Namespaced |
+| `WasmPlugin` | Bind Wasm extensions at the listener or route level to inject custom request/response processing logic | Namespaced |
+| `BackendLBPolicy` | Configure backend load balancing strategy and session persistence | Namespaced |
+
+## AIService
+
+:::caution[Experimental]
+`AIService` is experimental. The API may change.
+:::
+
+`AIService` manages the configuration for connecting to AI model providers. It defines the provider type, API endpoint, supported model list, and authentication method. A single `AIService` can contain multiple backends, each corresponding to an AI provider or model.
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.backends` | `[]Backend` | Yes | List of AI backends |
+| `spec.backends[].name` | `string` | Yes | Backend name, used for referencing |
+| `spec.backends[].provider` | `string` | Yes | Provider type: `openai`, `anthropic`, `ollama` |
+| `spec.backends[].endpoint` | `string` | Yes | API endpoint URL |
+| `spec.backends[].models` | `[]string` | No | List of models supported by this backend |
+| `spec.backends[].auth` | `AuthConfig` | No | Authentication configuration |
+| `spec.backends[].auth.type` | `string` | No | Auth type: `bearer`, `api_key` |
+| `spec.backends[].auth.secretRef` | `string` | No | Referenced Kubernetes Secret name |
+| `spec.backends[].auth.header` | `string` | No | HTTP header name carrying auth credentials, default `Authorization` |
+| `spec.backends[].timeout` | `Duration` | No | Request timeout |
+
+### Example
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: AIService
+metadata:
+  name: llm-routing
+  namespace: default
+spec:
+  backends:
+    - name: openai-gpt4
+      provider: openai
+      endpoint: https://api.openai.com/v1
+      models:
+        - gpt-4
+        - gpt-4-turbo
+        - gpt-4o
+      auth:
+        type: bearer
+        secretRef: openai-api-key
+        header: Authorization
+      timeout: 60s
+    - name: anthropic-claude
+      provider: anthropic
+      endpoint: https://api.anthropic.com
+      models:
+        - claude-3-opus
+        - claude-3-sonnet
+        - claude-3-haiku
+      auth:
+        type: api_key
+        secretRef: anthropic-api-key
+        header: x-api-key
+      timeout: 90s
+    - name: ollama-local
+      provider: ollama
+      endpoint: http://ollama.internal:11434
+      models:
+        - llama3
+        - mistral
+        - codellama
+```
+
+### How It Works
+
+When an `AIService` is created, the control plane translates it into an `AIServiceConfig` in the internal IR. After the data plane receives the configuration, it enables AI protocol translation and model routing capabilities within the proxy process. Applications simply send requests to the gateway's AI endpoint. The gateway automatically routes to the appropriate provider based on the model specified in the request and performs protocol format translation.
+
+:::tip[Protocol Adaptation]
+Nantian Gateway supports normalization across OpenAI, Anthropic, and Ollama API formats. Applications send requests using the OpenAI-compatible format, and the gateway automatically converts requests to the format required by the target backend provider.
+:::
+
+## TokenPolicy
+
+:::caution[Experimental]
+`TokenPolicy` is experimental. The API may change.
+:::
+
+`TokenPolicy` enforces rate limiting on AI API calls based on actual token usage. Unlike traditional request-count-based rate limiting, `TokenPolicy` counts the number of tokens in each request and response and enforces limits based on total token volume.
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.rules` | `[]Rule` | Yes | List of rate limit rules |
+| `spec.rules[].selector` | `map[string]string` | No | Label selector to match request sources |
+| `spec.rules[].limit.tokensPerMinute` | `uint64` | No | Maximum tokens per minute |
+| `spec.rules[].limit.tokensPerHour` | `uint64` | No | Maximum tokens per hour |
+| `spec.rules[].limit.tokensPerDay` | `uint64` | No | Maximum tokens per day |
+| `spec.rules[].limit.requestsPerMinute` | `uint64` | No | Maximum requests per minute |
+| `spec.rules[].limit.burst` | `float64` | No | Burst multiplier, allows temporary over-limit |
+| `spec.rules[].limit.onLimit` | `string` | No | Action on limit: `reject` or `queue` |
+
+### Example
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: team-quotas
+  namespace: default
+spec:
+  rules:
+    - selector:
+        team: engineering
+      limit:
+        tokensPerMinute: 100000
+        tokensPerHour: 5000000
+        tokensPerDay: 50000000
+        requestsPerMinute: 1000
+        burst: 1.5
+        onLimit: reject
+    - selector:
+        team: marketing
+      limit:
+        tokensPerMinute: 50000
+        tokensPerHour: 2000000
+        tokensPerDay: 10000000
+        requestsPerMinute: 500
+        burst: 1.2
+        onLimit: reject
+```
+
+### How It Works
+
+The data plane counts tokens on every AI API request and response. Token counts are based on actual usage returned by the AI provider, not estimates. When a source's token usage exceeds the limits configured in the `TokenPolicy`, the gateway rejects the request before it reaches the provider, returning an HTTP 429 status code.
+
+:::note[Token Counting Accuracy]
+Token counts are based on the `usage` field in AI provider API responses. For providers that do not return token usage, Nantian Gateway uses a built-in tokenizer for estimation. Accuracy is close to actual values but may have slight deviations.
+:::
+
+## WasmPlugin
+
+:::caution[Experimental]
+`WasmPlugin` is experimental. The API may change.
+:::
+
+`WasmPlugin` manages the loading and binding of WebAssembly extensions. Plugins are distributed as `.wasm` module files. The `WasmPlugin` CRD declares which request lifecycle hooks should execute plugin logic.
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.wasmBytes` | `[]byte` | No | Wasm module byte content (inline mode) |
+| `spec.wasmRef` | `string` | No | Referenced Wasm module (OCI image or URL) |
+| `spec.sha256` | `string` | No | SHA256 checksum of the Wasm module |
+| `spec.hooks` | `[]string` | Yes | List of execution hooks |
+| `spec.config` | `string` | No | Configuration passed to the plugin (JSON string) |
+| `spec.sandbox.maxMemoryBytes` | `uint64` | No | Sandbox maximum memory limit |
+| `spec.sandbox.maxExecutionTimeMs` | `uint64` | No | Maximum execution time per invocation |
+| `spec.sandbox.allowNetwork` | `bool` | No | Whether the plugin is allowed network access |
+| `spec.sandbox.allowFileSystem` | `bool` | No | Whether the plugin is allowed filesystem access |
+
+### Supported Lifecycle Hooks
+
+| Hook | Phase | Description |
+|------|-------|-------------|
+| `on_request_headers` | Request | Executes after request headers are received, before route matching |
+| `on_request_body` | Request | Executes after the full request body is received |
+| `on_response_headers` | Response | Executes after backend response headers are received |
+| `on_response_body` | Response | Executes after the full response body is received, before sending to the client |
+
+### Example
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: pii-sanitizer
+  namespace: default
+spec:
+  wasmRef: oci://registry.example.com/plugins/pii-sanitizer:v1.2.0
+  sha256: "sha256:abc123def456..."
+  hooks:
+    - on_request_body
+    - on_response_body
+  config: |
+    {
+      "patterns": ["email", "phone", "credit_card"],
+      "replacement": "[REDACTED]"
+    }
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+### Binding Methods
+
+`WasmPlugin` can be bound to traffic in the following ways:
+
+- **Listener level**: Specified in `Gateway` extension references, affecting all traffic on that listener
+- **Route level**: Referenced in `HTTPRoute` or `GRPCRoute` filter extensions, affecting only traffic matching that route
+- **Backend level**: Referenced in `BackendRef` filter extensions, affecting only traffic to a specific backend
+
+:::tip[Wasm Runtime]
+Nantian Gateway uses [wasmtime](https://wasmtime.dev/) as its Wasm runtime, embedded in the Rust data plane. Plugin execution runs in a sandboxed environment. Network and filesystem access are disallowed by default.
+:::
+
+## BackendLBPolicy
+
+:::caution[Experimental]
+`BackendLBPolicy` is experimental. The API may change.
+:::
+
+`BackendLBPolicy` configures backend service load balancing strategy and session persistence behavior.
+
+### Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `spec.loadBalancing.type` | `string` | No | Load balancing algorithm: `RoundRobin` (default), `ConsistentHash` |
+| `spec.loadBalancing.consistentHash.keyType` | `string` | No | Consistent hash key type: `SourceIP`, `Header`, `Hostname` |
+| `spec.loadBalancing.consistentHash.headerName` | `string` | No | Header name when `keyType` is `Header` |
+| `spec.sessionPersistence.type` | `string` | No | Session persistence type: `Cookie`, `Header` |
+| `spec.sessionPersistence.sessionName` | `string` | No | Session identifier name |
+| `spec.sessionPersistence.absoluteTimeout` | `Duration` | No | Session absolute timeout |
+| `spec.sessionPersistence.idleTimeout` | `Duration` | No | Session idle timeout |
+
+### Example
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: BackendLBPolicy
+metadata:
+  name: sticky-sessions
+  namespace: default
+spec:
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+  sessionPersistence:
+    type: Cookie
+    sessionName: NANTIAN_SESSION
+    absoluteTimeout: 3600s
+    idleTimeout: 600s
+```
+
+### How It Works
+
+`BackendLBPolicy` can be referenced in `HTTPRoute` or `GRPCRoute` backend references. The control plane translates it into the `LoadBalancingPolicy` and `SessionPersistence` fields of the `BackendCluster` configuration, and the data plane applies these policies when proxying requests.
+
+:::caution[Consistent Hash Considerations]
+When using consistent hashing, changes to the backend list will cause some sessions to be reassigned. If your application is sensitive to session migration, consider pairing with session persistence or performing operations outside of backend change windows.
+:::
+
+## Next Steps
+
+- See [Admin API](/en/api-reference/admin-api) for runtime diagnostics endpoints
+- See [xDS Protocol](/en/api-reference/xds-proto) for the control plane/data plane communication protocol
+- See [Use Cases](/en/use-cases) for real-world AI gateway usage examples

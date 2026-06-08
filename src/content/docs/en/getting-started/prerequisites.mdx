@@ -1,0 +1,120 @@
+---
+title: Prerequisites
+---
+
+Before installing Nantian Gateway, verify that the environment meets the following requirements.
+
+## Kubernetes Cluster
+
+A Kubernetes cluster running **version 1.28 or later** is required. Any conformant Kubernetes distribution is supported, from local development environments to managed cloud services.
+
+For local development, **[Kind](https://kind.sigs.k8s.io/)** (Kubernetes IN Docker) is the recommended tool. It is a single-binary, fast cluster creation utility that works well with the project's preconfigured Kind configurations.
+
+### Creating a Kind Cluster
+
+Install Kind from the [official releases page](https://kind.sigs.k8s.io/docs/user/quick-start/#installation). Create a cluster using the provided configuration:
+
+```bash
+kind create cluster --config gateway/deploy/kubernetes/overlays/kind/kind-config.yaml
+```
+
+This configuration creates a single-node cluster with host port mappings for gateway access:
+
+| Service | Cluster Port | Host Port |
+|---------|-------------|-----------|
+| HTTP | 30080 | 18080 |
+| HTTPS | 30443 | 18443 |
+| UDP primary | 30000 | 5300 |
+| UDP secondary | 30001 | 5301 |
+| Admin API | 30000 | 19000 |
+| Admin API (gRPC) | 30001 | 19001 |
+
+After deployment, the gateway is accessible at `http://localhost:18080`.
+
+:::tip[Host network mode]
+For direct port binding without extra port mappings, use the `kind-hostnetwork` configuration:
+
+```bash
+kind create cluster --config gateway/deploy/kubernetes/overlays/kind-hostnetwork/kind-config.yaml
+```
+
+This creates a multi-node cluster (one control plane, two worker nodes). The data plane binds directly to host ports, which is useful when low port numbers are required.
+:::
+
+Verify the cluster is operational:
+
+```bash
+kubectl cluster-info
+```
+
+Expected output:
+
+```
+Kubernetes control plane is running at https://127.0.0.1:XXXX
+CoreDNS is running at https://127.0.0.1:XXXX/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+```
+
+## CLI Tools
+
+The following command-line tools must be installed and available in `PATH`:
+
+| Tool | Minimum Version | Purpose |
+|------|----------------|---------|
+| `kubectl` | 1.28 | Cluster interaction and manifest application |
+| `helm` | 3.12 | Nantian Gateway installation via Helm chart |
+
+### kubectl
+
+Install `kubectl` following the [official Kubernetes documentation](https://kubernetes.io/docs/tasks/tools/). Verify the installation:
+
+```bash
+kubectl version --client
+```
+
+Expected output (version numbers vary by installation):
+
+```
+Client Version: v1.31.0
+Kustomize Version: v5.4.2
+```
+
+### Helm
+
+Install Helm following the [official Helm documentation](https://helm.sh/docs/intro/install/). Verify the installation:
+
+```bash
+helm version --short
+```
+
+Expected output:
+
+```
+v3.14.0+ge36b354
+```
+
+## Gateway API CRDs
+
+Nantian Gateway requires the Kubernetes Gateway API CRDs to be installed on the cluster. These CRDs define the Gateway, GatewayClass, HTTPRoute, and other resource types that the gateway uses for configuration.
+
+Install the Gateway API CRDs using the standard upstream channel:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+```
+
+Verify the CRDs are installed:
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+```
+
+Expected output:
+
+```
+NAME                                    CREATED AT
+gateways.gateway.networking.k8s.io      2024-01-01T00:00:00Z
+```
+
+## Next Steps
+
+After verifying all prerequisites, proceed to the [Quick Start](/en/getting-started/quick-start) to deploy Nantian Gateway.

@@ -1,0 +1,354 @@
+---
+title: 数据面配置
+---
+
+数据面是真正处理流量的代理组件。它从控制面通过 gRPC xDS 接收配置，运行 HTTP、TCP、UDP 监听器，然后把请求转发到上游服务。
+
+参考配置文件在 `dataplane/configs/dataplane/config.yaml`。
+
+## 节点标识
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `nodeId` | string | `dp` | 数据面实例的唯一标识 |
+| `cluster` | string | `kind` | 所属逻辑集群名 |
+
+`nodeId` 在连到同一个控制面的所有数据面实例中必须唯一。在 Kubernetes 里，Helm chart 自动把这个值设为 Pod 名称。本地开发用 `dp` 就够了。
+
+`cluster` 字段把数据面分组到逻辑集群。控制面在跨集群部署时用这个字段把配置路由到正确的数据面组。
+
+## 控制面连接
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `controlPlaneAddr` | string | `http://127.0.0.1:18080` | 要连接的控制面 gRPC 地址 |
+
+数据面启动时向这个地址打开一条双向 gRPC 流。所有配置推送、健康更新和节点状态报告都走这条连接。生产环境把这个地址指向控制面的 Kubernetes Service。
+
+当控制面开启了 [gRPC TLS](/zh/configuration/tls#grpc-tls) 之后，把地址改成 `https://` 开头。
+
+## Admin 服务
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `adminAddr` | string | `127.0.0.1:19080` | 数据面 Admin HTTP 服务的监听地址 |
+
+数据面 Admin 服务暴露健康检查、运行时统计和少量管理端点。默认只绑定 localhost，安全考虑。
+
+## 日志
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `log.level` | string | `info,nantian_core::connectors=off` | Rust tracing 指令格式的日志过滤 |
+| `log.format` | string | `json` | 输出格式：`json` 或 `text` |
+| `log.addSource` | bool | `false` | 日志条目中包含源文件位置 |
+| `log.includeTarget` | bool | `false` | 包含 tracing target（Rust 模块路径） |
+| `log.includeThreadIds` | bool | `false` | 包含线程 ID |
+| `log.includeThreadNames` | bool | `false` | 包含线程名 |
+| `log.nonBlocking` | bool | `true` | 使用非阻塞环形缓冲区输出日志 |
+| `log.nonBlockingBufferedLines` | int | `65536` | 环形缓冲区容量 |
+| `log.dropWhenFull` | bool | `true` | 缓冲区满时丢弃日志 |
+
+`level` 字段支持 tracing 过滤语法。可以按 Rust 模块设不同级别：`info,hyper=warn,tower=debug` 表示全局 info 级别，hyper HTTP 库用 warn 级别，tower 中间件用 debug 级别。默认值关掉了 `nantian_core::connectors` 的冗余输出。
+
+非阻塞日志对高吞吐代理来说很关键。没有非阻塞模式，一个慢速的日志 sink（比如阻塞的磁盘或网络）会拖慢整个代理线程。环形缓冲区吸收突发流量，`dropWhenFull` 保证代理线程不会被日志阻塞。
+
+## 代理运行时
+
+这些参数控制数据面怎么处理 HTTP 和 TCP 流量：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.httpCapacity.workerThreads` | int | `0` | Worker 线程数（0 = CPU 核数） |
+| `runtimeTuning.httpCapacity.acceptConcurrency` | int | `16` | 并发 TCP accept 操作数 |
+| `runtimeTuning.httpCapacity.upstreamKeepalivePoolSize` | int | `32768` | 上游连接池中保持的最大空闲连接数 |
+| `runtimeTuning.httpCapacity.reusePort` | bool/null | null | 开启 SO_REUSEPORT（null = 系统默认） |
+
+`workerThreads` 为 0 时，运行时按 CPU 核数创建线程。这对 CPU 密集型负载（TLS 拆解、请求头修改、Wasm 过滤器）是最优的。对于 I/O 密集型负载（大部分时间在等上游响应），可以降低这个值让出 CPU 给其他进程。
+
+上游连接池复用和后端服务之间的连接，避免每次请求都走 TCP 握手和 TLS 协商。32768 这个默认值能支持大约这么多并发空闲连接。如果后端服务很多（几百个）或者每个后端并发很高，可以调大这个值。
+
+## 缓冲区大小
+
+代理数据的缓冲区大小，直接影响内存使用和吞吐：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.bufferSizes.upstreamHeaderBuffer` | int | `8192` | 上游响应头缓冲区（字节） |
+| `runtimeTuning.bufferSizes.upstreamBodyBuffer` | int | `8192` | 上游响应体缓冲区（字节） |
+| `runtimeTuning.bufferSizes.downstreamHeaderBuffer` | int | `8192` | 下游请求头缓冲区（字节） |
+| `runtimeTuning.bufferSizes.downstreamBodyBuffer` | int | `8192` | 下游请求体缓冲区（字节） |
+默认 8KB 的缓冲区对大多数 HTTP 请求头来说绰绰有余。如果上游服务返回很大的响应头（比如塞了很多自定义 header），调大 `upstreamHeaderBuffer`。如果流量以大文件传输为主，调大 body 缓冲区可以提升吞吐，但代价是每连接多用内存。
+
+## 超时配置
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.timeouts.connectTimeoutMs` | int | `3000` | 建立上游连接的超时，毫秒 |
+| `runtimeTuning.timeouts.keepaliveTimeoutMs` | int | `60000` | 空闲连接保持时间，毫秒 |
+`connectTimeoutMs` 控制连接后端服务的最大等待时间。如果后端在 3 秒内没响应，连接被放弃，请求返回 503。
+
+`keepaliveTimeoutMs` 控制空闲连接在连接池里保留多久。60 秒后空闲连接被关闭。这个值太小会导致频繁重建连接，太大则浪费连接池资源。
+
+## 限流
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `rateLimiting.enabled` | bool | `false` | 是否开启全局限流 |
+| `rateLimiting.requestsPerSecond` | int | `1000` | 每秒允许的最大请求数 |
+| `rateLimiting.burstSize` | int | `100` | 允许的突发请求数 |
+这是全局限流，作用于所有进入数据面的请求，在路由规则之前生效。更细粒度的限流（比如按路由或按后端）通过 Gateway API 的 `HTTPRoute` 过滤器配置。
+
+## 熔断
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `circuitBreaker.enabled` | bool | `false` | 是否开启熔断 |
+| `circuitBreaker.errorThreshold` | float | `0.5` | 错误率阈值（0.5 = 50%） |
+| `circuitBreaker.minRequests` | int | `20` | 触发熔断需要的最小请求数 |
+| `circuitBreaker.halfOpenMaxRequests` | int | `5` | 半开状态允许的探测请求数 |
+| `circuitBreaker.openTimeoutMs` | int | `30000` | 熔断打开后多久进入半开状态，毫秒 |
+熔断器保护后端服务不被雪崩请求压垮。当某个后端的错误率超过 `errorThreshold`，且收到的请求数超过 `minRequests`，熔断器打开。在 `openTimeoutMs` 期间，所有请求立即被拒绝。之后熔断器进入半开状态，允许少量探测请求通过。如果探测请求成功，熔断器关闭；如果失败，重新打开。
+
+## 健康检查
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `healthCheck.intervalMs` | int | `10000` | 健康检查间隔，毫秒 |
+| `healthCheck.timeoutMs` | int | `2000` | 健康检查超时，毫秒 |
+| `healthCheck.unhealthyThreshold` | int | `3` | 连续失败多少次标记为不健康 |
+| `healthCheck.healthyThreshold` | int | `1` | 连续成功多少次标记为健康 |
+数据面对每个后端服务做主动健康检查。后端不健康时，流量被路由到其他健康的后端。当所有后端都不健康时，数据面返回 503，不把不可用的后端暴露给客户端。
+
+:::tip[健康检查和熔断的区别]
+健康检查是主动探测（数据面定期向后端发请求），熔断是被动保护（根据实际请求的失败率做决策）。两者互补：健康检查发现可以预见的故障，熔断应对突发的性能退化。
+:::
+
+## Admin 认证
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `adminAuth.bearerToken` | string | `""` | Admin API 静态 Bearer Token |
+| `adminAuth.bearerTokenFile` | string | `""` | 包含 Bearer Token 的文件路径 |
+用法和控制面的 Admin 认证一样。两个都设空字符串即关闭认证。
+
+## 访问日志
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `accessLog.enabled` | bool | `false` | 开启按请求访问日志 |
+| `accessLog.path` | string | `stdout` | 输出路径，`stdout` 表示控制台 |
+| `accessLog.format` | string | （见 config.yaml） | 格式字符串，支持 `%VARIABLE%` 占位符 |
+| `accessLog.mode` | string | `json` | 输出模式：`json` 或 `text` |
+| `accessLog.sampleRate` | float | `0.01` | 日志采样率（1.0 = 全部请求） |
+| `accessLog.routeAnnotationPrefix` | string | `gateway.nantian.dev/access-log-` | 按路由覆盖日志配置的 Kubernetes annotation 前缀 |
+访问日志记录每个（或抽样）代理请求的详情。格式字符串支持 `%METHOD%`、`%STATUS%`、`%LATENCY_MS%`、`%ROUTE_NAME%` 等变量。高流量环境下把 `sampleRate` 调低来控制日志量。
+
+`routeAnnotationPrefix` 允许通过 Kubernetes annotation 按路由覆盖采样率和格式。给某个路由加 `gateway.nantian.dev/access-log-sample-rate: "1.0"` 就能全量记录该路由的请求。
+
+:::tip[生产环境采样]
+0.01（1%）的采样率对大多可观测性需求已经够用，同时保持日志量可控。把访问日志和指标结合起来，可以全面了解流量模式。
+:::
+
+## 代理运行时
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtime.httpListenAddr` | string | `0.0.0.0:10080` | HTTP 代理监听地址 |
+| `runtime.enableIpv6` | bool | `true` | 接受 IPv6 连接 |
+| `runtime.enableHttp3` | bool | `false` | 开启 HTTP/3（QUIC）支持 |
+| `runtime.tlsMinVersion` | string | `1.2` | 入站连接最低 TLS 版本 |
+| `runtime.tlsMaxVersion` | string | `1.3` | 入站连接最高 TLS 版本 |
+| `runtime.tlsAssetDir` | string | `""` | TLS 证书文件目录 |
+
+## 上游连接调优
+
+控制数据面如何连接后端服务：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | 上游服务连接超时（毫秒） |
+| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | 上游响应的读取超时（毫秒） |
+| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | 上游 Keep-Alive 连接空闲超时（毫秒） |
+
+## 下游连接调优
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | 下游客户端请求的读取超时（毫秒） |
+| `runtimeTuning.httpMaxConnectionAgeMs` | int | `0` | 连接最大生命周期（毫秒，0 = 不限制） |
+| `runtimeTuning.httpKeepaliveRequestLimit` | int | `0` | 每个 Keep-Alive 连接的最大请求数（0 = 不限制） |
+
+## 连接重试行为
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.httpReloadRetryIntervalMs` | int | `1000` | HTTP 监听器重载失败时的重试间隔（毫秒） |
+| `runtimeTuning.streamReloadRetryIntervalMs` | int | `1000` | Stream 重载失败时的重试间隔（毫秒） |
+
+## TCP 代理设置
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.tcpProxyBufferBytes` | int | `16384` | TCP 代理数据缓冲区大小（字节） |
+| `runtimeTuning.tcpSessionIdleTimeoutMs` | int | `0` | TCP 会话空闲超时（毫秒，0 = 不超时） |
+| `runtimeTuning.tcpMaxConnectionAgeMs` | int | `0` | TCP 连接最大生命周期（毫秒，0 = 不限制） |
+
+## 重试预算
+
+重试预算防止重试风暴压垮后端：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.retryBudgetEnabled` | bool | `true` | 开启重试预算控制 |
+| `runtimeTuning.retryBudgetRatioPercent` | int | `20` | 重试与成功请求的最大比例（%） |
+| `runtimeTuning.retryBudgetBurst` | int | `16` | 超过预算限额的最大突发值 |
+重试预算确保重试不会加剧后端故障。当重试次数与成功请求的比例超过 `retryBudgetRatioPercent` 时，数据面停止重试，直到比例恢复。`retryBudgetBurst` 允许在稳态比例之上有短暂的突发。
+
+### 流连接池
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.streamUpstreamPoolSize` | int | `128` | 上游池中保持的最大空闲流连接数 |
+| `runtimeTuning.streamUpstreamPoolIdleTimeoutMs` | int | `30000` | 流上游连接的空闲超时（毫秒） |
+
+### 工作窃取
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.workStealing` | bool | `true` | 启用 Tokio 跨工作线程的工作窃取 |
+
+### HTTP 缓存
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.httpCache.enabled` | bool | `false` | 启用 HTTP 响应缓存 |
+| `runtimeTuning.httpCache.maxSizeMb` | int | `256` | 最大缓存大小（MB） |
+| `runtimeTuning.httpCache.defaultTtlSeconds` | int | `60` | 默认缓存 TTL（秒） |
+
+## 优雅关闭
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.gracefulDrainPeriodMs` | int | `0` | 优雅关闭排空时间（毫秒，0 = 不排空） |
+数据面收到 SIGTERM（Pod 终结）后，停止接受新连接，在此时间内排空现有连接。设为 0 则立即关闭代理。Kubernetes 部署常见值为 `30000`（30 秒）。
+
+## 主动健康检查
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.activeHealthCheckEnabled` | bool | `false` | 开启对上游的主动健康检查 |
+| `runtimeTuning.activeHealthCheckIntervalMs` | int | `5000` | 健康检查探测间隔（毫秒） |
+| `runtimeTuning.activeHealthCheckTimeoutMs` | int | `1000` | 单次探测超时（毫秒） |
+| `runtimeTuning.activeHealthCheckUnhealthyThreshold` | int | `2` | 连续失败多少次标记为不健康 |
+主动健康检查定期向后端发送请求，在生产流量之外验证后端存活性。它和被动健康检查（从真实请求中检测故障）互补，能发现那些没在接收流量的后端的问题。
+
+## TCP Keepalive
+
+TCP Keepalive 探测在操作系统层面检测死连接：
+
+下游 TCP Keepalive：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.downstreamTcpKeepalive.enabled` | bool | `false` | 开启下游连接 TCP Keepalive |
+| `runtimeTuning.downstreamTcpKeepalive.idleMs` | int | `60000` | 发送探测前的空闲时间（毫秒） |
+| `runtimeTuning.downstreamTcpKeepalive.intervalMs` | int | `15000` | 探测间隔（毫秒） |
+| `runtimeTuning.downstreamTcpKeepalive.probeCount` | int | `4` | 判定死亡前的探测次数 |
+| `runtimeTuning.downstreamTcpKeepalive.userTimeoutMs` | int | `0` | 用户超时覆盖（毫秒，0 = 系统默认） |
+上游 TCP Keepalive 使用 `runtimeTuning.upstreamTcpKeepalive` 下相同的字段，默认 `enabled: true`。
+
+### TCP 优化
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.downstreamTcpFastopen` | bool | `null` | 下游启用 TCP Fast Open（null = 自动检测） |
+| `runtimeTuning.downstreamDscp` | int | `null` | 下游连接 DSCP 标记（null = 禁用） |
+| `runtimeTuning.upstreamTcpRecvBuf` | int | `0` | 上游 TCP 接收缓冲区大小（字节，0 = 系统默认） |
+| `runtimeTuning.upstreamTcpFastOpen` | bool | `true` | 上游启用 TCP Fast Open |
+| `runtimeTuning.upstreamDscp` | int | `null` | 上游连接 DSCP 标记（null = 禁用） |
+
+TCP Fast Open 通过在初始 TCP 握手期间发送数据来减少连接延迟。DSCP（区分服务代码点）标记可在网络层面实现 QoS 优先级。
+
+## 连接保护
+
+保护限制防止异常客户端或后端导致资源耗尽：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeProtection.httpGlobalInflightLimit` | int | `0` | 所有监听器并发请求数上限 |
+| `runtimeProtection.httpListenerInflightLimit` | int | `0` | 每个监听器并发请求数上限 |
+| `runtimeProtection.httpRouteInflightLimit` | int | `0` | 每个路由并发请求数上限 |
+| `runtimeProtection.httpBackendCircuitBreakerMaxRequests` | int | `0` | 单个后端并发请求熔断阈值 |
+| `runtimeProtection.httpMaxRequestBodyBytes` | int | `0` | 请求体最大大小（字节，0 = 不限制） |
+| `runtimeProtection.httpMaxRequestHeaderBytes` | int | `0` | 请求头最大大小（字节，0 = 不限制） |
+
+## 全局限流
+
+全局、按监听器、按路由的限流：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeProtection.httpGlobalRateLimitRequestsPerSecond` | int | `0` | 全局请求速率限制（0 = 不限制） |
+| `runtimeProtection.httpGlobalRateLimitBurst` | int | `0` | 全局突发允许量 |
+| `runtimeProtection.httpListenerRateLimitRequestsPerSecond` | int | `0` | 每个监听器请求速率限制 |
+| `runtimeProtection.httpListenerRateLimitBurst` | int | `0` | 每个监听器突发允许量 |
+| `runtimeProtection.httpRouteRateLimitRequestsPerSecond` | int | `0` | 每个路由请求速率限制 |
+| `runtimeProtection.httpRouteRateLimitBurst` | int | `0` | 每个路由突发允许量 |
+限流采用令牌桶算法。`Burst` 决定桶的深度：100 的速率配 50 的突发，第一个瞬间允许 150 个请求，之后稳定在每秒 100 个。
+
+## 连接数限制（TCP/UDP）
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeProtection.tcpGlobalConnectionLimit` | int | `0` | 最大并发 TCP 连接数 |
+| `runtimeProtection.tcpListenerConnectionLimit` | int | `0` | 每个监听器最大 TCP 连接数 |
+| `runtimeProtection.udpGlobalDatagramLimit` | int | `0` | 最大并发 UDP 数据报数 |
+| `runtimeProtection.udpListenerDatagramLimit` | int | `0` | 每个监听器最大 UDP 数据报数 |
+
+## 请求镜像
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.requestMirrorMaxConcurrency` | int | `1024` | 最大并发镜像请求数 |
+请求镜像将生产流量复制一份发送到次要后端，用于测试或金丝雀分析。这个限制控制飞行中的镜像请求数，防止镜像消耗过多资源。
+
+## 会话保持
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `sessionPersistence.secretKey` | string | `""` | 会话 Cookie 加密密钥 |
+| `sessionPersistence.secretKeyFile` | string | `""` | 包含密钥的文件路径 |
+会话保持（粘性会话）需要密钥来加密会话 Cookie。二选一配置 `secretKey` 或 `secretKeyFile`。生产环境建议用文件方式，密钥从 Kubernetes Secret 挂载。
+
+## UDP 设置
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `runtimeTuning.udpResponseIdleTimeoutMs` | int | `500` | UDP 响应会话空闲超时（毫秒） |
+
+## xDS 传输
+
+xDS 连接控制面的传输参数：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `xdsTransport.connectTimeoutMs` | int | `5000` | 建立 xDS 连接的超时时间（毫秒） |
+| `xdsTransport.keepaliveIntervalMs` | int | `10000` | xDS keepalive ping 间隔（毫秒） |
+| `xdsTransport.keepaliveTimeoutMs` | int | `5000` | xDS keepalive ping 响应超时（毫秒） |
+| `xdsTransport.initialReconnectBackoffMs` | int | `2000` | xDS 重连初始退避时间（毫秒） |
+| `xdsTransport.maxReconnectBackoffMs` | int | `30000` | xDS 重连最大退避时间（毫秒） |
+| `xdsTransport.applyTimeoutMs` | int | `3000` | 应用接收到的配置快照的超时时间（毫秒） |
+| `xdsTransport.applyPollIntervalMs` | int | `100` | 等待快照应用时的轮询间隔（毫秒） |
+| `xdsTransport.staleStreamTimeoutMs` | int | `30000` | 将陈旧 xDS 流视为失败的时间（毫秒） |
+| `xdsTransport.snapshotFreshnessTimeoutMs` | int | `90000` | 将当前快照视为过期的时间（毫秒） |
+
+连接断开时，数据面使用指数退避重连，从 `initialReconnectBackoffMs` 开始，每次翻倍，最多到 `maxReconnectBackoffMs`。`applyTimeoutMs` 和 `applyPollIntervalMs` 控制快照应用过程。
+
+## 功能开关
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `experimental.enableExperimentalGateway` | bool | `false` | 开启实验性 Gateway API 功能 |
+| `experimental.enableAiGateway` | bool | `false` | 开启 AI 网关模块 |
+必须和控制面的功能开关保持一致。只在一侧开启会导致行为不一致。

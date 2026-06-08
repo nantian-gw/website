@@ -1,0 +1,161 @@
+---
+import FeatureCard from './FeatureCard.astro';
+
+export interface Props {
+  lang?: 'en' | 'zh';
+}
+
+const { lang = 'en' } = Astro.props;
+const isZh = lang === 'zh';
+
+const features = isZh
+  ? [
+      {
+        icon: '🚪',
+        title: 'Gateway API v1.5.1',
+        description: '完整支持 Gateway、HTTPRoute、GRPCRoute、TCPRoute、UDPRoute、TLSRoute',
+      },
+      {
+        icon: '🤖',
+        title: 'AI Gateway',
+        description: 'LLM 路由、负载均衡、Token 策略管理',
+      },
+      {
+        icon: '⚡',
+        title: '控制面与数据面分离',
+        description: 'Go 控制面 + Rust 数据面，通过 gRPC xDS 协议通信',
+      },
+      {
+        icon: '🔌',
+        title: 'Wasm 插件',
+        description: '自定义过滤器、请求/响应转换、安全策略',
+      },
+      {
+        icon: '📊',
+        title: '可观测性',
+        description: 'Prometheus 指标、Grafana 仪表盘、Admin API',
+      },
+      {
+        icon: '🚀',
+        title: '生产就绪',
+        description: 'Kustomize + Helm 部署、高可用、Leader Election',
+      },
+    ]
+  : [
+      {
+        icon: '🚪',
+        title: 'Gateway API v1.5.1',
+        description: 'Full support for Gateway, HTTPRoute, GRPCRoute, TCPRoute, UDPRoute, TLSRoute',
+      },
+      {
+        icon: '🤖',
+        title: 'AI Gateway',
+        description: 'LLM routing, load balancing, token policy management',
+      },
+      {
+        icon: '⚡',
+        title: 'Split-plane Architecture',
+        description: 'Go control plane + Rust data plane over gRPC xDS',
+      },
+      {
+        icon: '🔌',
+        title: 'Wasm Plugins',
+        description: 'Custom filters, request/response transforms, security policies',
+      },
+      {
+        icon: '📊',
+        title: 'Observability',
+        description: 'Prometheus metrics, Grafana dashboards, Admin API',
+      },
+      {
+        icon: '🚀',
+        title: 'Production Ready',
+        description: 'Kustomize + Helm, HA, Leader Election',
+      },
+    ];
+
+const sectionTitle = isZh ? '核心特性' : 'Core Features';
+const sectionSubtitle = isZh
+  ? '一个平台，满足所有网关需求'
+  : 'One platform for all your gateway needs';
+---
+
+<section class="features" aria-label={sectionTitle}>
+  <div class="features-container">
+    <header class="features-header">
+      <h2 class="features-heading gradient-text">{sectionTitle}</h2>
+      <p class="features-subtitle">{sectionSubtitle}</p>
+    </header>
+
+    <div class="features-grid">
+      {features.map((feature) => (
+        <FeatureCard
+          icon={feature.icon}
+          title={feature.title}
+          description={feature.description}
+        />
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .features {
+    background: var(--color-bg-base);
+    padding: 5rem 1.5rem;
+  }
+
+  .features-container {
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+
+  .features-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .features-heading {
+    font-size: 2.25rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin: 0 0 0.75rem;
+  }
+
+  .features-subtitle {
+    font-size: 1.125rem;
+    color: var(--color-text-muted);
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 1024px) {
+    .features-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .features {
+      padding: 3rem 1rem;
+    }
+
+    .features-heading {
+      font-size: 1.75rem;
+    }
+
+    .features-header {
+      margin-bottom: 2rem;
+    }
+
+    .features-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

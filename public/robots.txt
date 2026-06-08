@@ -1,0 +1,28 @@
+User-agent: *
+Allow: /
+Sitemap: https://nantian.dev/sitemap-index.xml
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Omgili
+Allow: /
+
+User-agent: FacebookBot
+Allow: /

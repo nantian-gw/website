@@ -1,0 +1,333 @@
+---
+title: xDS 协议
+---
+
+Nantian Gateway 的控制面和数据面之间通过 gRPC 双向流通信，协议定义在 `proto/gateway/control/v1/control.proto` 中。这个协议基于 Envoy 的 xDS 模型，但消息结构专为 Nantian Gateway 的内部表示（IR）设计。
+
+## 协议概述
+
+控制面和数据面之间有两个 gRPC 服务：
+
+| 服务 | RPC | 类型 | 用途 |
+|------|-----|------|------|
+| `ConfigurationDiscoveryService` | `StreamConfiguration` | 双向流 | 推送配置快照，确认接收状态 |
+| `ConfigurationDiscoveryService` | `ReportStatus` | 一元 RPC | 数据面上报健康状态 |
+## 数据流模型
+
+```
+数据面                                  控制面
+
+  |                                       |
+  |-- DiscoveryRequest (subscribe) ------>|  数据面发起订阅
+  |                                       |
+  |<---- DiscoveryResponse (snapshot) --- |  控制面推送配置快照
+  |                                       |
+  |-- DiscoveryRequest (ACK/NACK) ------>|  数据面确认接收
+  |                                       |
+  |  ... 配置变更 ...                     |
+  |                                       |
+  |<---- DiscoveryResponse (new ver) ---- |  控制面推送新快照
+  |                                       |
+  |-- DiscoveryRequest (ACK/NACK) ------>|  数据面确认
+  |                                       |
+  |-- StatusReport --------------------->|  数据面上报健康状态
+  |<---- StatusAck --------------------- |  控制面确认收到
+```
+
+### 关键概念
+
+**版本追踪**：每个配置快照都有一个 `version` 字段，控制面在每次配置变更时递增版本号。数据面在 `DiscoveryRequest` 中携带当前版本，控制面据此判断是否需要推送新配置。
+
+**Nonce 机制**：每次 `DiscoveryResponse` 携带一个随机 `nonce`，数据面在确认时必须原样返回。防止过期确认干扰配置流。
+
+**订阅模式**：数据面在首次 `DiscoveryRequest` 中声明它关心的资源类型（`subscriptions` 字段），控制面只推送数据面订阅的资源。
+
+**ACK/NACK**：数据面收到配置后必须回复确认状态。`ACK` 表示配置已成功应用，`NACK` 表示配置无效，同时通过 `error_detail` 字段携带错误信息。
+
+## 消息定义
+
+### DiscoveryRequest
+
+数据面发送给控制面的请求消息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `node_id` | `string` | 数据面节点标识，通常为 Pod 名称 |
+| `cluster` | `string` | 数据面所属集群名称 |
+| `version` | `string` | 当前已应用的配置版本 |
+| `nonce` | `string` | 上一次收到的 nonce（用于 ACK/NACK） |
+| `subscriptions` | `repeated string` | 订阅的资源类型列表 |
+| `result_status` | `DiscoveryResultStatus` | 配置应用结果：`ACK` 或 `NACK` |
+| `error_detail` | `string` | NACK 时的错误详情 |
+### DiscoveryResponse
+
+控制面响应数据面的消息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `version` | `string` | 当前配置快照版本 |
+| `nonce` | `string` | 本次响应的唯一标识，数据面确认时需返回 |
+| `snapshot` | `ConfigSnapshot` | 配置快照内容 |
+### ConfigSnapshot
+
+配置快照，包含数据面需要的所有配置信息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 快照唯一标识 |
+| `generated_at` | `Timestamp` | 快照生成时间 |
+| `listeners` | `repeated Listener` | 监听器列表 |
+| `http_routes` | `repeated HttpRoute` | HTTP 路由列表 |
+| `grpc_routes` | `repeated GrpcRoute` | gRPC 路由列表 |
+| `stream_routes` | `repeated StreamRoute` | TCP/UDP/TLS 路由列表 |
+| `backends` | `repeated BackendCluster` | 后端集群列表 |
+| `secrets` | `repeated SecretMaterial` | TLS 证书和密钥 |
+| `extensions` | `Struct` | 扩展配置（Wasm 插件等） |
+### StatusReport
+
+数据面定期上报的健康状态消息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `node_id` | `string` | 数据面节点标识 |
+| `version` | `string` | 当前数据面版本 |
+| `ready` | `bool` | 是否就绪接收流量 |
+| `message` | `string` | 状态消息 |
+| `observed_at` | `Timestamp` | 观测时间 |
+### StatusAck
+
+控制面对状态上报的确认。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `accepted` | `bool` | 是否接受状态上报 |
+## Listener 定义
+
+`Listener` 定义数据面需要监听的网络端口和协议。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 监听器名称 |
+| `address` | `string` | 监听地址 |
+| `port` | `uint32` | 监听端口 |
+| `protocol` | `ListenerProtocol` | 协议类型 |
+| `hostnames` | `repeated string` | 允许的主机名列表 |
+| `attached_routes` | `repeated string` | 绑定到该监听器的路由名称 |
+| `tls` | `TlsConfig` | TLS 配置 |
+| `metadata` | `map<string, string>` | 元数据 |
+| `backend_tls` | `BackendTlsConfig` | 后端 TLS 配置 |
+| `addresses` | `repeated string` | 多地址监听 |
+### ListenerProtocol 枚举
+
+| 值 | 说明 |
+|----|------|
+| `LISTENER_PROTOCOL_HTTP` | HTTP/1.1 和 HTTP/2（h2c） |
+| `LISTENER_PROTOCOL_HTTPS` | TLS 终结 + HTTP |
+| `LISTENER_PROTOCOL_GRPC` | gRPC |
+| `LISTENER_PROTOCOL_HTTP3` | HTTP/3（QUIC） |
+| `LISTENER_PROTOCOL_TCP` | TCP 流代理 |
+| `LISTENER_PROTOCOL_UDP` | UDP 流代理 |
+| `LISTENER_PROTOCOL_TLS_PASSTHROUGH` | TLS 透传 |
+| `LISTENER_PROTOCOL_TLS` | TLS 终结 |
+### TlsConfig
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `enabled` | `bool` | 是否启用 TLS |
+| `passthrough` | `bool` | 是否为透传模式 |
+| `secret_refs` | `repeated string` | 引用的 Secret 名称 |
+| `sni_hosts` | `repeated string` | SNI 主机名列表 |
+| `min_version` | `string` | TLS 最低版本 |
+| `max_version` | `string` | TLS 最高版本 |
+| `frontend_validation` | `FrontendValidation` | 客户端证书验证 |
+### FrontendValidation
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ca_pems` | `repeated string` | CA 证书 PEM 列表 |
+| `mode` | `string` | 验证模式 |
+## HttpRoute 定义
+
+`HttpRoute` 对应 Gateway API 中的 `HTTPRoute` 资源，定义 HTTP 流量路由规则。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 路由名称 |
+| `namespace` | `string` | 命名空间 |
+| `hostnames` | `repeated string` | 主机名列表 |
+| `parent_refs` | `repeated ParentRef` | 父资源引用 |
+| `rules` | `repeated HttpRule` | 路由规则列表 |
+| `labels` | `map<string, string>` | 标签 |
+| `annotations` | `map<string, string>` | 注解 |
+### HttpRule
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `matches` | `repeated HttpMatch` | 匹配条件 |
+| `filters` | `repeated Filter` | 过滤器链 |
+| `backend_refs` | `repeated BackendRef` | 后端引用列表 |
+| `timeouts` | `HttpRouteTimeouts` | 超时配置 |
+| `retry` | `HttpRouteRetry` | 重试配置 |
+| `session_persistence` | `SessionPersistence` | 会话保持 |
+| `name` | `string` | 规则名称 |
+### HttpMatch
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `path` | `string` | 路径匹配值 |
+| `path_type` | `string` | 路径匹配类型：`Exact`、`PathPrefix`、`RegularExpression` |
+| `method` | `string` | HTTP 方法 |
+| `headers` | `repeated HeaderMatch` | 请求头匹配条件 |
+| `query_params` | `repeated QueryMatch` | 查询参数匹配条件 |
+### HttpRouteTimeouts
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `request` | `Duration` | 请求超时时间 |
+| `backend_request` | `Duration` | 后端请求超时时间 |
+### HttpRouteRetry
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `codes` | `repeated uint32` | 触发重试的 HTTP 状态码 |
+| `attempts` | `uint32` | 最大重试次数 |
+| `backoff` | `Duration` | 重试退避时间 |
+## GrpcRoute 定义
+
+`GrpcRoute` 对应 Gateway API 中的 `GRPCRoute` 资源。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 路由名称 |
+| `namespace` | `string` | 命名空间 |
+| `hostnames` | `repeated string` | 主机名列表 |
+| `parent_refs` | `repeated ParentRef` | 父资源引用 |
+| `rules` | `repeated GrpcRule` | gRPC 路由规则 |
+### GrpcRule
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `matches` | `repeated GrpcMatch` | 匹配条件 |
+| `filters` | `repeated Filter` | 过滤器链 |
+| `backend_refs` | `repeated BackendRef` | 后端引用列表 |
+| `session_persistence` | `SessionPersistence` | 会话保持 |
+| `name` | `string` | 规则名称 |
+### GrpcMatch
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `service` | `string` | gRPC 服务名 |
+| `method` | `string` | gRPC 方法名 |
+| `headers` | `repeated HeaderMatch` | Metadata 匹配 |
+| `match_type` | `string` | 匹配类型 |
+## StreamRoute 定义
+
+`StreamRoute` 统一表示 TCP、UDP 和 TLS 路由。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 路由名称 |
+| `namespace` | `string` | 命名空间 |
+| `kind` | `RouteKind` | 路由类型：`TCP`、`UDP`、`TLS` |
+| `parent_refs` | `repeated ParentRef` | 父资源引用 |
+| `rules` | `repeated StreamRule` | 流路由规则 |
+### StreamMatch
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `port` | `uint32` | 匹配端口 |
+| `sni_hostname` | `string` | SNI 主机名（TLS 路由） |
+| `mode` | `TlsRouteMode` | TLS 路由模式：`PASSTHROUGH` 或 `TERMINATE` |
+## BackendCluster 定义
+
+`BackendCluster` 表示一个后端服务集群。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 集群名称 |
+| `namespace` | `string` | 命名空间 |
+| `protocol` | `string` | 后端协议 |
+| `endpoints` | `repeated BackendEndpoint` | 端点列表 |
+| `connect_timeout` | `Duration` | 连接超时 |
+| `request_timeout` | `Duration` | 请求超时 |
+| `tls_validation` | `BackendTlsValidation` | 后端 TLS 验证 |
+| `session_persistence` | `SessionPersistence` | 会话保持 |
+| `load_balancing` | `LoadBalancingPolicy` | 负载均衡策略 |
+| `ai_service` | `AIServiceConfig` | AI 服务配置 |
+| `token_policy` | `TokenPolicyConfig` | Token 策略配置 |
+| `wasm_plugin` | `WasmPluginConfig` | Wasm 插件配置 |
+### BackendEndpoint
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `address` | `string` | 端点 IP 地址 |
+| `port` | `uint32` | 端点端口 |
+| `healthy` | `bool` | 健康状态 |
+| `zone` | `string` | 可用区 |
+## 扩展配置
+
+### AIServiceConfig
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `provider` | `string` | 提供方类型：`openai`、`anthropic`、`ollama` |
+| `format` | `string` | 请求/响应格式 |
+| `model` | `string` | 模型名称 |
+| `auth` | `AIServiceAuthConfig` | 认证配置 |
+| `timeout` | `Duration` | 请求超时 |
+### TokenPolicyConfig
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `tokens_per_minute` | `uint64` | 每分钟 Token 上限 |
+| `tokens_per_hour` | `uint64` | 每小时 Token 上限 |
+| `requests_per_minute` | `uint64` | 每分钟请求数上限 |
+| `scope` | `string` | 限流范围 |
+| `burst` | `double` | 突发倍数 |
+| `on_limit` | `string` | 超限行为 |
+### WasmPluginConfig
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | `string` | 插件名称 |
+| `namespace` | `string` | 命名空间 |
+| `wasm_bytes` | `bytes` | Wasm 模块字节内容 |
+| `sha256` | `string` | SHA256 校验和 |
+| `hooks` | `repeated string` | 执行钩子列表 |
+| `config_json` | `string` | 插件配置（JSON） |
+| `sandbox` | `WasmSandboxConfig` | 沙箱配置 |
+### WasmSandboxConfig
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `max_memory_bytes` | `uint64` | 最大内存限制 |
+| `max_execution_time_ms` | `uint64` | 最大执行时间 |
+| `allow_network` | `bool` | 是否允许网络访问 |
+| `allow_file_system` | `bool` | 是否允许文件系统访问 |
+### SecretMaterial
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `namespace` | `string` | Secret 命名空间 |
+| `name` | `string` | Secret 名称 |
+| `cert_pem` | `string` | 证书 PEM |
+| `key_pem` | `string` | 私钥 PEM |
+## 协议源码
+
+完整的协议定义位于：
+
+```
+proto/gateway/control/v1/control.proto
+```
+
+当前 protobuf 包名为 `gateway.control.v1`，Go 生成代码的 import 路径为 `github.com/nantian-gw/proto/gateway/control/v1;controlv1`。
+
+:::note[协议稳定性]
+当前的协议版本为 `v1`，处于活跃开发阶段。协议消息结构可能在小版本迭代中发生变化。如果你在开发与 Nantian Gateway 控制面通信的数据面实现，建议锁定协议版本并关注变更日志。
+:::
+
+## 下一步
+
+- 查看 [Admin API](/zh/api-reference/admin-api) 了解运行时诊断接口
+- 查看 [架构概述](/zh/architecture/) 了解控制面和数据面的整体设计
+- 查看 [gRPC xDS 配置](/zh/configuration/xds) 了解 xDS 的部署配置选项

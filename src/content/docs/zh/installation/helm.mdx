@@ -1,0 +1,209 @@
+---
+title: Helm 安装
+---
+
+Helm 是 Nantian Gateway 推荐的安装方式。Chart 把控制面、数据面和管理界面打包进一次发布，默认值覆盖了大多数场景，需要覆盖的值也都能在 values.yaml 里找到。
+
+Chart 托管在 Cloudflare Pages，要求 Helm 3.x。
+
+## 前置条件
+
+安装前请确保集群已安装 Gateway API CRD：
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+```
+
+验证 CRD 已就绪：
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+```
+
+## 基础安装
+
+首先添加 Helm 仓库：
+
+```bash
+helm repo add nantian-gw https://chart.nantian.dev
+helm repo update
+```
+
+最简单的安装方式就是跑一行命令。它会自动创建 `nantian-gw` 命名空间，给每个组件部署两个副本，然后注册 GatewayClass：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace
+```
+
+安装完成之后，你会拿到一套完整的运行环境：控制面两个副本（有主备选举）、数据面两个副本（都接流量）、管理界面一个副本。控制面和数据面之间通过 gRPC 双向流通信，默认用的是 18080 端口。
+
+:::tip[先看再装]
+用 `helm template` 可以把要部署的 YAML 全渲染出来，不碰集群一根毛：
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw > rendered.yaml
+```
+
+用 `--dry-run` 可以模拟整个安装过程：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw --dry-run
+```
+
+养成先看再装的习惯，尤其是在生产环境变更配置的时候。
+:::
+
+## values.yaml 参数速查
+
+Chart 的 `values.yaml` 注释写得很详细，下面是最常用的几个段。完整的默认值运行 `helm show values` 就能看到。
+
+**全局配置：**
+
+```yaml
+global:
+  imageRegistry: ""          # 所有镜像的前缀，适合离线/私有仓库场景
+  imagePullSecrets: []       # 私有仓库的拉取凭据
+  commonLabels: {}           # 打在全部资源上的标签
+```
+
+**命名空间：**
+
+```yaml
+namespace:
+  create: true               # 让 Helm 帮你建命名空间
+  name: "nantian-gw"         # 命名空间名字
+```
+
+**控制面：**
+
+```yaml
+controlplane:
+  enabled: true
+  replicas: 2
+  image:
+    repository: "nantian-controlplane"
+    tag: ""                  # 不填就用 Chart.appVersion
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  config:
+    grpcAddr: ":18080"
+    adminAddr: ":18081"
+    metricsAddr: ":18082"
+    healthProbeAddr: ":18083"
+    syncPeriod: "30s"
+    leaderElection:
+      enabled: true
+      id: "nantian-controlplane-leader"
+      leaseDuration: "15s"
+      renewDeadline: "10s"
+      retryPeriod: "2s"
+  grpcTLS:
+    enabled: false
+    existingSecret: ""
+    requireClientCert: false
+```
+
+**数据面：**
+
+```yaml
+dataplane:
+  enabled: true
+  replicas: 2
+  image:
+    repository: "nantian-dataplane"
+    tag: ""
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: "1"
+      memory: "256Mi"
+    limits:
+      memory: "1Gi"
+```
+
+## 常用覆盖场景
+
+### 自定义镜像
+
+如果你用私有镜像仓库，或者需要指定版本号：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  --set global.imageRegistry=ghcr.io/nantian-gw \
+  --set controlplane.image.tag=v0.2.0 \
+  --set dataplane.image.tag=v0.2.0
+```
+
+### 关闭不需要的组件
+
+在只需要控制面和数据面的场景下，可以关掉管理界面：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  --set dashboard.enabled=false
+```
+
+### 自定义命名空间
+
+把网关装到一个已存在的命名空间里：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  --set namespace.create=false \
+  --set namespace.name=my-gateway-ns \
+  -n my-gateway-ns
+```
+
+### 开启 gRPC TLS
+
+生产环境必须把控制面和数据面之间的 gRPC 通信加密起来。提前把证书存成 Secret，再引用：
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  --set controlplane.grpcTLS.enabled=true \
+  --set controlplane.grpcTLS.existingSecret=nantian-grpc-tls \
+  --set controlplane.grpcTLS.requireClientCert=true
+```
+
+TLS 相关的完整配置参考 [TLS / mTLS](/zh/configuration/tls) 一节。
+
+## 安装后的验证
+
+Helm 跑完之后，确认所有组件都起起来了：
+
+```bash
+# 看 Pod 状态
+kubectl get pods -n nantian-gw
+
+# 看 GatewayClass 有没有被领走
+kubectl get gatewayclass nantian-gw
+
+# 看所有创建出来的资源
+kubectl get all -n nantian-gw
+```
+
+正常情况下你会看到五个 Pod：两个控制面、两个数据面、一个管理界面，全部 `Running`，READY 列显示 `1/1`。GatewayClass 的 `ACCEPTED` 列应该显示 `True`，说明控制面已经认领了这个类。
+
+:::note[数据面就绪时间]
+数据面 Pod 比控制面起来要慢一点。它需要先跟控制面建立 gRPC 流，拿到初始配置快照，然后才能接流量。这段时间通常是 10 到 30 秒。如果数据面一直没就绪，看一下控制面的日志：`kubectl logs -n nantian-gw -l app.kubernetes.io/component=controlplane`。
+:::
+
+## 卸载
+
+不用了就清干净：
+
+```bash
+helm uninstall nantian-gw -n nantian-gw
+```
+
+Helm 卸载不会自动删命名空间。如果需要彻底清掉：
+
+```bash
+kubectl delete namespace nantian-gw
+```

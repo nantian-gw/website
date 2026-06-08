@@ -1,0 +1,142 @@
+---
+title: Quick Start
+---
+
+This guide walks through installing Nantian Gateway on a local Kind cluster. After completing the steps below, the control plane, data plane, and dashboard will be operational.
+
+Expected time to complete: approximately five minutes.
+
+## Before you begin
+
+Complete the [prerequisites](/en/getting-started/prerequisites) before proceeding:
+
+- A running Kubernetes cluster (Kind recommended for local development)
+- `kubectl` and `helm` installed and available in `PATH`
+- Gateway API CRDs installed on the cluster
+
+## Step 1: Install the Helm chart
+
+Nantian Gateway is distributed as a Helm chart. The chart is available via the Helm repository as `nantian-gw/nantian-gw`.
+
+For local development, install directly from the chart directory:
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw
+```
+
+To review the default configuration before installing:
+
+```bash
+helm show values nantian-gw/nantian-gw
+```
+
+:::tip[Production configuration]
+For production deployments, reference the included `production-values.yaml` as a starting point. This file enables TLS, configures resource limits appropriate for production workloads, and sets the data plane to connect to the control plane over HTTPS.
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  -f https://raw.githubusercontent.com/nantian-gw/helm-charts/main/charts/nantian-gw/production-values.yaml
+```
+:::
+
+## Step 2: Verify the installation
+
+After Helm completes, verify that all pods are running:
+
+```bash
+kubectl get pods -n nantian-gw
+```
+
+Expected output:
+
+```
+NAME                                    READY   STATUS    RESTARTS   AGE
+nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          30s
+nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          20s
+nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          25s
+nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          15s
+nantian-gw-dashboard-xxxxxxxxx-xxxxx     1/1     Running   0          10s
+```
+
+The deployment should show two control plane replicas, two data plane replicas, and one dashboard pod. Each pod should display `1/1` in the READY column and `Running` in the STATUS column.
+
+:::note[Startup sequence]
+Data plane pods typically require more time to reach readiness than the control plane. The data plane must establish a gRPC stream with the control plane and receive an initial configuration snapshot before accepting traffic. This process normally completes within 10 to 30 seconds.
+:::
+
+Verify that the GatewayClass resource was created:
+
+```bash
+kubectl get gatewayclass
+```
+
+Expected output:
+
+```
+NAME               CONTROLLER                                    ACCEPTED   AGE
+nantian-gateway    gateway.nantian.io/gateway-controller         True       1m
+```
+
+## Step 3: Deploy an example application
+
+The chart includes a sample application that demonstrates the Gateway API routing model. Deploy it to verify end-to-end connectivity:
+
+```bash
+kubectl apply -f gateway/examples/httpbin.yaml
+```
+
+This manifest creates a deployment, service, and HTTPRoute for the [httpbin](https://httpbin.org) testing application.
+
+Verify the route was created:
+
+```bash
+kubectl get httproute
+```
+
+Expected output:
+
+```
+NAME                   HOSTNAMES   AGE
+httpbin-route                               1m
+```
+
+## Step 4: Test the gateway
+
+Send a request through the gateway to the sample application:
+
+```bash
+curl -s http://localhost:18080/get
+```
+
+Expected response:
+
+```json
+{
+  "args": {},
+  "headers": {
+    "Accept": "*/*",
+    "Host": "httpbin.example.com",
+    "User-Agent": "curl/8.0.0"
+  },
+  "origin": "127.0.0.1",
+  "url": "http://httpbin.example.com/get"
+}
+```
+
+The response confirms that the request passed through the data plane and reached the backend service. The `Host` header was set by the gateway, and the `origin` reflects the data plane's IP address.
+
+## What was deployed
+
+The Helm installation created the following components:
+
+- **Control plane** (2 replicas) — watches Kubernetes resources, translates configuration, and pushes it to data plane instances via gRPC xDS
+- **Data plane** (2 replicas) — handles client traffic, terminates TLS, performs routing, and forwards requests to backend services
+- **Dashboard** (1 replica) — serves the web-based admin interface for monitoring and configuration
+- **GatewayClass** — defines the gateway controller implementation
+- **Gateway** — configures listeners for HTTP and HTTPS traffic
+
+## Next steps
+
+- [Your First Route](/en/getting-started/first-route) — define custom routing rules for your own services
+- [Core Concepts](/en/concepts/) — understand the Gateway API resource model and split-plane architecture
+- [Configuration Overview](/en/configuration/) — customize the gateway for your environment

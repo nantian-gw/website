@@ -1,0 +1,241 @@
+---
+title: Kustomize Installation
+---
+
+Kustomize gives you a declarative, patch-based approach to deploying Nantian Gateway. Instead of templating, you define a base set of manifests and layer environment-specific patches on top. This works especially well with GitOps tools like Argo CD and Flux, where every change is a commit to a Git repository.
+
+This guide assumes you're familiar with Kustomize basics. If you haven't used it before, the [Kustomize documentation](https://kustomize.io/) is a good place to start.
+
+## Directory structure
+
+A typical Kustomize layout for Nantian Gateway looks like this:
+
+```
+deploy/
+├── base/
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── gatewayclass.yaml
+│   ├── controlplane/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   ├── rbac.yaml
+│   │   └── pdb.yaml
+│   ├── dataplane/
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   └── pdb.yaml
+│   └── dashboard/
+│       ├── deployment.yaml
+│       └── service.yaml
+└── overlays/
+    ├── dev/
+    │   └── kustomization.yaml
+    ├── staging/
+    │   └── kustomization.yaml
+    └── production/
+        ├── kustomization.yaml
+        ├── controlplane-patch.yaml
+        ├── dataplane-patch.yaml
+        └── tls-secret.yaml
+```
+
+The `base/` directory contains the resource definitions shared across all environments. Each overlay in `overlays/` patches the base for a specific environment.
+
+## Base kustomization
+
+The base `kustomization.yaml` declares all resources and common labels:
+
+```yaml
+# deploy/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nantian-gw
+
+resources:
+  - namespace.yaml
+  - gatewayclass.yaml
+  - controlplane/deployment.yaml
+  - controlplane/service.yaml
+  - controlplane/configmap.yaml
+  - controlplane/rbac.yaml
+  - controlplane/pdb.yaml
+  - dataplane/deployment.yaml
+  - dataplane/service.yaml
+  - dataplane/configmap.yaml
+  - dataplane/pdb.yaml
+  - dashboard/deployment.yaml
+  - dashboard/service.yaml
+
+commonLabels:
+  app.kubernetes.io/name: nantian-gw
+  app.kubernetes.io/part-of: nantian-gw
+
+images:
+  - name: nantian-controlplane
+    newName: ghcr.io/nantian-gw/controller
+    newTag: v0.1.0
+  - name: nantian-dataplane
+    newName: ghcr.io/nantian-gw/dataplane
+    newTag: v0.1.0
+```
+
+## Production overlay
+
+The production overlay patches the base with higher replica counts, resource limits, TLS configuration, and stricter security contexts:
+
+```yaml
+# deploy/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - tls-secret.yaml
+
+patches:
+  - path: controlplane-patch.yaml
+  - path: dataplane-patch.yaml
+```
+
+### Control plane patch
+
+```yaml
+# deploy/overlays/production/controlplane-patch.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nantian-gw-controlplane
+spec:
+  replicas: 3
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: controlplane
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          volumeMounts:
+            - name: grpc-tls
+              mountPath: /etc/nantian-gw/grpc-tls
+              readOnly: true
+      volumes:
+        - name: grpc-tls
+          secret:
+            secretName: nantian-grpc-tls
+```
+
+### Data plane patch
+
+```yaml
+# deploy/overlays/production/dataplane-patch.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nantian-gw-dataplane
+spec:
+  replicas: 4
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/component: dataplane
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: dataplane
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: dataplane
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [NET_BIND_SERVICE]
+          resources:
+            requests:
+              cpu: "2"
+              memory: "512Mi"
+            limits:
+              memory: "2Gi"
+```
+
+## Applying
+
+```bash
+kubectl apply -k deploy/overlays/production
+```
+
+Kustomize merges the base with the overlay patches, builds the final manifests, and applies them to the cluster.
+
+## GitOps integration
+
+If you're using Argo CD, point the application at the overlay directory:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nantian-gw
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/nantian-gw-deploy
+    path: deploy/overlays/production
+    targetRevision: main
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nantian-gw
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+:::tip[Patch instead of template]
+One advantage of Kustomize over Helm is that you never modify the base manifests. Every environment change is a patch, which makes it easy to see exactly what differs between dev, staging, and production. Diff two overlays with `kubectl diff -k deploy/overlays/production` and you see only the deltas.
+:::
+
+## ConfigMap management
+
+Kustomize's `configMapGenerator` can replace the manual ConfigMap approach. Define your config in a separate file and let Kustomize generate the ConfigMap with a content hash suffix. This triggers a rolling update whenever the config changes:
+
+```yaml
+# In the overlay kustomization.yaml
+configMapGenerator:
+  - name: nantian-gw-controlplane-config
+    behavior: replace
+    files:
+      - config.yaml=controlplane-config.yaml
+```
+
+This is a cleaner pattern than embedding config in the Deployment patch, especially for larger configurations.

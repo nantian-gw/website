@@ -1,0 +1,399 @@
+---
+title: Admin API
+---
+
+Admin API 是控制面内建的 HTTP 服务器，提供检查、查询和管理端点。它作为 Nantian Gateway 仪表盘的后端，同时暴露 JSON API，运维人员可直接用于脚本编写和自动化操作。
+
+服务器监听 `adminAddr` 配置的地址（默认 `:18081`）。支持可选的 TLS 和 Bearer Token 认证。
+
+## 安全模型
+
+Admin API 有两个认证级别：
+
+- **`none`**：无需认证。用于 `/livez` 和 `/readyz` 健康探针。
+- **`bearer-when-configured`**：如果配置了 Bearer Token（通过 `adminAuth.bearerToken` 或 `adminAuth.bearerTokenFile`），请求必须携带 `Authorization: Bearer <token>` 头。如果未配置 Token，这些端点允许匿名访问。
+
+Bearer Token 在启动时解析。如果解析失败，控制面拒绝启动。这确保了你不会意外地在需要安全保护的情况下运行未认证的 Admin API。
+
+:::caution
+Admin API 提供对网关配置的完整读取权限，包括密钥、后端地址和路由详情。切勿在没有 TLS 和认证的情况下将 `adminAddr` 暴露到外部网络。有关配置详情，请参阅 [TLS / mTLS](/zh/configuration/tls)。
+:::
+
+## 端点总览
+
+所有路径以 `/v1/` 为前缀。健康检查端点位于根路径。
+
+### 健康检查
+
+| 方法 | 路径 | 认证 | 说明 |
+|---|---|---|---|
+| GET | `/livez` | 无 | 存活探针，始终返回 200 |
+| GET | `/readyz` | 无 | 就绪探针，根据就绪模式返回状态 |
+### 概览与快照
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/summary` | 集群概览摘要 |
+| GET | `/v1/snapshot` | 当前 IR 快照的完整内容 |
+| GET | `/v1/snapshot-sync` | 快照同步状态，包含节点漂移信息 |
+### 监听器与路由
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/listeners` | 所有监听器列表 |
+| GET | `/v1/listeners/{name}` | 单个监听器详情 |
+| GET | `/v1/routes` | 所有路由列表 |
+| GET | `/v1/routes/{kind}/{namespace}/{name}` | 单个路由详情 |
+### 后端与节点
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/backends` | 所有后端集群列表 |
+| GET | `/v1/backends/{namespace}/{name}` | 单个后端详情 |
+| GET | `/v1/nodes` | 所有数据面节点状态 |
+| GET | `/v1/nodes/{nodeId}` | 单个节点详情 |
+### 资源管理
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/resource-kinds` | 支持的资源类型 |
+| GET | `/v1/namespaces` | 命名空间列表 |
+| GET | `/v1/resources` | 资源列表（支持过滤和分页） |
+| POST | `/v1/resources` | 创建资源 |
+| PUT | `/v1/resources/{kind}/{namespace}/{name}` | 创建或更新资源 |
+| GET | `/v1/resources/{kind}/{namespace}/{name}` | 获取资源详情 |
+| DELETE | `/v1/resources/{kind}/{namespace}/{name}` | 删除资源 |
+### 数据面代理
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/dataplanes` | 发现所有数据面端点 |
+| GET | `/v1/dataplanes/{nodeId}/summary` | 代理查询单个数据面摘要 |
+### 基础设施与拓扑
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/infrastructure` | 基础设施检查报告 |
+| GET | `/v1/service-catalog` | 服务目录 |
+| GET | `/v1/topology` | 资源拓扑关系 |
+### AI 网关
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/ai/overview` | AI 网关概览 |
+| GET | `/v1/ai/services` | AI 服务列表 |
+| GET | `/v1/ai/token-usage` | Token 使用统计 |
+| GET | `/v1/ai/traces` | AI 调用追踪 |
+### 指标
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/metrics/config` | 获取指标配置 |
+| PUT | `/v1/metrics/config` | 更新指标配置 |
+| POST | `/v1/metrics/query` | 即时查询 |
+| POST | `/v1/metrics/query_range` | 范围查询 |
+### Chatbot
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/v1/chatbot/config` | 获取 Chatbot 配置 |
+| PUT | `/v1/chatbot/config` | 更新 Chatbot 配置 |
+| POST | `/v1/chatbot/chat` | 发送聊天消息（SSE 流） |
+## 认证
+
+Admin API 支持可选的 Bearer Token 认证。在控制面配置中设置 `admin.auth.token` 后，除 `/livez` 和 `/readyz` 外的所有端点都需要在请求头中携带 `Authorization: Bearer <token>`。
+
+端点分为三个认证级别：
+
+- `none`：不需要认证（`/livez`、`/readyz`）
+- `bearer-when-configured`：仅在配置了 token 时需要认证（大部分端点）
+- 需要认证的端点如果未配置 token，则允许匿名访问
+
+## 就绪模式
+
+`/readyz` 端点支持三种就绪模式，通过控制面配置的 `readinessMode` 字段控制：
+
+| 模式 | 行为 |
+|---|---|
+| `snapshot` | 存在任意快照即就绪（默认） |
+| `current-snapshot-any` | 至少有一个数据面节点确认了当前快照 |
+| `current-snapshot-all` | 所有已连接的数据面节点都确认了当前快照 |
+
+选择合适的就绪模式取决于你的部署策略。滚动更新时建议使用 `current-snapshot-any`，确保至少有一个数据面节点可以处理流量后再替换旧 Pod。
+
+## 快照同步摘要
+
+`/v1/snapshot-sync` 返回的快照同步状态包含以下关键字段：
+
+```
+{
+  "snapshotVersion": "snap-abc123",
+  "listenerCount": 5,
+  "httpRouteCount": 42,
+  "backendCount": 30,
+  "nodeCount": 3,
+  "connectedNodeCount": 3,
+  "readyNodeCount": 3,
+  "currentVersionNodeCount": 3,
+  "currentVersionReadyCount": 3,
+  "driftedNodeCount": 0,
+  "readyListenerCount": 5,
+  "warningListenerCount": 0,
+  "failedListenerCount": 0,
+  "warnings": []
+}
+```
+
+当 `driftedNodeCount` 大于 0 时，说明部分数据面节点尚未同步到最新配置。`warnings` 字段会列出具体的漂移节点和持续时间。
+
+## 指标
+
+Admin API 自动暴露 Prometheus 指标，包括：
+
+- `nantian_gateway_controlplane_admin_requests_total`：按方法、路由和状态码分类的请求计数
+- `nantian_gateway_controlplane_admin_request_duration_seconds`：请求延迟直方图
+
+这些指标由 `wrapMetricsHandler` 中间件自动收集，不需要额外配置。此外，Admin API 通过 `nantian_gateway_controlplane_admin_requests_total` 和 `nantian_gateway_controlplane_admin_request_duration_seconds` 指标发出请求级别的度量，按 HTTP 方法、规范化路由和状态类别进行分区。这些指标由 Prometheus 通过主指标端点（`:18082`）抓取。
+
+## 端点详细参考
+
+### 健康探针
+
+#### `GET /livez`
+
+若服务器正在运行，返回 `200 OK` 及 `ok`。用于 Kubernetes 存活探针。
+
+**认证**：none
+**响应**：`text/plain`
+
+```
+ok
+```
+
+#### `GET /readyz`
+
+若服务器就绪，返回 `200 OK` 及 `ok`。就绪状态由配置的 `readinessMode` 决定：
+
+- `gate`（默认）：启动门控打开时即就绪（所有组件已启动）
+- `snapshot`：启动门控打开且至少发布了一个快照时即就绪
+- `nodes`：启动门控打开、至少发布了一个快照且至少有一个数据面节点连接时即就绪
+
+**认证**：none
+**响应**：`text/plain`
+
+```
+ok
+```
+
+### 快照与配置
+
+#### `GET /v1/summary`
+
+返回当前网关状态的高层摘要。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+```json
+{
+  "snapshotVersion": "abc123def456",
+  "generatedAt": "2026-06-06T12:00:00Z",
+  "listenerCount": 4,
+  "httpRouteCount": 12,
+  "grpcRouteCount": 2,
+  "streamRouteCount": 1,
+  "routeCount": 15,
+  "backendCount": 8,
+  "secretCount": 5,
+  "nodeCount": 3,
+  "connectedNodeCount": 3,
+  "readyNodeCount": 3,
+  "currentVersionNodeCount": 3,
+  "currentVersionReadyCount": 3,
+  "driftedNodeCount": 0,
+  "readyListenerCount": 4,
+  "warningListenerCount": 0,
+  "failedListenerCount": 0,
+  "warnings": []
+}
+```
+
+#### `GET /v1/snapshot-sync`
+
+返回快照同步器的当前状态，包括上次同步时间、同步周期以及当前是否正在进行同步。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+#### `GET /v1/snapshot`
+
+以 JSON 格式返回完整的 IR 快照。这是当前正在向数据面提供的配置。响应包含监听器、路由、后端、密钥和策略配置。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 监听器
+
+#### `GET /v1/listeners`
+
+列出当前快照中的所有监听器。每个监听器包含名称、端口、协议、TLS 配置、主机名和附加路由数量。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+**查询参数**：
+- `namespace` — 按命名空间过滤
+- `hostname` — 按主机名过滤（子串匹配）
+
+#### `GET /v1/listeners/{name}`
+
+返回特定监听器的详细信息，包括附加路由、TLS 配置和后端引用。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 路由
+
+#### `GET /v1/routes`
+
+列出当前快照中的所有路由。返回所有类型的路由：HTTP、gRPC、TCP、UDP 和 TLS。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+**查询参数**：
+- `namespace` — 按命名空间过滤
+- `kind` — 按路由类型过滤（`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute`、`TLSRoute`）
+- `listener` — 按父监听器名称过滤
+
+#### `GET /v1/routes/{kind}/{namespace}/{name}`
+
+返回特定路由的详细信息，包括匹配规则、过滤器、后端引用和附加策略。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 后端
+
+#### `GET /v1/backends`
+
+列出当前快照中的所有后端。返回 Service 后端、AIService 后端和自定义后端，包括其端点地址、健康状态和负载均衡配置。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+**查询参数**：
+- `namespace` — 按命名空间过滤
+
+#### `GET /v1/backends/{namespace}/{name}`
+
+返回特定后端的详细信息，包括端点列表、健康检查配置和负载均衡策略。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 节点
+
+#### `GET /v1/nodes`
+
+列出所有已知的数据面节点。每个节点条目包含连接状态、快照版本、运行时间和健康状态。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+#### `GET /v1/nodes/{name}`
+
+返回特定数据面节点的详细信息，包括状态历史和配置漂移信息。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 基础设施
+
+#### `GET /v1/infrastructure`
+
+返回基础设施级别的信息，包括 Kubernetes 命名空间、节点详情和资源计数。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 资源管理
+
+#### `GET /v1/resources`
+
+列出网关管理的 Kubernetes 资源。支持按命名空间、类型和标签选择器过滤。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+**查询参数**：
+- `namespace` — 按命名空间过滤
+- `kind` — 按资源类型过滤（如 `Gateway`、`HTTPRoute`、`Secret`）
+- `labels` — 按标签选择器过滤
+
+#### `GET /v1/resources/{kind}/{namespace}/{name}`
+
+返回单个 Kubernetes 资源。响应包含完整的 JSON 对象，包括元数据、规格和状态。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 查询
+
+#### `GET /v1/queries`
+
+对集群执行资源查询。支持过滤、排序和字段选择。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 数据面聚合
+
+#### `GET /v1/dataplane`
+
+当配置了数据面聚合时，此端点返回所有已连接数据面实例的聚合信息，包括其各自的 Admin API 响应。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### 指标
+
+#### `GET /v1/metrics`
+
+返回控制面指标的当前状态。这与 Prometheus 指标端点暴露的数据相同，但按指标命名空间进行了过滤。
+
+**认证**：bearer-when-configured
+**响应**：`application/json`
+
+### Chatbot
+
+#### `POST /v1/chat`
+
+提供查询网关状态的自然语言接口。接受包含用户查询的 JSON 请求体，返回包含相关网关信息的结构化响应。
+
+**认证**：bearer-when-configured
+**请求**：`application/json`
+**响应**：`application/json`
+
+## 速率限制与超时
+
+Admin API 服务器应用以下限制：
+
+| 限制项 | 默认值 | 说明 |
+|--------|--------|------|
+| `maxRequestBodyBytes` | 2 MB | 最大请求体大小 |
+| `maxResponseBodyBytes` | 8 MB | 最大响应体大小 |
+| `readHeaderTimeout` | 5s | 读取请求头的最大时间 |
+| `readTimeout` | 30s | 读取完整请求的最大时间 |
+| `writeTimeout` | 30s | 写入响应的最大时间 |
+| `idleTimeout` | 2m | Keep-Alive 连接的最大空闲时间 |
+
+## 下一步
+
+- [API 参考：Admin API](/zh/api-reference/admin-api) — OpenAPI 规范与客户端库
+- [运维：指标参考](/zh/operations/metrics) — 完整的 Prometheus 指标目录
+- [配置：控制面](/zh/configuration/controlplane) — Admin 服务器配置
+
+:::tip
+在生产环境中，建议为 Admin API 配置 TLS 和 Bearer Token 认证。Admin API 暴露了集群的全部配置信息，未认证的访问可能造成信息泄露。
+:::

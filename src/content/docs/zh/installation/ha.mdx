@@ -1,0 +1,191 @@
+---
+title: 高可用配置
+---
+
+Nantian Gateway 的控制面与数据面分离架构让你在高可用配置上有很大的灵活性。控制面和数据面有不同的故障模式，不同的恢复特性，所以需要不同的 HA 策略。
+
+这篇指南覆盖了多副本部署、跨可用区调度、主备选举，以及每种故障到底会发生什么。
+
+## 各组件在 HA 里的角色
+
+两个平面处理故障的方式完全不同：
+
+**控制面**：用 Kubernetes 主备选举。同一时间只有一个副本是活跃的 Leader。Leader 负责监听 Gateway API 资源、计算配置快照、通过 gRPC/xDS 流推送给数据面。备用副本空闲着，等 Leader 挂了再接管。选举用的是 `nantian-gw` 命名空间里的一个 Lease 资源，租约时长 15 秒，续约截止时间 10 秒。
+
+**数据面**：所有副本都活跃，都接流量。每个数据面独立维护自己和控制面之间的 gRPC/xDS 连接，独立接收配置快照。如果一个数据面 Pod 挂了，Kubernetes 会重建一个。新 Pod 起来后连上控制面，拿到最新快照，然后开始接流量。
+
+**管理界面**：单副本。管理界面是无状态的，挂了只影响 UI。网关的流量路由不受影响。
+
+## 生产环境最低 HA 配置
+
+```yaml
+controlplane:
+  replicas: 2
+  pdb:
+    minAvailable: 1
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: controlplane
+          topologyKey: kubernetes.io/hostname
+
+dataplane:
+  replicas: 3
+  pdb:
+    minAvailable: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: dataplane
+          topologyKey: kubernetes.io/hostname
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: dataplane
+```
+
+## 跨可用区部署
+
+把数据面副本分散到多个可用区，保护的是区级故障。上面的拓扑分散约束确保调度器把 Pod 均匀分布到各个区。
+
+对于一个三区集群、三个数据面副本，每个区分到一个 Pod。如果某个区挂了，剩下两个 Pod 继续接所有流量。PDB 设的 `minAvailable: 2` 允许集群在维护期间驱逐一个 Pod 的同时，其他两个区还能正常工作。
+
+:::warn[可用区数量 vs. 副本数量]
+如果可用区比副本多，有些区会是空的。这没问题，`maxSkew: 1` 约束保证 Pod 在当前可用区范围内尽可能均匀分布。如果可用区比副本少，调度器会在某些区放多个 Pod。`kubernetes.io/hostname` 上的反亲和规则仍然阻止 Pod 落到同一个节点上。
+:::
+
+## 故障模式详解
+
+### 控制面 Leader 故障
+
+1. Leader Pod 停止发送租约续期请求。
+2. 经过 `renewDeadline`（10 秒）后，一个备用副本获取租约，成为新的 Leader。
+3. 新 Leader 从 Kubernetes API 重建内部状态，开始向数据面推送配置快照。
+4. 数据面收到一份配置相同的新快照。流量不受影响。
+
+总恢复时间：10 到 30 秒。在此期间 Gateway API 资源不会被修改，没有路由被创建或删除。
+
+在这段切换窗口里，数据面用上一份配置快照继续路由流量。已经建好的路由不受影响。新路由的创建或修改会延迟到新 Leader 就位之后才生效。
+
+### 数据面 Pod 故障
+
+1. Kubernetes 检测到 Pod 不健康或已消失。
+2. Deployment 控制器创建替换 Pod。
+3. 新 Pod 启动后连上控制面，收到最新配置快照。
+4. 就绪探针通过后，Pod 开始接流量。
+
+总恢复时间：30 到 60 秒，取决于镜像拉取时间和启动探针配置。其余数据面 Pod 在整个过程中持续服务。
+
+### 数据面 gRPC 流断连
+
+如果数据面丢失了与控制面的 gRPC 连接，但 Pod 本身没有挂：
+
+1. 数据面以指数退避方式尝试重连。
+2. 断连期间，数据面用上一次收到的配置快照继续路由流量。
+3. 如果控制面在重连窗口内恢复，数据面继续接收增量更新。流量不受影响。
+4. 如果控制面长时间不恢复，数据面最终会超时。默认情况下，数据面用最后已知的配置无限期继续服务。
+
+:::note[配置过期风险]
+用过期快照服务的数据面比停止路由的数据面要好。但如果 Gateway API 资源发生了变化但还没推送到数据面，代理就会在用旧规则运行。监控 `control_plane_connected` 指标来检测这种情况。
+:::
+
+### 节点故障
+
+如果某个节点挂了，上面所有的 Pod（控制面、数据面、管理界面）都会跟着挂。Kubernetes 在其他健康的节点上重新调度这些 Pod。反亲和和拓扑分散确保新 Pod 被调度到不同的节点/区。
+
+### 整个可用区故障
+
+如果一个区内的所有数据面 Pod 同时挂掉：
+
+1. 其余区的 Pod 承担全部流量。
+2. Kubernetes 在节点恢复后在故障区重建 Pod。
+3. 新 Pod 连上控制面，收到当前配置。
+
+确保资源请求和限制已经考虑到这种场景。如果三个数据面 Pod 平时处理正常流量，丢了一个区之后，剩下的 Pod 必须承担同样的流量。把单个 Pod 的资源请求设为预期流量的 150%，给可用区故障留余地。
+
+### 网络分区
+
+控制面和数据面之间的网络分区是一种特殊场景。数据面检测到 gRPC 连接断了之后会自动重连。在重连成功之前，数据面用现有的配置快照继续路由流量。gRPC 的 keepalive 机制（默认 30 秒 ping 间隔，10 秒超时）保证断连能在几十秒内被检测到。
+
+## 主备选举调优
+
+默认的主备选举设置在快速接管和稳定性之间做了一个合理的平衡：
+
+```yaml
+controlplane:
+  config:
+    leaderElection:
+      enabled: true
+      id: "nantian-controlplane-leader"
+      leaseDuration: "15s"
+      renewDeadline: "10s"
+      retryPeriod: "2s"
+```
+
+**`leaseDuration`**：租约的有效时长。如果 Leader 没在这个时间窗口内续约，租约过期，备用副本可以抢占。
+
+**`renewDeadline`**：Leader 多长时限内必须续约，否则认为自己已失权。必须小于 `leaseDuration`。
+
+**`retryPeriod`**：Leader 尝试续约的间隔。
+
+如果你的集群 API server 响应快，可以调紧这些值来加快故障接管；如果因为 API server 延迟出现 Leader 假性切换，就放松它们：
+
+```yaml
+# 激进故障接管（API server 响应快）
+leaderElection:
+  leaseDuration: "10s"
+  renewDeadline: "5s"
+  retryPeriod: "1s"
+
+# 保守（API server 慢、网络噪声大）
+leaderElection:
+  leaseDuration: "30s"
+  renewDeadline: "20s"
+  retryPeriod: "5s"
+```
+
+:::caution
+`leaseDuration` 设得太低，如果 API server 慢了会导致 Leader 来回切换。每次切换都会造成一段短暂的配置更新停摆。监控控制面的 `leader_election_master_status` 指标来追踪切换频率。
+:::
+
+## 监控 HA 健康状态
+
+需要关注的关键指标：
+
+| 指标 | 含义 |
+|------|------|
+| `leader_election_master_status` | 1 表示当前控制面是 Leader，0 表示不是 |
+| `control_plane_connected` | 已连接到控制面的数据面数量 |
+| `xds_active_streams` | 活跃的 gRPC/xDS 流数 |
+| `xds_snapshot_version` | 各数据面已应用的配置快照版本号 |
+
+告警规则：
+- 超过 30 秒无 Leader（控制面 HA 故障）
+- `control_plane_connected` 低于预期副本数（数据面断连）
+- 各数据面 `xds_snapshot_version` 不一致（存在过期配置）
+
+## 健康检查
+
+主备选举的状态可以通过控制面 metrics 端口查看。Prometheus 指标 `nantian_leader_election_is_leader` 显示当前实例是不是 Leader。
+
+```bash
+# 查控制面当前 Leader
+kubectl get lease -n nantian-gw nantian-controlplane-leader
+
+# 查所有控制面 Pod 的选举状态
+kubectl port-forward -n nantian-gw svc/nantian-controlplane 18082:18082
+curl http://localhost:18082/metrics | grep leader_election
+```
+
+## 跨区域部署
+
+如果你需要跨多个区域（region）部署，每个区域跑一套独立的 Nantian Gateway 实例。不同区域的控制面不共享状态，数据面也只连本区域的控制面。流量分发由上游的 DNS 或全局负载均衡器处理，在区域层面做 split。
+
+这种部署模式把故障域完全隔离。一个区域挂了，另一个区域不受影响。代价是你需要维护两套独立的配置和监控。

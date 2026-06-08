@@ -1,0 +1,263 @@
+---
+title: 开发环境搭建
+---
+
+Nantian Gateway 的控制面用 Go 编写，数据面用 Rust 编写，管理界面用 Next.js 编写。本页带你从零搭建本地开发环境，完成编译、运行和调试的全流程。
+
+## 前置要求
+
+### 必需工具
+
+| 工具 | 版本要求 | 用途 |
+|------|---------|------|
+| [Go](https://go.dev/dl/) | ≥ 1.21 | 控制面编译 |
+| [Rust](https://rustup.rs/) | ≥ 1.85 | 数据面编译 |
+| [Docker](https://docs.docker.com/get-docker/) | ≥ 24.0 | 本地集群和容器化运行 |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | ≥ 1.28 | Kubernetes 集群操作 |
+| [Helm](https://helm.sh/docs/intro/install/) | ≥ 3.12 | Chart 打包和部署 |
+| [protoc](https://grpc.io/docs/protoc-installation/) | ≥ 3.21 | Protobuf 编译 |
+| [Node.js](https://nodejs.org/) | ≥ 18 | 管理界面和文档站 |
+### 推荐工具
+
+| 工具 | 用途 |
+|------|------|
+| [Kind](https://kind.sigs.k8s.io/) | 本地 Kubernetes 集群 |
+| [just](https://github.com/casey/just) | 命令运行器（CI 和任务自动化） |
+| [golangci-lint](https://golangci-lint.run/) | Go 代码 Lint |
+| [cargo-watch](https://crates.io/crates/cargo-watch) | Rust 热重载开发 |
+### 快速验证环境
+
+```bash
+# 验证 Go
+go version
+# 预期: go version go1.21.x ...
+
+# 验证 Rust
+rustc --version
+# 预期: rustc 1.88.x ...
+
+# 验证 Docker
+docker version
+
+# 验证 kubectl
+kubectl version --client
+
+# 验证 Helm
+helm version
+
+# 验证 protoc
+protoc --version
+
+# 验证 Node.js
+node --version
+```
+
+## 克隆仓库
+
+```bash
+# Fork 主仓库，然后克隆你的 Fork
+git clone https://github.com/<your-username>/gateway.git
+cd gateway
+
+# 添加主仓库为 upstream
+git remote add upstream https://github.com/nantian-gw/gateway.git
+```
+
+## 搭建本地 Kubernetes 集群
+
+开发环境推荐使用 Kind 搭建本地集群：
+
+```bash
+# 创建 Kind 集群
+kind create cluster --name nantian-dev
+
+# 验证集群状态
+kubectl cluster-info
+kubectl get nodes
+```
+
+## 安装 Gateway API CRD
+
+```bash
+# 安装 Gateway API v1.5.1 CRD
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+```
+
+## 编译和运行控制面
+
+控制面使用 Go 编写，入口在 `gateway/cmd/manager/main.go`。
+
+```bash
+# 进入控制面目录
+cd gateway
+
+# 安装依赖
+go mod download
+
+# 编译控制面
+go build -o bin/manager ./cmd/manager
+
+# 本地运行控制面（需要先安装 Nantian Gateway CRD）
+kubectl apply -f deploy/crds/
+./bin/manager \
+  --metrics-bind-address=:8080 \
+  --health-probe-bind-address=:8081 \
+  --xds-bind-address=:9090 \
+  --leader-elect=false
+```
+
+### 控制面命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--metrics-bind-address` | `:8080` | Prometheus 指标端口 |
+| `--health-probe-bind-address` | `:8081` | 健康检查和管理 API 端口 |
+| `--xds-bind-address` | `:9090` | gRPC xDS 服务器端口 |
+| `--leader-elect` | `true` | 是否启用主从选举 |
+| `--leader-elect-namespace` | 当前命名空间 | 选举所在的命名空间 |
+| `--gateway-class-name` | `nantian-gw` | 认领的 GatewayClass 名称 |
+:::tip[本地开发技巧]
+本地开发时设置 `--leader-elect=false` 避免主从选举，这样可以直接运行单个控制面实例。生产环境请保持默认值 `true`。
+:::
+
+## 编译和运行数据面
+
+数据面使用 Rust 编写，位于 `dataplane/` 目录。
+
+```bash
+# 进入数据面目录
+cd dataplane
+
+# 编译数据面（debug 模式）
+cargo build
+
+# 编译数据面（release 模式，性能优化）
+cargo build --release
+
+# 运行数据面
+cargo run -- \
+  --node-id dataplane-dev-0 \
+  --controlplane-addr http://localhost:9090 \
+  --cluster kind \
+  --admin-bind-address 0.0.0.0:8082 \
+  --metrics-bind-address 0.0.0.0:9091
+```
+
+### 数据面命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--node-id` | 自动生成 | 节点标识 |
+| `--controlplane-addr` | `http://localhost:9090` | 控制面 gRPC 地址 |
+| `--cluster` | `kind` | 集群名称 |
+| `--admin-bind-address` | `0.0.0.0:8082` | Admin API 地址 |
+| `--metrics-bind-address` | `0.0.0.0:9091` | Prometheus 指标端口 |
+## 编译 Protobuf
+
+修改 `proto/` 目录下的 `.proto` 文件后，需要重新生成 Go 和 Rust 代码：
+
+```bash
+# 生成 Go 代码
+cd proto
+buf generate
+
+# 生成 Rust 代码（在 dataplane 目录下）
+cd ../dataplane
+# 代码生成已集成在 dataplane 的 build.rs 中
+cargo build
+```
+
+## 运行管理界面
+
+管理界面是基于 Next.js 的 Web 应用：
+
+```bash
+cd dashboard
+
+# 安装依赖
+npm install
+
+# 开发模式运行
+npm run dev
+
+# 浏览器访问 http://localhost:3000
+```
+
+## 运行文档站
+
+文档站使用 Astro + Starlight：
+
+```bash
+cd website
+
+# 安装依赖
+npm install
+
+# 开发模式运行
+npm run dev
+
+# 浏览器访问 http://localhost:4321
+```
+
+## 使用 Docker Compose 一键启动
+
+项目提供了 `docker-compose.yml` 用于快速启动完整的开发环境：
+
+```bash
+docker compose up -d
+```
+
+这会启动：
+- 控制面实例
+- 数据面实例
+- 管理界面
+
+## 调试技巧
+
+### Go 控制面调试
+
+使用 [Delve](https://github.com/go-delve/delve) 调试 Go 代码：
+
+```bash
+# 安装 Delve
+go install github.com/go-delve/delve/cmd/dlv@latest
+
+# 调试模式运行控制面
+dlv debug ./cmd/manager -- \
+  --leader-elect=false \
+  --xds-bind-address=:9090
+```
+
+VS Code 用户可以安装 Go 扩展，在 `.vscode/launch.json` 中配置调试目标。
+
+### Rust 数据面调试
+
+Rust 数据面支持 `RUST_LOG` 环境变量控制日志级别：
+
+```bash
+# 启用详细日志
+RUST_LOG=debug cargo run -- --node-id dataplane-dev-0
+
+# 仅查看特定模块日志
+RUST_LOG=nantian_dataplane::proxy=trace cargo run -- --node-id dataplane-dev-0
+```
+
+常用的日志级别：`error`、`warn`、`info`、`debug`、`trace`。
+
+### 查看 xDS 通信
+
+在开发过程中，可以查看控制面和数据面之间的 xDS 通信来验证配置是否正确传递：
+
+```bash
+# 查看控制面 Admin API 中的 xDS 客户端状态
+curl http://localhost:8081/api/v1/clients | jq
+
+# 查看数据面 Admin API 中的 xDS 连接状态
+curl http://localhost:8082/api/v1/xds/status | jq
+```
+
+## 下一步
+
+- 查看 [测试指南](/zh/contributing/testing) 了解如何运行测试
+- 查看 [架构概述](/zh/architecture/) 了解系统设计
+- 查看 [贡献概述](/zh/contributing/) 了解贡献流程

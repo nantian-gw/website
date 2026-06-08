@@ -1,0 +1,489 @@
+---
+export interface Props {
+  lang?: 'en' | 'zh';
+}
+
+const { lang = 'en' } = Astro.props;
+
+const isZh = lang === 'zh';
+
+const heading = isZh ? 'Nantian Gateway' : 'Nantian Gateway';
+const subtitle = isZh
+  ? 'Kubernetes Gateway API 实现 — 控制面与数据面分离'
+  : 'Split-plane Kubernetes Gateway API Implementation';
+const tagline = isZh
+  ? '控制面与数据面分离 · Go 控制面 · Rust 数据面 · 55+ 特性'
+  : 'Split-plane Kubernetes Gateway API · Go Control Plane · Rust Data Plane · 55 Features';
+const quickStartLabel = isZh ? '快速开始' : 'Quick Start';
+const quickStartHref = isZh
+  ? '/zh/getting-started/quick-start/'
+  : '/en/getting-started/quick-start/';
+const githubHref = 'https://github.com/nantian-gw/gateway';
+---
+
+<section class="hero" aria-label={isZh ? '首页横幅' : 'Hero banner'}>
+  <!-- Starfield layers -->
+  <div class="starfield" aria-hidden="true">
+    <div class="starfield-layer starfield-layer--slow"></div>
+    <div class="starfield-layer starfield-layer--medium"></div>
+    <div class="starfield-layer starfield-layer--fast"></div>
+  </div>
+
+  <!-- Content -->
+  <div class="hero-content">
+    <h1 class="hero-heading gradient-text">
+      {heading}
+    </h1>
+
+    <p class="hero-subtitle">
+      {subtitle}
+    </p>
+
+    <p class="hero-tagline">
+      {tagline}
+    </p>
+
+    <div class="hero-actions">
+      <a href={quickStartHref} class="btn btn-primary glow-hover">
+        {quickStartLabel}
+        <svg class="btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd" />
+        </svg>
+      </a>
+
+      <a href={githubHref} class="btn btn-secondary glow-hover" target="_blank" rel="noopener noreferrer">
+        <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12Z" />
+        </svg>
+        GitHub
+        <svg class="btn-arrow" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+          <path fill-rule="evenodd" d="M5.22 14.78a.75.75 0 0 0 1.06 0l7.22-7.22v5.69a.75.75 0 0 0 1.5 0v-7.5a.75.75 0 0 0-.75-.75h-7.5a.75.75 0 0 0 0 1.5h5.69l-7.22 7.22a.75.75 0 0 0 0 1.06Z" clip-rule="evenodd" />
+        </svg>
+      </a>
+    </div>
+
+    <!-- GitHub star badge -->
+    <div class="github-badge">
+      <span class="github-badge-star" aria-hidden="true">★</span>
+      <span class="github-badge-text">GitHub</span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 6rem 1.5rem;
+    background: var(--color-bg-base);
+    overflow: hidden;
+  }
+
+  /* ===== Starfield ===== */
+  .starfield {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .starfield-layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Layer 1 — distant, slow, small stars */
+  .starfield-layer--slow {
+    --star-size: 1px;
+    --star-count: 200;
+    --anim-duration: 6s;
+    animation: starDrift var(--anim-duration) linear infinite;
+  }
+
+  .starfield-layer--slow::before,
+  .starfield-layer--slow::after {
+    content: '';
+    position: absolute;
+    width: var(--star-size);
+    height: var(--star-size);
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.6);
+    box-shadow:
+      /* Generated star positions — scattered across the viewport */
+      5vw 8vh 0 0 rgba(148, 163, 184, 0.4),
+      12vw 15vh 0 0 rgba(148, 163, 184, 0.3),
+      23vw 5vh 0 0 rgba(148, 163, 184, 0.5),
+      35vw 22vh 0 0 rgba(148, 163, 184, 0.2),
+      48vw 3vh 0 0 rgba(148, 163, 184, 0.6),
+      55vw 18vh 0 0 rgba(148, 163, 184, 0.3),
+      67vw 7vh 0 0 rgba(148, 163, 184, 0.4),
+      72vw 25vh 0 0 rgba(148, 163, 184, 0.5),
+      85vw 12vh 0 0 rgba(148, 163, 184, 0.3),
+      92vw 4vh 0 0 rgba(148, 163, 184, 0.6),
+      8vw 35vh 0 0 rgba(148, 163, 184, 0.2),
+      18vw 42vh 0 0 rgba(148, 163, 184, 0.5),
+      30vw 38vh 0 0 rgba(148, 163, 184, 0.3),
+      42vw 45vh 0 0 rgba(148, 163, 184, 0.4),
+      58vw 32vh 0 0 rgba(148, 163, 184, 0.6),
+      65vw 48vh 0 0 rgba(148, 163, 184, 0.2),
+      78vw 35vh 0 0 rgba(148, 163, 184, 0.5),
+      88vw 42vh 0 0 rgba(148, 163, 184, 0.3),
+      95vw 30vh 0 0 rgba(148, 163, 184, 0.4),
+      3vw 55vh 0 0 rgba(148, 163, 184, 0.5),
+      15vw 62vh 0 0 rgba(148, 163, 184, 0.3),
+      28vw 55vh 0 0 rgba(148, 163, 184, 0.6),
+      38vw 68vh 0 0 rgba(148, 163, 184, 0.2),
+      50vw 58vh 0 0 rgba(148, 163, 184, 0.4),
+      62vw 65vh 0 0 rgba(148, 163, 184, 0.5),
+      75vw 52vh 0 0 rgba(148, 163, 184, 0.3),
+      82vw 68vh 0 0 rgba(148, 163, 184, 0.6),
+      90vw 55vh 0 0 rgba(148, 163, 184, 0.2),
+      10vw 75vh 0 0 rgba(148, 163, 184, 0.4),
+      22vw 82vh 0 0 rgba(148, 163, 184, 0.5),
+      36vw 72vh 0 0 rgba(148, 163, 184, 0.3),
+      45vw 85vh 0 0 rgba(148, 163, 184, 0.6),
+      55vw 78vh 0 0 rgba(148, 163, 184, 0.2),
+      68vw 82vh 0 0 rgba(148, 163, 184, 0.4),
+      80vw 72vh 0 0 rgba(148, 163, 184, 0.5),
+      88vw 88vh 0 0 rgba(148, 163, 184, 0.3),
+      95vw 78vh 0 0 rgba(148, 163, 184, 0.6),
+      7vw 92vh 0 0 rgba(148, 163, 184, 0.2),
+      20vw 95vh 0 0 rgba(148, 163, 184, 0.4),
+      33vw 90vh 0 0 rgba(148, 163, 184, 0.5),
+      48vw 95vh 0 0 rgba(148, 163, 184, 0.3),
+      60vw 88vh 0 0 rgba(148, 163, 184, 0.6),
+      73vw 95vh 0 0 rgba(148, 163, 184, 0.2),
+      85vw 90vh 0 0 rgba(148, 163, 184, 0.4),
+      94vw 95vh 0 0 rgba(148, 163, 184, 0.5);
+  }
+
+  .starfield-layer--slow::after {
+    box-shadow:
+      2vw 12vh 0 0 rgba(148, 163, 184, 0.3),
+      18vw 28vh 0 0 rgba(148, 163, 184, 0.5),
+      32vw 8vh 0 0 rgba(148, 163, 184, 0.2),
+      44vw 32vh 0 0 rgba(148, 163, 184, 0.6),
+      58vw 15vh 0 0 rgba(148, 163, 184, 0.3),
+      70vw 28vh 0 0 rgba(148, 163, 184, 0.4),
+      82vw 8vh 0 0 rgba(148, 163, 184, 0.5),
+      93vw 22vh 0 0 rgba(148, 163, 184, 0.2),
+      6vw 48vh 0 0 rgba(148, 163, 184, 0.6),
+      25vw 55vh 0 0 rgba(148, 163, 184, 0.3),
+      40vw 42vh 0 0 rgba(148, 163, 184, 0.4),
+      52vw 58vh 0 0 rgba(148, 163, 184, 0.5),
+      68vw 45vh 0 0 rgba(148, 163, 184, 0.2),
+      80vw 55vh 0 0 rgba(148, 163, 184, 0.6),
+      92vw 48vh 0 0 rgba(148, 163, 184, 0.3),
+      12vw 72vh 0 0 rgba(148, 163, 184, 0.4),
+      28vw 78vh 0 0 rgba(148, 163, 184, 0.5),
+      45vw 68vh 0 0 rgba(148, 163, 184, 0.2),
+      62vw 82vh 0 0 rgba(148, 163, 184, 0.6),
+      78vw 72vh 0 0 rgba(148, 163, 184, 0.3),
+      88vw 85vh 0 0 rgba(148, 163, 184, 0.4);
+  }
+
+  /* Layer 2 — mid-distance, medium speed, medium stars */
+  .starfield-layer--medium {
+    --star-size: 2px;
+    --anim-duration: 12s;
+    animation: starDrift var(--anim-duration) linear infinite;
+  }
+
+  .starfield-layer--medium::before,
+  .starfield-layer--medium::after {
+    content: '';
+    position: absolute;
+    width: var(--star-size);
+    height: var(--star-size);
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.7);
+    box-shadow:
+      8vw 5vh 0 0 rgba(148, 163, 184, 0.5),
+      25vw 18vh 0 0 rgba(148, 163, 184, 0.4),
+      40vw 8vh 0 0 rgba(148, 163, 184, 0.6),
+      55vw 22vh 0 0 rgba(148, 163, 184, 0.3),
+      70vw 5vh 0 0 rgba(148, 163, 184, 0.5),
+      85vw 18vh 0 0 rgba(148, 163, 184, 0.4),
+      10vw 38vh 0 0 rgba(148, 163, 184, 0.6),
+      30vw 45vh 0 0 rgba(148, 163, 184, 0.3),
+      50vw 35vh 0 0 rgba(148, 163, 184, 0.5),
+      65vw 48vh 0 0 rgba(148, 163, 184, 0.4),
+      80vw 38vh 0 0 rgba(148, 163, 184, 0.6),
+      92vw 45vh 0 0 rgba(148, 163, 184, 0.3),
+      5vw 62vh 0 0 rgba(148, 163, 184, 0.5),
+      22vw 68vh 0 0 rgba(148, 163, 184, 0.4),
+      42vw 58vh 0 0 rgba(148, 163, 184, 0.6),
+      58vw 72vh 0 0 rgba(148, 163, 184, 0.3),
+      72vw 62vh 0 0 rgba(148, 163, 184, 0.5),
+      88vw 68vh 0 0 rgba(148, 163, 184, 0.4),
+      15vw 85vh 0 0 rgba(148, 163, 184, 0.6),
+      35vw 92vh 0 0 rgba(148, 163, 184, 0.3),
+      55vw 82vh 0 0 rgba(148, 163, 184, 0.5),
+      72vw 92vh 0 0 rgba(148, 163, 184, 0.4),
+      90vw 82vh 0 0 rgba(148, 163, 184, 0.6);
+  }
+
+  .starfield-layer--medium::after {
+    box-shadow:
+      15vw 12vh 0 0 rgba(148, 163, 184, 0.4),
+      35vw 28vh 0 0 rgba(148, 163, 184, 0.5),
+      52vw 12vh 0 0 rgba(148, 163, 184, 0.3),
+      68vw 28vh 0 0 rgba(148, 163, 184, 0.6),
+      82vw 12vh 0 0 rgba(148, 163, 184, 0.4),
+      5vw 48vh 0 0 rgba(148, 163, 184, 0.5),
+      28vw 52vh 0 0 rgba(148, 163, 184, 0.3),
+      48vw 42vh 0 0 rgba(148, 163, 184, 0.6),
+      62vw 55vh 0 0 rgba(148, 163, 184, 0.4),
+      78vw 42vh 0 0 rgba(148, 163, 184, 0.5),
+      95vw 52vh 0 0 rgba(148, 163, 184, 0.3),
+      12vw 72vh 0 0 rgba(148, 163, 184, 0.6),
+      38vw 78vh 0 0 rgba(148, 163, 184, 0.4),
+      58vw 68vh 0 0 rgba(148, 163, 184, 0.5),
+      75vw 82vh 0 0 rgba(148, 163, 184, 0.3),
+      92vw 72vh 0 0 rgba(148, 163, 184, 0.6);
+  }
+
+  /* Layer 3 — close, fast, larger brighter stars (mixed white + cyan accent) */
+  .starfield-layer--fast {
+    --star-size: 3px;
+    --anim-duration: 8s;
+    animation: starDrift var(--anim-duration) linear infinite;
+  }
+
+  .starfield-layer--fast::before {
+    content: '';
+    position: absolute;
+    width: var(--star-size);
+    height: var(--star-size);
+    border-radius: 50%;
+    background: rgba(203, 213, 225, 0.8);
+    box-shadow:
+      12vw 10vh 0 0 rgba(203, 213, 225, 0.6),
+      32vw 22vh 0 0 rgba(6, 182, 212, 0.5),
+      52vw 8vh 0 0 rgba(203, 213, 225, 0.7),
+      72vw 22vh 0 0 rgba(6, 182, 212, 0.4),
+      88vw 10vh 0 0 rgba(203, 213, 225, 0.6),
+      8vw 42vh 0 0 rgba(6, 182, 212, 0.5),
+      28vw 48vh 0 0 rgba(203, 213, 225, 0.7),
+      48vw 38vh 0 0 rgba(6, 182, 212, 0.4),
+      68vw 48vh 0 0 rgba(203, 213, 225, 0.6),
+      85vw 38vh 0 0 rgba(6, 182, 212, 0.5),
+      5vw 68vh 0 0 rgba(203, 213, 225, 0.7),
+      25vw 72vh 0 0 rgba(6, 182, 212, 0.4),
+      45vw 62vh 0 0 rgba(203, 213, 225, 0.6),
+      65vw 72vh 0 0 rgba(6, 182, 212, 0.5),
+      82vw 62vh 0 0 rgba(203, 213, 225, 0.7),
+      18vw 88vh 0 0 rgba(6, 182, 212, 0.4),
+      42vw 92vh 0 0 rgba(203, 213, 225, 0.6),
+      62vw 85vh 0 0 rgba(6, 182, 212, 0.5),
+      78vw 92vh 0 0 rgba(203, 213, 225, 0.7);
+  }
+
+  .starfield-layer--fast::after {
+    content: '';
+    position: absolute;
+    width: var(--star-size);
+    height: var(--star-size);
+    border-radius: 50%;
+    background: rgba(203, 213, 225, 0.8);
+    box-shadow:
+      22vw 15vh 0 0 rgba(203, 213, 225, 0.5),
+      42vw 25vh 0 0 rgba(6, 182, 212, 0.6),
+      62vw 15vh 0 0 rgba(203, 213, 225, 0.4),
+      78vw 25vh 0 0 rgba(6, 182, 212, 0.5),
+      95vw 15vh 0 0 rgba(203, 213, 225, 0.5),
+      15vw 52vh 0 0 rgba(6, 182, 212, 0.6),
+      38vw 55vh 0 0 rgba(203, 213, 225, 0.4),
+      58vw 45vh 0 0 rgba(6, 182, 212, 0.5),
+      75vw 55vh 0 0 rgba(203, 213, 225, 0.5),
+      92vw 45vh 0 0 rgba(6, 182, 212, 0.6),
+      8vw 78vh 0 0 rgba(203, 213, 225, 0.4),
+      32vw 82vh 0 0 rgba(6, 182, 212, 0.5),
+      52vw 72vh 0 0 rgba(203, 213, 225, 0.5),
+      72vw 85vh 0 0 rgba(6, 182, 212, 0.4),
+      88vw 78vh 0 0 rgba(203, 213, 225, 0.6);
+  }
+
+  @keyframes starDrift {
+    0% {
+      transform: translateY(0);
+      opacity: 0.6;
+    }
+    25% {
+      opacity: 0.9;
+    }
+    50% {
+      transform: translateY(-2vh);
+      opacity: 0.4;
+    }
+    75% {
+      opacity: 0.8;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 0.6;
+    }
+  }
+
+  /* ===== Content ===== */
+  .hero-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    max-width: 48rem;
+    animation: contentReveal 0.8s ease-out;
+  }
+
+  @keyframes contentReveal {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .hero-heading {
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin: 0;
+  }
+
+  .hero-subtitle {
+    margin: 1.25rem 0 0;
+    font-size: clamp(1.125rem, 3vw, 1.5rem);
+    color: var(--color-text-secondary);
+    font-weight: 400;
+    line-height: 1.5;
+    max-width: 36rem;
+  }
+
+  .hero-tagline {
+    margin: 1rem 0 0;
+    font-size: clamp(0.8125rem, 2vw, 0.9375rem);
+    color: var(--color-text-muted);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  /* ===== Actions ===== */
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-top: 2.5rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-decoration: none;
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background: var(--color-gradient);
+    color: #fff;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 24px rgba(6, 182, 212, 0.3), 0 0 48px rgba(6, 182, 212, 0.1);
+  }
+
+  .btn-secondary {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--color-border-light);
+    background: var(--color-bg-elevated);
+  }
+
+  .btn-arrow {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+
+  .btn:hover .btn-arrow {
+    transform: translateX(2px);
+  }
+
+  .btn-secondary:hover .btn-arrow {
+    transform: translate(2px, -2px);
+  }
+
+  .btn-icon {
+    width: 1.125em;
+    height: 1.125em;
+    flex-shrink: 0;
+  }
+
+  /* ===== GitHub Badge ===== */
+  .github-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 1.5rem;
+    padding: 0.375rem 0.875rem;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    transition: border-color 0.25s ease;
+  }
+
+  .github-badge:hover {
+    border-color: var(--color-border-light);
+  }
+
+  .github-badge-star {
+    color: #f59e0b;
+    font-size: 0.875rem;
+    line-height: 1;
+  }
+
+  .github-badge-text {
+    font-weight: 500;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    .hero {
+      padding: 4rem 1rem;
+      min-height: 90vh;
+    }
+
+    .hero-actions {
+      flex-direction: column;
+      width: 100%;
+      max-width: 20rem;
+    }
+
+    .btn {
+      justify-content: center;
+    }
+  }
+</style>

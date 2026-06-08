@@ -1,0 +1,269 @@
+---
+title: 自定义 CRD
+---
+
+Nantian Gateway 在标准 Gateway API 之上定义了四个自定义资源（CRD），扩展了 AI 服务管理、Token 配额控制、Wasm 插件注入和自定义负载均衡的能力。所有 CRD 都在 `gateway.nantian.io/v1alpha1` API 组下。
+
+:::caution[实验性功能]
+这些 CRD 目前处于 **实验阶段**（`v1alpha1`），API 可能在后续版本中发生不兼容变更。生产环境使用前请评估风险。
+:::
+
+## 概览
+
+| CRD | 用途 | 作用范围 |
+|-----|------|---------|
+| `AIService` | 管理 AI 模型提供方的连接配置，包括认证、模型路由、提供方选择和超时控制 | 命名空间 |
+| `TokenPolicy` | 基于 Token 数量对 AI API 调用做限流和配额控制 | 命名空间 |
+| `WasmPlugin` | 在监听器或路由级别绑定 Wasm 扩展，注入自定义请求/响应处理逻辑 | 命名空间 |
+| `BackendLBPolicy` | 配置后端负载均衡策略和会话保持 | 命名空间 |
+## AIService
+
+:::caution[实验性]
+`AIService` 处于实验阶段，API 可能变更。
+:::
+
+`AIService` 管理连接到 AI 模型提供方的配置。它定义了提供方类型、API 端点、支持的模型列表和认证方式。一个 `AIService` 可以包含多个后端，每个后端对应一个 AI 提供方或模型。
+
+### 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `spec.backends` | `[]Backend` | 是 | AI 后端列表 |
+| `spec.backends[].name` | `string` | 是 | 后端名称，用于引用 |
+| `spec.backends[].provider` | `string` | 是 | 提供方类型：`openai`、`anthropic`、`ollama` |
+| `spec.backends[].endpoint` | `string` | 是 | API 端点 URL |
+| `spec.backends[].models` | `[]string` | 否 | 该后端支持的模型列表 |
+| `spec.backends[].auth` | `AuthConfig` | 否 | 认证配置 |
+| `spec.backends[].auth.type` | `string` | 否 | 认证类型：`bearer`、`api_key` |
+| `spec.backends[].auth.secretRef` | `string` | 否 | 引用的 Kubernetes Secret 名称 |
+| `spec.backends[].auth.header` | `string` | 否 | 携带认证信息的 HTTP 头名称，默认 `Authorization` |
+| `spec.backends[].timeout` | `Duration` | 否 | 请求超时时间 |
+### 示例
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: AIService
+metadata:
+  name: llm-routing
+  namespace: default
+spec:
+  backends:
+    - name: openai-gpt4
+      provider: openai
+      endpoint: https://api.openai.com/v1
+      models:
+        - gpt-4
+        - gpt-4-turbo
+        - gpt-4o
+      auth:
+        type: bearer
+        secretRef: openai-api-key
+        header: Authorization
+      timeout: 60s
+    - name: anthropic-claude
+      provider: anthropic
+      endpoint: https://api.anthropic.com
+      models:
+        - claude-3-opus
+        - claude-3-sonnet
+        - claude-3-haiku
+      auth:
+        type: api_key
+        secretRef: anthropic-api-key
+        header: x-api-key
+      timeout: 90s
+    - name: ollama-local
+      provider: ollama
+      endpoint: http://ollama.internal:11434
+      models:
+        - llama3
+        - mistral
+        - codellama
+```
+
+### 工作原理
+
+当 `AIService` 被创建后，控制面将其翻译为内部 IR 中的 `AIServiceConfig`。数据面收到配置后，在代理进程内启用 AI 协议转换和模型路由能力。应用的请求只需发往网关的 AI 端点，网关根据请求中指定的模型自动路由到对应的提供方，并完成协议格式转换。
+
+:::tip[协议适配]
+Nantian Gateway 支持 OpenAI、Anthropic 和 Ollama 三种 API 格式的归一化。应用使用 OpenAI 兼容格式发送请求，网关自动将请求转换为后端提供方所需的格式。
+:::
+
+## TokenPolicy
+
+:::caution[实验性]
+`TokenPolicy` 处于实验阶段，API 可能变更。
+:::
+
+`TokenPolicy` 基于 Token 实际使用量对 AI API 调用做限流。与传统的按请求数限流不同，`TokenPolicy` 统计每次请求和响应中的 Token 数量，按 Token 总量限制。
+
+### 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `spec.rules` | `[]Rule` | 是 | 限流规则列表 |
+| `spec.rules[].selector` | `map[string]string` | 否 | 标签选择器，匹配请求来源 |
+| `spec.rules[].limit.tokensPerMinute` | `uint64` | 否 | 每分钟 Token 上限 |
+| `spec.rules[].limit.tokensPerHour` | `uint64` | 否 | 每小时 Token 上限 |
+| `spec.rules[].limit.tokensPerDay` | `uint64` | 否 | 每日 Token 上限 |
+| `spec.rules[].limit.requestsPerMinute` | `uint64` | 否 | 每分钟请求数上限 |
+| `spec.rules[].limit.burst` | `float64` | 否 | 突发倍数，允许短时超过限制 |
+| `spec.rules[].limit.onLimit` | `string` | 否 | 超限行为：`reject`（拒绝）或 `queue`（排队） |
+### 示例
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: team-quotas
+  namespace: default
+spec:
+  rules:
+    - selector:
+        team: engineering
+      limit:
+        tokensPerMinute: 100000
+        tokensPerHour: 5000000
+        tokensPerDay: 50000000
+        requestsPerMinute: 1000
+        burst: 1.5
+        onLimit: reject
+    - selector:
+        team: marketing
+      limit:
+        tokensPerMinute: 50000
+        tokensPerHour: 2000000
+        tokensPerDay: 10000000
+        requestsPerMinute: 500
+        burst: 1.2
+        onLimit: reject
+```
+
+### 工作原理
+
+数据面在每次 AI API 请求和响应时统计 Token 数量。Token 计数基于 AI 提供方返回的实际使用量，不是估算值。当某个来源的 Token 使用量超过 `TokenPolicy` 中配置的上限时，网关在流量到达提供方之前就拒绝请求，返回 HTTP 429 状态码。
+
+:::note[Token 计数精度]
+Token 计数以 AI 提供方 API 响应中的 `usage` 字段为准。对于不支持返回 Token 用量的提供方，Nantian Gateway 使用内置的 tokenizer 进行估算，精度接近实际值但可能略有偏差。
+:::
+
+## WasmPlugin
+
+:::caution[实验性]
+`WasmPlugin` 处于实验阶段，API 可能变更。
+:::
+
+`WasmPlugin` 管理 WebAssembly 扩展的加载和绑定。插件以 `.wasm` 模块的形式分发，通过 `WasmPlugin` CRD 声明哪些请求生命周期钩子需要执行插件逻辑。
+
+### 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `spec.wasmBytes` | `[]byte` | 否 | Wasm 模块的字节内容（内联模式） |
+| `spec.wasmRef` | `string` | 否 | 引用的 Wasm 模块（OCI 镜像或 URL） |
+| `spec.sha256` | `string` | 否 | Wasm 模块的 SHA256 校验和 |
+| `spec.hooks` | `[]string` | 是 | 执行钩子列表 |
+| `spec.config` | `string` | 否 | 传递给插件的配置（JSON 字符串） |
+| `spec.sandbox.maxMemoryBytes` | `uint64` | 否 | 沙箱最大内存限制 |
+| `spec.sandbox.maxExecutionTimeMs` | `uint64` | 否 | 单次执行最大时间限制 |
+| `spec.sandbox.allowNetwork` | `bool` | 否 | 是否允许插件访问网络 |
+| `spec.sandbox.allowFileSystem` | `bool` | 否 | 是否允许插件访问文件系统 |
+### 支持的生命周期钩子
+
+| 钩子 | 阶段 | 说明 |
+|------|------|------|
+| `on_request_headers` | 请求 | 在收到请求头后、路由匹配前执行 |
+| `on_request_body` | 请求 | 在收到完整请求体后执行 |
+| `on_response_headers` | 响应 | 在收到后端响应头后执行 |
+| `on_response_body` | 响应 | 在收到完整响应体后、发送给客户端前执行 |
+### 示例
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: pii-sanitizer
+  namespace: default
+spec:
+  wasmRef: oci://registry.example.com/plugins/pii-sanitizer:v1.2.0
+  sha256: "sha256:abc123def456..."
+  hooks:
+    - on_request_body
+    - on_response_body
+  config: |
+    {
+      "patterns": ["email", "phone", "credit_card"],
+      "replacement": "[REDACTED]"
+    }
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+### 绑定方式
+
+`WasmPlugin` 可以通过以下方式绑定到流量：
+
+- **监听器级别**：在 `Gateway` 的扩展引用中指定，影响该监听器上的所有流量
+- **路由级别**：在 `HTTPRoute` 或 `GRPCRoute` 的过滤器扩展中引用，只影响匹配该路由的流量
+- **后端级别**：在 `BackendRef` 的过滤器扩展中引用，只影响发往特定后端的流量
+
+:::tip[Wasm 运行时]
+Nantian Gateway 使用 [wasmtime](https://wasmtime.dev/) 作为 Wasm 运行时，内嵌在 Rust 数据面中。插件执行在沙箱环境中，默认不允许网络和文件系统访问。
+:::
+
+## BackendLBPolicy
+
+:::caution[实验性]
+`BackendLBPolicy` 处于实验阶段，API 可能变更。
+:::
+
+`BackendLBPolicy` 配置后端服务的负载均衡策略和会话保持行为。
+
+### 字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `spec.loadBalancing.type` | `string` | 否 | 负载均衡算法：`RoundRobin`（默认）、`ConsistentHash` |
+| `spec.loadBalancing.consistentHash.keyType` | `string` | 否 | 一致性哈希键类型：`SourceIP`、`Header`、`Hostname` |
+| `spec.loadBalancing.consistentHash.headerName` | `string` | 否 | 当 `keyType` 为 `Header` 时指定的请求头名称 |
+| `spec.sessionPersistence.type` | `string` | 否 | 会话保持类型：`Cookie`、`Header` |
+| `spec.sessionPersistence.sessionName` | `string` | 否 | 会话标识名称 |
+| `spec.sessionPersistence.absoluteTimeout` | `Duration` | 否 | 会话绝对超时时间 |
+| `spec.sessionPersistence.idleTimeout` | `Duration` | 否 | 会话空闲超时时间 |
+### 示例
+
+```yaml
+apiVersion: gateway.nantian.io/v1alpha1
+kind: BackendLBPolicy
+metadata:
+  name: sticky-sessions
+  namespace: default
+spec:
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+  sessionPersistence:
+    type: Cookie
+    sessionName: NANTIAN_SESSION
+    absoluteTimeout: 3600s
+    idleTimeout: 600s
+```
+
+### 工作原理
+
+`BackendLBPolicy` 可以在 `HTTPRoute` 或 `GRPCRoute` 后端引用中被引用。控制面将其翻译为 `BackendCluster` 配置中的 `LoadBalancingPolicy` 和 `SessionPersistence` 字段，数据面在代理请求时应用这些策略。
+
+:::caution[一致性哈希注意事项]
+当使用一致性哈希时，后端列表的变化会导致部分会话重新分配。如果你的应用对会话迁移敏感，建议配合会话保持使用，或在后端变更窗口期外进行操作。
+:::
+
+## 下一步
+
+- 查看 [Admin API](/zh/api-reference/admin-api) 了解运行时诊断接口
+- 查看 [xDS 协议](/zh/api-reference/xds-proto) 了解控制面和数据面的通信协议
+- 查看 [适用场景](/zh/use-cases) 了解 AI 网关的实际使用案例

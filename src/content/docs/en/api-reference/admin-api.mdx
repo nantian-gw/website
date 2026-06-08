@@ -1,0 +1,231 @@
+---
+title: Admin API
+---
+
+The Nantian Gateway control plane and data plane each expose an HTTP REST Admin API for runtime diagnostics, configuration inspection, and health probes. The Admin API is the most commonly used entry point for operators troubleshooting issues.
+
+## Control Plane Admin API
+
+The control plane Admin API is exposed on the control plane pod's HTTP port (default `8081`) and provides a cluster-level configuration view as well as xDS client management.
+
+### Endpoint List
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/healthz` | Health check |
+| `GET` | `/readyz` | Readiness check |
+| `GET` | `/api/v1/config/snapshot` | Get the current configuration snapshot |
+| `GET` | `/api/v1/config/snapshot/version` | Get the current configuration snapshot version |
+| `GET` | `/api/v1/gateways` | List all Gateways |
+| `GET` | `/api/v1/gateways/{namespace}/{name}` | Get details for a specific Gateway |
+| `GET` | `/api/v1/routes` | List all routes (HTTP/gRPC/TCP/UDP/TLS) |
+| `GET` | `/api/v1/routes/{namespace}/{name}` | Get details for a specific route |
+| `GET` | `/api/v1/backends` | List all backend clusters |
+| `GET` | `/api/v1/backends/{namespace}/{name}` | Get details for a specific backend cluster |
+| `GET` | `/api/v1/clients` | List all connected xDS clients |
+| `GET` | `/api/v1/clients/{node_id}` | Get connection status for a specific xDS client |
+| `GET` | `/api/v1/metrics` | Prometheus metrics endpoint |
+
+### Health Checks
+
+```bash
+# Control plane liveness check
+curl http://<controlplane-pod>:8081/healthz
+# Returns: 200 OK (body: "ok")
+
+# Control plane readiness check
+curl http://<controlplane-pod>:8081/readyz
+# Returns: 200 OK (body: "ready") or 503 Service Unavailable
+```
+
+`/healthz` only checks whether the process is alive. `/readyz` additionally checks whether the control plane has completed initial resource synchronization and is ready to accept configuration changes.
+
+### Configuration Snapshot
+
+```bash
+# Get the current configuration snapshot version
+curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
+# Example response:
+# {
+#   "id": "snap-20240601-120000-abc123",
+#   "generated_at": "2024-06-01T12:00:00Z",
+#   "gateways": 2,
+#   "routes": 15,
+#   "backends": 8,
+#   "clients_connected": 3
+# }
+
+# Get the full configuration snapshot
+curl http://<controlplane-pod>:8081/api/v1/config/snapshot
+# Returns the full IR snapshot content currently being pushed to all data planes
+```
+
+The configuration snapshot endpoints return the control plane's translated internal representation (IR), not the original Kubernetes resources. This helps troubleshoot whether configuration translation is correct and confirm what configuration the data plane has received.
+
+### xDS Client Status
+
+```bash
+# List all connected xDS clients
+curl http://<controlplane-pod>:8081/api/v1/clients
+
+# Example response:
+# [
+#   {
+#     "node_id": "dataplane-7f8a9b-0",
+#     "cluster": "default",
+#     "version": "v1.2.3",
+#     "connected_since": "2024-06-01T11:55:00Z",
+#     "last_config_version": "snap-20240601-120000-abc123",
+#     "last_config_nonce": "nonce-xyz789",
+#     "last_config_status": "ACK",
+#     "subscriptions": ["http_routes", "backends", "listeners"]
+#   }
+# ]
+
+# Get details for a specific client
+curl http://<controlplane-pod>:8081/api/v1/clients/dataplane-7f8a9b-0
+```
+
+The `clients` endpoint helps confirm whether data planes have connected successfully, which configurations they have received, and their last acknowledged status. If a data plane shows a `NACK` status for an extended period, it indicates there may be a problem with configuration delivery.
+
+## Data Plane Admin API
+
+The data plane Admin API is exposed on each data plane pod's HTTP port (default `8082`) and provides the runtime state of a single proxy instance.
+
+### Endpoint List
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/healthz` | Health check |
+| `GET` | `/readyz` | Readiness check |
+| `GET` | `/api/v1/status` | Proxy runtime status |
+| `GET` | `/api/v1/config` | Currently applied configuration |
+| `GET` | `/api/v1/config/version` | Current configuration version |
+| `GET` | `/api/v1/stats` | Runtime statistics |
+| `GET` | `/api/v1/stats/connections` | Active connection statistics |
+| `GET` | `/api/v1/stats/backends` | Backend health status |
+| `GET` | `/api/v1/xds/status` | xDS connection status |
+| `GET` | `/api/v1/metrics` | Prometheus metrics endpoint |
+
+### Proxy Status
+
+```bash
+# Get proxy runtime status
+curl http://<dataplane-pod>:8082/api/v1/status
+
+# Example response:
+# {
+#   "node_id": "dataplane-7f8a9b-0",
+#   "version": "v1.2.3",
+#   "uptime_seconds": 86400,
+#   "ready": true,
+#   "config_version": "snap-20240601-120000-abc123",
+#   "config_applied_at": "2024-06-01T12:00:01Z",
+#   "listeners": [
+#     {"name": "http-80", "address": "0.0.0.0:80", "protocol": "HTTP", "active": true},
+#     {"name": "https-443", "address": "0.0.0.0:443", "protocol": "HTTPS", "active": true}
+#   ]
+# }
+```
+
+### Runtime Statistics
+
+```bash
+# Get active connection statistics
+curl http://<dataplane-pod>:8082/api/v1/stats/connections
+
+# Example response:
+# {
+#   "active_connections": 1250,
+#   "connections_per_second": 45.2,
+#   "total_connections": 3892000,
+#   "connection_errors": 12
+# }
+
+# Get backend health status
+curl http://<dataplane-pod>:8082/api/v1/stats/backends
+
+# Example response:
+# [
+#   {
+#     "name": "backend-v1",
+#     "namespace": "default",
+#     "endpoints": [
+#       {"address": "10.0.1.5:8080", "healthy": true, "zone": "us-east-1a"},
+#       {"address": "10.0.1.6:8080", "healthy": true, "zone": "us-east-1b"},
+#       {"address": "10.0.1.7:8080", "healthy": false, "zone": "us-east-1a"}
+#     ]
+#   }
+# ]
+```
+
+### xDS Connection Status
+
+```bash
+# Get the xDS connection status with the control plane
+curl http://<dataplane-pod>:8082/api/v1/xds/status
+
+# Example response:
+# {
+#   "connected": true,
+#   "controlplane_address": "nantian-gw-controlplane:9090",
+#   "connected_since": "2024-06-01T11:55:00Z",
+#   "last_config_version": "snap-20240601-120000-abc123",
+#   "last_config_nonce": "nonce-xyz789",
+#   "last_config_status": "ACK",
+#   "stream_reconnects": 0
+# }
+```
+
+## Common Diagnostic Scenarios
+
+### Scenario 1: Verify Configuration Has Taken Effect
+
+When you modify a routing configuration in Kubernetes but don't see the expected behavior, first confirm whether the configuration has been pushed to and applied by the data plane:
+
+```bash
+# 1. Check the control plane configuration snapshot version
+curl http://<controlplane>:8081/api/v1/config/snapshot/version
+
+# 2. Check whether the data plane has received the same version
+curl http://<dataplane>:8082/api/v1/config/version
+
+# 3. If versions don't match, check xDS client status
+curl http://<controlplane>:8081/api/v1/clients
+```
+
+If the control plane snapshot version has been updated but the data plane version has not, check whether the xDS client is in `NACK` status and whether the error details contain configuration parsing failure information.
+
+### Scenario 2: Diagnose Backend Unavailability
+
+```bash
+# 1. Check the endpoint list for the backend cluster in the control plane
+curl http://<controlplane>:8081/api/v1/backends/default/backend-v1
+
+# 2. Check the health status of backend endpoints in the data plane
+curl http://<dataplane>:8082/api/v1/stats/backends
+```
+
+The control plane returns the configuration translated from Kubernetes EndpointSlice. The data plane returns the actual health check results. If the control plane lists endpoints but the data plane shows `healthy: false`, it means health checks are failing. You need to check whether the backend service itself is healthy.
+
+### Scenario 3: Check Data Plane to Control Plane Connectivity
+
+```bash
+# View connection status for all data planes
+curl http://<controlplane>:8081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
+
+# View xDS status for a specific data plane
+curl http://<dataplane>:8082/api/v1/xds/status
+```
+
+If a data plane's `stream_reconnects` is continuously increasing, it means the gRPC connection between the control plane and data plane is unstable. Check your network and firewall configuration.
+
+:::tip[jq Tool]
+The Admin API returns JSON format. Using the `jq` tool is recommended for formatting output. If `jq` is not available in your environment, you can use `python3 -m json.tool` as an alternative.
+:::
+
+## Next Steps
+
+- See [xDS Protocol](/en/api-reference/xds-proto) for communication protocol details between the control plane and data plane
+- See [Troubleshooting](/en/operations/troubleshooting) for diagnostic methods for common issues
+- See [Metrics Reference](/en/operations/metrics) for Prometheus metric definitions

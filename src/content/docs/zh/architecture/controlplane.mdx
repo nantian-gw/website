@@ -1,0 +1,210 @@
+---
+title: 控制面设计
+---
+
+控制面是 Nantian Gateway 的大脑。它监听 Kubernetes 资源，将其翻译为数据面可以理解的配置，管理数据面连接的生命周期，并向 Gateway API 资源回写状态。它基于 `controller-runtime` 和 `grpc-go` 构建，以 Go 二进制文件的形式运行。
+
+## 启动顺序
+
+控制面按照精心设计的顺序启动，避免向外暴露不完整的配置。入口点是 `gateway/cmd/manager/main.go`，它调用 `app.go` 中的 `run()`：
+
+1. **加载配置**：从 `--config` 指定的 YAML 文件读取配置
+2. **构建 Kubernetes Scheme**：注册所有 Gateway API 类型、自定义 CRD 和基础设施类型
+3. **创建 controller-runtime 管理器**：包含主从选举、健康探针和指标服务器
+4. **初始化核心服务**：指标注册表、IR 快照存储和基于 Kubernetes Lease 的节点状态注册表
+5. **创建 Translator**：配置资源限制参数，防止翻译失控
+6. **创建 Status Writer**：配置控制器名称和广播地址
+7. **设置 Reconciler Runner**：包含基础设施和状态两个作用域
+8. **创建 Snapshot Syncer**：监听 Kubernetes 资源，喂给 Translator，发布快照
+9. **创建 Admin API 服务器**：可选 TLS 和 Bearer Token 认证
+10. **创建 gRPC xDS 服务器**：支持 TLS/mTLS 和运行时配置
+11. **组装所有组件**：纳入生命周期管理器
+12. **运行 Supervisor**：所有组件并行启动，启动门控阻塞就绪直到一切健康
+
+```
+ 加载配置 -> 构建 Scheme -> 创建 Manager -> 初始化核心服务
+                                                  |
+                                                  v
+                                        Translator + Status + Reconciler
+                                                  |
+                                                  v
+                                        Syncer + Admin + gRPC
+                                                  |
+                                                  v
+                                        Supervisor（并行启动，门控就绪）
+```
+
+## Translator
+
+Translator 位于 `gateway/internal/translator/translator.go`。它的核心方法是 `Build(ctx, client)`，通过 controller-runtime 客户端读取所有相关的 Kubernetes 资源，生成一个完整的 `ir.Snapshot`。
+
+### 读取的资源
+
+Translator 从 Kubernetes API 获取以下资源：
+
+- **Gateway API 核心**：Gateway、HTTPRoute、GRPCRoute、TCPRoute、UDPRoute、TLSRoute
+- **Gateway API 扩展**：BackendTLSPolicy、ListenerSet
+- **自定义 CRD**：AIService、TokenPolicy、WasmPlugin、BackendLBPolicy
+- **Kubernetes 核心**：Service、EndpointSlice、Secret、ConfigMap
+- **多集群**：ServiceImport（MCS API）
+
+### 翻译过程
+
+翻译采用并行化策略。每种资源类型独立获取，然后通过一系列转换步骤组合成最终快照：
+
+```
+Gateway + ListenerSet
+        |
+        v
+  构建 Listener（地址、端口、协议、TLS）
+        |
+        v
+  匹配路由 -> HTTPRoute/GRPCRoute/TCPRoute/UDPRoute/TLSRoute
+        |
+        v
+  解析后端引用 -> Service + EndpointSlice
+        |
+        v
+  应用策略 -> BackendTLSPolicy + BackendLBPolicy + WasmPlugin
+        |
+        v
+  生成 IR Snapshot（Listeners + Routes + Backends + Secrets + Workloads）
+```
+
+### 资源限制
+
+Translator 内置了可配置的资源限制，防止单个翻译任务消耗过多资源：
+
+- 路由数量上限
+- 每个路由的规则数量上限
+- 后端引用数量上限
+- 每个监听器的附加路由数量上限
+
+这些限制在翻译过程中强制执行，如果超限会生成警告并截断，而不是让翻译失败。
+
+### 索引
+
+Translator 在 controller-runtime 管理器上注册了多个字段索引以加速资源查找。这些索引定义在 `gateway/internal/translator/indexes.go` 中，并在启动时通过 `SetupIndexes()` 注册。如果没有这些索引，Translator 每次构建都需要执行昂贵的全列表扫描。
+
+## Snapshot Syncer
+
+Syncer（`gateway/internal/controller/syncer.go`）是连接 Kubernetes 事件和 Translator 的桥梁。它通过 controller-runtime 的 Watch 机制监听资源变更，在下列情况下触发翻译：
+
+- Gateway 资源创建、更新或删除
+- 路由资源（HTTPRoute、GRPCRoute 等）变更
+- Service 或 EndpointSlice 变更（影响后端端点）
+- Secret 变更（影响 TLS 证书）
+- 自定义 CRD 变更
+
+Syncer 实现了**结算延迟**（settle delay）机制：当短时间内有大量变更时，它会等待一个可配置的延迟窗口，将多个变更合并成一次翻译，避免频繁重新构建快照。关键路径变更（如 Gateway 删除）会绕过结算延迟，立即触发翻译。
+
+## Snapshot Store
+
+Snapshot Store（`gateway/internal/ir/store.go`）是控制面内部的配置分发中心。它保存当前有效的 IR Snapshot，并提供订阅机制：
+
+- gRPC xDS Server 订阅新快照，推送到连接的数据面
+- Admin API 查询当前快照状态
+- Reconciler Runner 获取快照以驱动基础设施协调
+
+每次翻译完成后，Translator 将新快照发布到 Store，Store 将当前快照替换并分发给所有订阅者。如果某个订阅者仍在处理上一个快照，Store 会合并待处理快照，用新的替换旧的。这防止了慢速数据面产生的背压阻塞 Translator。
+
+Store 还暴露了用于指标收集的钩子。`OnSubscriberQueueReplace` 钩子在待处理快照被替换时递增 `nantian_gateway_controlplane_xds_snapshot_fanout_coalesced_total` 计数器。
+
+## gRPC xDS 服务器
+
+gRPC xDS 服务器（`gateway/internal/grpcserver/server.go`）实现 `proto/gateway/control/v1/` 中定义的 `ConfigurationDiscoveryService` gRPC 服务。数据面通过双向流式 RPC 连接并交换 `DiscoveryRequest` 和 `DiscoveryResponse` 消息。
+
+### 流生命周期
+
+1. 数据面打开 `StreamConfiguration` RPC，发送 `DiscoveryRequest` 以节点 ID 标识自身
+2. 服务器验证请求，将流记录在活跃流注册表中，并将节点订阅到快照存储
+3. 服务器向数据面发送当前快照
+4. 数据面通过 ACK 或 NACK 确认
+5. 当快照存储发布新快照时，服务器将其发送到所有活跃流
+6. 数据面在同一流上发送状态报告（`DataplaneStatusReport`），提供健康状态和配置状态
+7. 当数据面断开连接、服务器关闭或发生超时时，流终止
+
+### 流终止原因
+
+服务器跟踪每个流结束的原因，并将其记录在 `nantian_gateway_controlplane_xds_stream_terminations_total` 指标中，带有 `reason` 标签：
+
+| 原因 | 说明 |
+|------|------|
+| `shutdown` | 服务器正在关闭 |
+| `client_disconnect` | 数据面关闭了流 |
+| `stream_error` | gRPC 流遇到错误 |
+| `send_timeout` | 发送快照超时 |
+| `ack_timeout` | 在超时时间内未收到 ACK/NACK |
+| `superseded` | 来自同一节点的新流替换了此流 |
+| `invalid_request` | 初始请求格式错误 |
+| `other` | 其他原因 |
+
+### 状态报告处理
+
+gRPC 服务器接收来自数据面的 `DataplaneStatusReport` 消息，并将其转发到节点状态注册表。报告在应用前会进行验证。被拒绝的报告计入 `nantian_gateway_controlplane_xds_status_report_rejections_total` 指标，拒绝原因包括 `shutdown`、`invalid_request`、`unknown_node` 或 `other`。
+
+## 主从选举
+
+控制面通过 `controller-runtime` 管理器使用 Kubernetes 原生的 Lease 机制实现主从选举。主从选举配置在控制面配置中定义：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `leaderElection.enabled` | `true` | 启用主从选举 |
+| `leaderElection.id` | `nantian-gw-controlplane` | Lease 标识 |
+| `leaderElection.leaseDuration` | `15s` | Lease 持有时间 |
+| `leaderElection.renewDeadline` | `10s` | Leader 续约的最大尝试时间 |
+| `leaderElection.retryPeriod` | `2s` | 候选者等待获取租约的间隔 |
+
+只有 Leader 实例运行 Translator、Reconciler Runner 和 Snapshot Syncer。备用副本提供 Admin API 和指标端点服务，但不监听 Kubernetes 资源或构建快照。如果 Leader 故障，其中一个备用副本会在 Lease 持续时间内获取租约并接管翻译。
+
+:::caution
+主从选举对正确性至关重要。如果两个控制面实例同时进行翻译，数据面可能收到冲突的快照。在生产环境中必须始终启用主从选举。
+:::
+
+## Reconciler Runner
+
+控制面使用自定义的 Reconciler Runner（`gateway/internal/controller/reconciler_runner.go`），而非默认的 controller-runtime 协调循环。Runner 支持：
+
+- **作用域协调**：基础设施和状态以不同的作用域独立协调
+- **结算延迟**：变更会被去抖，避免在快速资源更新期间过度协调
+- **带退避的重试**：失败的协调以指数退避重试
+- **即时触发**：节点状态变更可以触发即时基础设施协调
+
+Runner 发出详细的监控指标：队列深度、触发计数、去重计数、结算状态和重试状态。
+
+## 状态报告
+
+状态写入器（`gateway/internal/status/`）将状态回写到 Gateway API 资源。它更新：
+
+- **Gateway 状态**：监听器状态（就绪、警告、失败）、地址和条件
+- **路由状态**：父网关接受状态、路由条件和已解析引用
+- **策略状态**：BackendTLSPolicy、BackendLBPolicy、AIService、TokenPolicy 和 WasmPlugin 的祖先引用和条件
+
+状态写入器由 Reconciler Runner 在每次基础设施协调后触发。它使用 controller-runtime 客户端来修补状态子资源，遵循标准的 Gateway API 状态约定。
+
+### 节点状态
+
+节点状态系统（`gateway/internal/nodestatus/`）跟踪每个数据面实例的健康和配置状态。它使用 Kubernetes Lease 对象进行持久化，将节点状态以 JSON 格式存储在 Lease 的 spec 字段中。节点状态注册表支持：
+
+- **去抖持久化**：状态更新会被批量处理，在可配置的去抖窗口后刷新
+- **有界积压**：持久化队列具有可配置的最大深度，防止内存无限增长
+- **即时和去抖更新**：关键更新可以绕过去抖窗口
+
+节点状态指标包括队列深度、待处理节点、入队/丢弃总数和刷新持续时间直方图。
+
+## 生命周期管理器
+
+生命周期管理器（`gateway/internal/lifecycle/supervisor.go`）管理所有控制面部件的启动和关闭。组件以名称和运行函数注册。管理器：
+
+1. 并行启动所有组件
+2. 等待所有组件发出就绪信号（或启动超时）
+3. 将启动门控标记为就绪，允许 Kubernetes 就绪探针成功
+4. 在关闭时，取消所有组件的上下文并等待优雅终止
+
+组件包括 controller-runtime 管理器、Admin HTTP 服务器、指标 HTTP 服务器、gRPC 服务器，以及可选的 pprof 调试服务器。
+
+## 下一步
+
+- [数据面设计](/zh/architecture/dataplane) — Rust 代理如何处理流量
+- [Admin API](/zh/architecture/admin-api) — Admin 服务器 API 参考
+- [配置：控制面](/zh/configuration/controlplane) — 所有配置参数

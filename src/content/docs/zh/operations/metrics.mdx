@@ -1,0 +1,173 @@
+---
+title: 指标参考
+---
+
+Nantian Gateway 的控制面和数据面各自暴露 Prometheus 指标。本文档列出所有关键指标及其含义。
+
+## 控制面指标
+
+控制面指标在 `/metrics` 端点暴露，可通过 `nantian-controlplane-metrics` Service 访问。
+
+### 翻译与发布
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_controlplane_builds_total` | Counter | 快照构建次数 |
+| `nantian_gateway_controlplane_build_failures` | Counter | 快照构建失败次数 |
+| `nantian_gateway_controlplane_published_total` | Counter | 快照发布（推送到数据面）次数 |
+| `nantian_gateway_controlplane_last_build_success` | Gauge | 最近一次构建是否成功（1=成功，0=失败） |
+| `nantian_gateway_controlplane_snapshot_build_duration_seconds` | Histogram | 快照构建耗时 |
+| `nantian_gateway_controlplane_snapshot_resource_count` | HistogramVec | 快照中各类资源的数量分布 |
+
+`snapshot_resource_count` 的 `resource` 标签可选值包括：`Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`Service`、`EndpointSlice`、`Secret`、`AIService`、`TokenPolicy`、`WasmPlugin`。
+
+### xDS 流状态
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_controlplane_xds_snapshot_fanout_coalesced_total` | Counter | 合并的快照推送次数 |
+| `nantian_gateway_controlplane_xds_stream_terminations_total` | CounterVec | xDS 流终止次数，按原因分类 |
+| `nantian_gateway_controlplane_xds_status_report_rejections_total` | CounterVec | 状态报告拒绝次数，按原因分类 |
+| `nantian_gateway_controlplane_xds_snapshot_send_duration_seconds` | Histogram | 快照推送耗时 |
+| `nantian_gateway_controlplane_xds_snapshot_send_timeouts_total` | Counter | 快照推送超时次数 |
+| `nantian_gateway_controlplane_xds_snapshot_ack_timeouts_total` | Counter | 等待数据面 ACK 超时次数 |
+| `nantian_gateway_controlplane_xds_publish_ack_lag_seconds` | Histogram | 从发布到收到 ACK 的延迟 |
+| `nantian_gateway_controlplane_xds_publish_nack_lag_seconds` | Histogram | 从发布到收到 NACK 的延迟 |
+
+流终止原因（`reason` 标签）：`shutdown`、`client_disconnect`、`stream_error`、`send_timeout`、`ack_timeout`、`superseded`、`invalid_request`、`other`。
+
+状态报告拒绝原因（`reason` 标签）：`shutdown`、`invalid_request`、`unknown_node`、`other`。
+
+### 节点状态
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_controlplane_node_status_persist_queue_depth` | Gauge | 节点状态持久化队列深度 |
+| `nantian_gateway_controlplane_node_status_persist_pending_nodes` | Gauge | 待持久化的节点数量 |
+| `nantian_gateway_controlplane_node_status_persist_enqueued_total` | Counter | 入队的事件总数 |
+| `nantian_gateway_controlplane_node_status_persist_dropped_total` | Counter | 丢弃的事件总数 |
+| `nantian_gateway_controlplane_node_status_persist_immediate_total` | Counter | 立即持久化次数 |
+| `nantian_gateway_controlplane_node_status_persist_debounced_total` | Counter | 防抖后持久化次数 |
+| `nantian_gateway_controlplane_node_status_persist_flush_duration_seconds` | Histogram | 持久化写入耗时 |
+### Reconciler Runner
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_controlplane_reconciler_runner_runs_total` | Counter | Reconciler 运行次数 |
+| `nantian_gateway_controlplane_reconciler_runner_failures_total` | Counter | Reconciler 失败次数 |
+| `nantian_gateway_controlplane_reconciler_runner_last_run_success` | Gauge | 最近一次运行是否成功 |
+| `nantian_gateway_controlplane_reconciler_runner_run_duration_seconds` | HistogramVec | Reconciler 运行耗时 |
+| `nantian_gateway_controlplane_reconciler_runner_queue_depth` | Gauge | 队列深度 |
+| `nantian_gateway_controlplane_reconciler_runner_trigger_enqueued_total` | Counter | 触发入队次数 |
+| `nantian_gateway_controlplane_reconciler_runner_trigger_deduped_total` | Counter | 触发去重次数 |
+| `nantian_gateway_controlplane_reconciler_runner_trigger_settled_total` | Counter | 结算触发次数 |
+| `nantian_gateway_controlplane_reconciler_runner_settle_pending` | Gauge | 待结算的触发数 |
+| `nantian_gateway_controlplane_reconciler_runner_retries_scheduled_total` | Counter | 重试调度次数 |
+| `nantian_gateway_controlplane_reconciler_runner_retry_pending` | Gauge | 待重试任务数 |
+
+`reconciler_runner_run_duration_seconds` 的 `scope` 标签可选值：`infra`、`status`、`gateway_status`、`route_status`、`policy_status`。
+
+### Admin API
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_controlplane_admin_requests_total` | CounterVec | Admin API 请求数，按 method、route、status_class 分类 |
+| `nantian_gateway_controlplane_admin_request_duration_seconds` | HistogramVec | Admin API 请求延迟 |
+
+`status_class` 标签根据 HTTP 状态码派生：`2xx`、`3xx`、`4xx`、`5xx`。
+
+## 数据面指标
+
+数据面指标在 `:19080/metrics` 端点暴露，可通过 `nantian-dataplane-metrics` Service 访问。
+
+### 关键指标
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_dataplane_ready` | Gauge | 数据面就绪状态（1=就绪，0=未就绪），per-pod gauge |
+| `nantian_gateway_dataplane_runtime_supervisor_http_states` | Gauge | HTTP 运行时状态（1=运行中，0=未运行） |
+| `nantian_gateway_dataplane_traffic_request_events_total` | Counter | 请求事件总数 |
+| `nantian_gateway_dataplane_traffic_response_flags_total` | CounterVec | 响应标志，按 flag 分类 |
+| `nantian_gateway_dataplane_traffic_response_duration_seconds` | Histogram | 请求延迟分布 |
+| `nantian_gateway_dataplane_traffic_response_size_bytes` | Histogram | 响应体大小分布 |
+
+:::caution
+`nantian_gateway_dataplane_ready` 是 per-pod gauge，不是副本计数器。如果需要获取就绪副本总数，必须让 Prometheus 独立抓取每个数据面 Pod，然后通过 PromQL 聚合（如 `count` 或 `sum`）。不要使用单个 Service 静态目标，那样只能看到一个 Pod 的视图。
+:::
+
+### 流量相关
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_dataplane_traffic_upstream_connect_duration_seconds` | Histogram | 上游连接建立耗时 |
+| `nantian_gateway_dataplane_traffic_upstream_failures_total` | CounterVec | 上游连接失败次数 |
+| `nantian_gateway_dataplane_traffic_retry_events_total` | CounterVec | 重试事件次数 |
+| `nantian_gateway_dataplane_traffic_pool_reuse_ratio` | Gauge | 连接池复用率 |
+### 运行时状态
+
+| 指标名 | 类型 | 说明 |
+|---|---|---|
+| `nantian_gateway_dataplane_runtime_listener_reloads_total` | Counter | 监听器重载次数 |
+| `nantian_gateway_dataplane_runtime_circuit_breaker_open` | Gauge | 熔断器打开状态 |
+| `nantian_gateway_dataplane_runtime_overload_rejections_total` | Counter | 过载拒绝次数 |
+| `nantian_gateway_dataplane_runtime_rate_limit_rejections_total` | Counter | 限流拒绝次数 |
+| `nantian_gateway_dataplane_runtime_endpoint_health` | Gauge | 端点健康状态 |
+## Prometheus 采集配置
+
+控制面和数据面需要配置独立的抓取 job。项目提供了两种配置方式：
+
+### 原生 Prometheus
+
+配置文件位于 `deploy/observability/prometheus/native/`：
+
+- `prometheus-controlplane-scrape.yaml`：控制面指标抓取配置
+- `prometheus-dataplane-scrape.yaml`：数据面指标抓取配置
+- `prometheus-dataplane-rules.yaml`：数据面 Recording Rules
+
+每个抓取配置文件包含两种服务发现模式的示例：
+
+- `endpoints`：基于 Endpoints 的服务发现
+- `endpointslice`：基于 EndpointSlice 的服务发现
+
+选择一种模式，将对应的 `scrape_configs` 块复制到你的 `prometheus.yml` 中。不要同时使用两种模式，否则会重复抓取同一个 Pod。
+
+### Prometheus Operator
+
+配置文件位于 `deploy/observability/prometheus/operator/`：
+
+- `servicemonitor-controlplane.yaml`：控制面 ServiceMonitor
+- `podmonitor-controlplane.yaml`：控制面 PodMonitor
+- `servicemonitor-dataplane.yaml`：数据面 ServiceMonitor
+- `podmonitor-dataplane.yaml`：数据面 PodMonitor
+- `prometheusrule-dataplane.yaml`：数据面 PrometheusRule
+- `secret-dataplane-admin-token.example.yaml`：数据面 Admin Token Secret 示例
+- `networkpolicy-prometheus-scrape.yaml`：允许 Prometheus 抓取流量的 NetworkPolicy
+
+同样，每个平面只选择 ServiceMonitor 或 PodMonitor 中的一种。
+
+## Recording Rules
+
+数据面 Recording Rules 预计算了常用的聚合指标，减少 Grafana 查询的计算开销：
+
+| 规则名 | 说明 |
+|---|---|
+| `nantian_gateway_dataplane_ready_replicas` | 就绪的数据面副本数 |
+| `nantian_gateway_dataplane_targets` | 数据面抓取目标数 |
+| `nantian_gateway_dataplane_not_ready_replicas` | 未就绪的数据面副本数 |
+| `nantian_gateway_dataplane_container_cpu_cores` | 数据面容器 CPU 使用（核） |
+| `nantian_gateway_dataplane_container_cpu_request_cores` | 数据面容器 CPU 请求值 |
+| `nantian_gateway_dataplane_container_cpu_throttle_ratio` | CPU 限流比例 |
+| `nantian_gateway_dataplane_container_memory_working_set_bytes` | 内存工作集大小 |
+| `nantian_gateway_dataplane_container_memory_limit_bytes` | 内存限制 |
+| `nantian_gateway_dataplane_container_memory_request_bytes` | 内存请求值 |
+这些 Recording Rules 依赖 cAdvisor 的 `container_*` 指标和 kube-state-metrics 的 `kube_pod_container_resource_*` 指标，确保这些数据源已正确配置。
+
+:::note
+指标名称前缀 `nantian_gateway` 在控制面指标中对应 `controlplane` 子标签，在数据面指标中对应 `dataplane` 子标签。Grafana 仪表盘通过标签区分两个平面的指标。
+:::
+
+## 下一步
+
+- [Grafana 仪表盘](/zh/operations/grafana) —— 导入和自定义预构建的仪表盘
+- [告警规则](/zh/operations/alerting) —— 推荐配置的告警规则
+- [配置：可观测性](/zh/configuration/observability) —— 日志、指标和追踪配置

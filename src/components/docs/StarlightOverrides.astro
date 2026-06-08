@@ -1,0 +1,9 @@
+---
+// Starlight header override — adds language switcher to docs header
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Header.astro';
+---
+
+<Default {...Astro.props}>
+  <slot />
+</Default>

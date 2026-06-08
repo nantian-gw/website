@@ -1,0 +1,252 @@
+---
+title: 故障排查
+---
+
+排查 Nantian Gateway 的问题通常从 Admin API 开始。控制面暴露的诊断端点可以帮你快速定位问题所在。
+
+## 诊断工具
+
+### Admin API 端点
+
+排查问题时，按以下顺序检查：
+
+```
+/livez  ->  /readyz  ->  /v1/summary  ->  /v1/snapshot-sync  ->  /v1/nodes
+```
+
+每个端点提供不同层面的信息：
+
+| 端点 | 用途 |
+|---|---|
+| `/livez` | 控制面进程是否存活 |
+| `/readyz` | 控制面是否准备好服务 |
+| `/v1/summary` | 集群配置概览（路由数、后端数、节点状态） |
+| `/v1/snapshot-sync` | 快照同步状态，节点漂移信息 |
+| `/v1/snapshot` | 当前 IR 快照的完整内容 |
+| `/v1/nodes` | 每个数据面节点的连接和就绪状态 |
+| `/v1/listeners` | 监听器列表及其状态 |
+| `/v1/routes` | 路由列表 |
+| `/v1/backends` | 后端集群及其端点 |
+### 数据面 Admin API
+
+每个数据面 Pod 也暴露 Admin API（默认 `:19080`），可以直接查询数据面的内部状态：
+
+```bash
+# 查询数据面摘要
+curl http://<dataplane-pod-ip>:19080/v1/summary
+
+# 查询数据面指标
+curl http://<dataplane-pod-ip>:19080/metrics
+```
+
+也可以通过控制面的代理端点查询：
+
+```bash
+# 通过控制面代理查询指定数据面节点
+curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
+```
+
+## 常见问题
+
+### 数据面 Pod 未就绪
+
+**症状**：`/v1/summary` 显示 `readyNodeCount` 为 0，或 Grafana 仪表盘显示 Ready Pods 为 0。
+
+**排查步骤**：
+
+1. 检查数据面 Pod 日志：
+   ```bash
+   kubectl logs -n nantian-gw <dataplane-pod> -c dataplane
+   ```
+
+2. 检查数据面是否连接到控制面：
+   ```bash
+   curl http://<controlplane>:19080/v1/nodes
+   ```
+   查看目标节点的 `connected` 字段是否为 `true`。
+
+3. 检查数据面是否收到了快照：
+   ```bash
+   curl http://<dataplane-pod-ip>:19080/v1/summary
+   ```
+   查看 `snapshotVersion` 字段是否非空。
+
+4. 检查 xDS 连接：
+   - 控制面日志中搜索 `xDS stream` 相关错误
+   - 数据面日志中搜索 `xDS` 或 `grpc` 相关错误
+   - 确认控制面的 gRPC 端口（默认 18000）在数据面 Pod 中可达
+
+**常见原因**：
+
+- 控制面 gRPC 端口不可达（网络策略、防火墙）
+- TLS 证书配置错误（mTLS 模式下）
+- 数据面与控制面版本不兼容
+- 数据面配置文件中 xDS 服务器地址配置错误
+
+### 路由不生效
+
+**症状**：创建了 HTTPRoute 但请求没有按预期路由。
+
+**排查步骤**：
+
+1. 确认 Gateway 资源状态：
+   ```bash
+   kubectl get gateway -A
+   ```
+   检查 Gateway 是否被 Nantian Gateway 接受（`Programmed` 条件为 `True`）。
+
+2. 确认 HTTPRoute 是否附加到 Gateway：
+   ```bash
+   kubectl get httproute -A
+   ```
+   检查路由的 `Accepted` 条件。
+
+3. 通过 Admin API 检查快照中是否包含该路由：
+   ```bash
+   curl http://<controlplane>:19080/v1/routes
+   ```
+
+4. 检查监听器是否就绪：
+   ```bash
+   curl http://<controlplane>:19080/v1/listeners
+   ```
+   查看目标监听器的状态。
+
+5. 检查后端端点是否健康：
+   ```bash
+   curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
+   ```
+   查看后端集群的端点列表和健康状态。
+
+**常见原因**：
+
+- 路由的 `parentRefs` 未正确引用 Gateway
+- 路由的 hostname 与监听器的 hostname 不匹配
+- 后端 Service 没有健康的 Endpoint
+- ReferenceGrant 未配置（跨命名空间引用时）
+- 监听器协议与路由类型不匹配（如 HTTP 监听器不能附加 TCPRoute）
+
+### 控制面快照构建失败
+
+**症状**：`/v1/summary` 中的 `generatedAt` 时间戳长时间未更新，或 `nantian_gateway_controlplane_build_failures` 指标增长。
+
+**排查步骤**：
+
+1. 检查控制面日志：
+   ```bash
+   kubectl logs -n nantian-gw <controlplane-pod> | grep -i "build\|error\|fail"
+   ```
+
+2. 检查是否有无效的 Gateway API 资源：
+   ```bash
+   kubectl get gateway,httproute,grpcroute,tcproute,udproute,tlsroute -A
+   ```
+   查看是否有资源处于错误状态。
+
+3. 检查 Translator 资源限制是否被触发：
+   - 路由数量是否超过限制
+   - 后端引用数量是否超过限制
+
+**常见原因**：
+
+- 存在格式错误的 Gateway API 资源
+- 资源数量超过 Translator 限制
+- Kubernetes API Server 不可达
+- 控制面内存不足导致翻译过程 OOM
+
+### 请求返回 5xx 错误
+
+**症状**：客户端收到 502、503 或 504 错误。
+
+**排查步骤**：
+
+1. 检查数据面指标中的响应标志：
+   ```promql
+   nantian_gateway_dataplane_traffic_response_flags_total{flag!="none"}
+   ```
+   常见的非 `none` 标志：
+   - `upstream_connection_failure`：无法连接后端
+   - `upstream_timeout`：后端响应超时
+   - `upstream_reset`：后端重置连接
+   - `circuit_breaker_open`：熔断器打开
+
+2. 检查后端端点健康状态：
+   ```bash
+   curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
+   ```
+
+3. 检查数据面日志中的错误信息。
+
+**常见原因**：
+
+- 后端 Service 的 Pod 不健康或已终止
+- 后端响应超时（检查路由的 `timeouts` 配置）
+- 后端 TLS 配置错误（证书不匹配、SAN 校验失败）
+- 熔断器触发（后端错误率过高）
+- 限流触发（请求速率超过配置的限流阈值）
+
+### xDS 流频繁断开
+
+**症状**：`nantian_gateway_controlplane_xds_stream_terminations_total` 指标持续增长。
+
+**排查步骤**：
+
+1. 检查控制面和数据面的网络连通性：
+   ```bash
+   kubectl exec -n nantian-gw <dataplane-pod> -- nc -zv <controlplane-svc> 18000
+   ```
+
+2. 检查 TLS 证书是否过期：
+   ```bash
+   # 检查控制面 TLS 证书
+   kubectl get secret -n nantian-gw <tls-secret> -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
+   ```
+
+3. 检查控制面是否因 Leader 切换导致连接中断。
+
+**常见原因**：
+
+- 网络不稳定或防火墙规则变更
+- TLS 证书过期
+- 控制面 Leader 切换（短暂中断，数据面会自动重连）
+- 数据面或控制面 OOM 重启
+
+### 内存使用过高
+
+**症状**：数据面 Pod 内存使用接近或超过限制，可能触发 OOMKill。
+
+**排查步骤**：
+
+1. 检查内存使用趋势：
+   ```promql
+   nantian_gateway_dataplane_container_memory_working_set_bytes
+   / nantian_gateway_dataplane_container_memory_limit_bytes
+   ```
+
+2. 检查连接数是否异常：
+   - Grafana 仪表盘的 Connection Overview 面板
+   - 数据面 Admin API 的连接统计
+
+3. 检查是否有大量路由或后端配置导致内存占用增加。
+
+**常见原因**：
+
+- 连接泄漏（客户端或后端连接未正确关闭）
+- 大量路由和后端配置（每个路由和后端都会消耗内存）
+- Wasm 插件内存泄漏
+- 并发连接数超过预期（考虑增加内存限制或启用连接限制）
+
+## 日志级别
+
+控制面和数据面都支持动态调整日志级别，无需重启：
+
+**控制面**：通过配置文件中的 `logging.level` 字段设置，支持 `debug`、`info`、`warn`、`error`。
+
+**数据面**：通过环境变量 `RUST_LOG` 设置，例如：
+```bash
+RUST_LOG=ntgw_xds=debug,ntgw_http=info,warn
+```
+
+:::caution
+在生产环境中不要长时间开启 `debug` 级别日志。debug 日志量很大，可能影响性能并快速填满磁盘。
+:::

@@ -1,0 +1,125 @@
+---
+title: 什么是 Nantian Gateway
+---
+
+Nantian Gateway 是 [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) 的一个实现，它为云原生场景提供高性能的南北向流量入口、流量治理和 API 网关能力。项目基于 Gateway API v1.5.1 规范，声明支持 55 个特性，覆盖 HTTP、gRPC、TCP、UDP 和 TLS 路由。
+
+和其他网关实现相比，Nantian Gateway 有两个明显不同的设计选择。第一个是**控制面与数据面分离架构**（split-plane architecture）：控制面用 Go 编写，数据面用 Rust 编写，两者之间通过 gRPC 双向 xDS 流通信。第二个是**AI 网关能力**作为一等公民直接内置在数据面中，而不是挂在外部组件上。
+
+## 它是怎么工作的
+
+简单来说，Nantian Gateway 监听 Kubernetes 集群中的 Gateway API 资源，比如 `Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute` 和 `TLSRoute`。Go 控制面把这些资源翻译成内部 IR（中间表示），然后通过 gRPC/xDS 流推送到 Rust 数据面代理。
+
+数据面负责实际的请求处理：TLS 拆解、HTTP 路由、请求头修改、流量拆分、限流、AI 协议转换等。控制面负责翻译和分发，数据面负责执行，两者各司其职，独立扩缩。
+
+## 核心概念
+
+### Gateway API 原生
+
+所有路由配置都通过标准的 Gateway API 资源完成。你的 `HTTPRoute` 配置写法和其他兼容实现完全一样，这意味着迁移成本低，学习曲线平缓，API 界面也足够熟悉。
+
+### 控制面与数据面通信
+
+控制面不内嵌代理。配置通过 gRPC 双向流（xDS 协议）推送到数据面。这样做的好处很明显：数据面保持轻量，两个平面可以独立扩缩，运维边界也更清晰。
+
+### 用于 AI 和 Wasm 的自定义资源
+
+Nantian Gateway 自带四个自定义 CRD，扩展了 Gateway API 的能力：
+
+- [**AIService**](../api-reference/crds/): 管理 AI 模型提供方的连接，包括认证、模型路由和提供方配置
+- [**TokenPolicy**](../api-reference/crds/): 基于 token 数量对 AI API 调用做限流和配额控制
+- [**WasmPlugin**](../api-reference/crds/): 在监听器或路由级别绑定 Wasm 扩展，注入自定义请求/响应处理逻辑
+- [**BackendLBPolicy**](../api-reference/crds/): 配置后端负载均衡和会话保持策略
+
+这些 CRD 让你用同样的 Kubernetes 原生工作流来管理 AI 流量和自定义扩展，不必额外搭建独立服务。
+
+### 内置 AI 网关
+
+Rust 数据面内嵌了一个 AI 网关模块，负责处理多 AI 提供方的协议适配。支持 OpenAI、Anthropic 和 Ollama 三种格式，能力包括 token 计数、API 密钥管理、限流、PII 脱敏和模型 A/B 测试。所有这些都在代理进程内部完成，不需要额外的网络跳转。
+
+### Wasm 运行时
+
+基于 [wasmtime](https://wasmtime.dev/) 的插件引擎运行在数据面层面，允许你在请求和响应的生命周期钩子中注入自定义逻辑。插件以标准 `.wasm` 模块的形式分发，通过 `WasmPlugin` CRD 管理。
+
+## 功能概览
+
+Nantian Gateway 的功能覆盖路由、流量治理、安全、可观测性和扩展性五个维度。
+
+### 路由
+
+- **HTTP 路由**：支持路径、请求头、查询参数和方法匹配
+- **gRPC 路由**：支持命名路由规则，精确到方法级别
+- **TCP 和 UDP 路由**：覆盖非 HTTP 负载
+- **TLS 透传和拆解**：支持同一监听器上的混合模式
+- **Host 重写**和**路径重写/重定向**
+- 支持 301、302、303、307、308 状态码重定向
+
+### 流量治理
+
+- **请求镜像**：按百分比将请求复制到多个后端
+- **后端超时**：支持请求级和后端级超时控制
+- **CORS 配置**：在路由级别配置跨域策略
+- **请求头修改**：同时支持请求和响应方向的头部变更
+- **后端协议支持**：HTTP/1.1、HTTP/2（h2c）、gRPC、WebSocket
+
+### 安全
+
+- **后端 TLS 策略**：支持 SAN 校验和客户端证书
+- **前端 TLS**：支持客户端证书校验和非安全回退
+- **ReferenceGrant**：允许跨命名空间引用后端
+- **监听器隔离**：防止跨监听器请求泄漏
+
+### 服务网格
+
+Nantian Gateway 支持 Gateway API Mesh 资源，包括：
+
+- 基于集群 IP 匹配的消费者路由
+- Mesh 级别的 HTTP 路由操作（请求头修改、路径重写、重定向）
+- 无 Sidecar 的网格配置，通过 Gateway API Mesh 模型实现
+
+### 可观测性
+
+- 控制面和数据面均暴露 **Prometheus** 指标
+- **Grafana** 仪表盘模板，提供集群级可见性
+- **Admin API**：运行时诊断和配置检查
+- **健康检查和就绪探针**：支持 Kubernetes 原生的存活检测
+
+### 扩展性
+
+- **Wasm 插件系统**：自定义请求/响应钩子
+- **AI 网关**模块：多提供方 AI 流量管理
+- **扩展过滤器**：自定义 Gateway API 过滤器集成
+
+## 架构速览
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Kubernetes 集群                                      │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
+│  │ Gateway  │  │ HTTPRoute│  │ EndpointSlice     │  │
+│  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
+│       └──────────────┼───────────────┘               │
+│                      │ watch                         │
+│              ┌───────┴────────┐                      │
+│              │  Nantian GW    │                      │
+│              │  Control Plane │                      │
+│              │  (Go)          │     ── gRPC/xDS ──►  │
+│              └───────┬────────┘                      │
+│                      │                               │
+│              ┌───────┴────────┐                      │
+│              │  Data Plane    │                      │
+│              │  (Rust)        │────────────────────  │
+│              └────────────────┘                      │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+              ┌──────────────────┐
+              │  后端服务 (Pod)   │
+              └──────────────────┘
+```
+
+## 下一步
+
+- [快速开始（5 分钟部署）](../getting-started/quick-start/)
+- [了解整体架构](../architecture/)
+- [和 Envoy Gateway 对比](../comparison/)

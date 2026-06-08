@@ -1,0 +1,117 @@
+---
+title: TLS / mTLS
+---
+
+Nantian Gateway 支持三条通信通道的 TLS：Admin HTTP API、控制面与数据面之间的 gRPC xDS 流，以及数据面侧的 xDS 传输。每条通道独立配置。
+
+## 控制面 TLS
+
+控制面暴露两个支持 TLS 的服务器：Admin HTTP 服务器和 gRPC xDS 服务器。
+
+### Admin TLS
+
+为 Admin HTTP API 提供服务器端 TLS 保护：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminTLS.enabled` | bool | `false` | 启用 Admin HTTP 服务器的 TLS |
+| `adminTLS.certPath` | string | `""` | 服务器证书文件路径（PEM 格式） |
+| `adminTLS.keyPath` | string | `""` | 服务器私钥文件路径（PEM 格式） |
+
+启用后，Admin 服务器使用 HTTPS 而非 HTTP。证书和私钥必须是控制面进程可读取的有效 PEM 编码文件。在 Kubernetes 中，通过 Secret 卷挂载这些文件。
+
+:::tip[证书轮换]
+控制面不会监控证书文件变更。轮换证书需要重启控制面进程。在 Kubernetes 中，滚动更新期间会自动完成此操作。
+:::
+
+### gRPC TLS
+
+为 gRPC xDS 流提供 TLS 保护，可选双向 TLS：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `grpcTLS.enabled` | bool | `false` | 启用 gRPC 服务器的 TLS |
+| `grpcTLS.certPath` | string | `""` | 服务器证书文件路径（PEM 格式） |
+| `grpcTLS.keyPath` | string | `""` | 服务器私钥文件路径（PEM 格式） |
+| `grpcTLS.clientCAPath` | string | `""` | 用于验证客户端证书的 CA 证书路径 |
+| `grpcTLS.requireClientCert` | bool | `false` | 要求并验证客户端证书（mTLS） |
+
+将 `requireClientCert` 设置为 `true` 启用双向 TLS。每个连接的数据面必须提供由 `clientCAPath` 指定的 CA 签发的证书。未启用 mTLS 时，任何能够访问 gRPC 端口的客户端都可以接收配置快照。
+
+:::caution[生产环境 gRPC]
+gRPC 流传输完整的网关配置，包括路由规则、后端地址和 TLS 密钥。生产环境中务必启用 gRPC TLS 并配置 mTLS。未启用时，拥有 gRPC 端口网络访问权限的任何方均可拦截或注入配置。
+:::
+
+## 数据面 TLS
+
+数据面有两个 TLS 相关配置部分：代理运行时（面向客户端的 TLS）和 xDS 传输（控制面连接）。
+
+### 代理运行时 TLS
+
+这些设置控制流经数据面的流量的 TLS 行为：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `tls.minVersion` | string | `"1.2"` | 接受的最低 TLS 版本（`"1.2"` 或 `"1.3"`） |
+| `tls.maxVersion` | string | `"1.3"` | 提供的最高 TLS 版本 |
+| `tls.cipherSuites` | []string | `[]` | 允许的密码套件（空 = 默认值） |
+| `tls.sessionCacheSize` | int | `2048` | 用于会话恢复的 TLS 会话缓存条目数 |
+| `tls.sessionCacheLifetime` | duration | `"10m"` | 缓存的 TLS 会话生存期 |
+
+### xDS 传输 TLS
+
+配置数据面如何连接控制面的 gRPC 服务器：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `xds.tls.enabled` | bool | `false` | 启用 xDS 连接的 TLS |
+| `xds.tls.serverName` | string | `""` | 用于证书验证的预期服务器名称 |
+| `xds.tls.caCertPath` | string | `""` | 用于验证服务器的 CA 证书路径 |
+| `xds.tls.clientCertPath` | string | `""` | 客户端证书路径（用于 mTLS） |
+| `xds.tls.clientKeyPath` | string | `""` | 客户端私钥路径（用于 mTLS） |
+
+当同时设置 `clientCertPath` 和 `clientKeyPath` 时，数据面向控制面提供客户端证书，满足 gRPC 服务器上启用 `requireClientCert` 时的 mTLS 要求。
+
+## 示例：完整 mTLS 配置
+
+以下配置在 gRPC 流上启用 mTLS，并在 Admin API 上启用 TLS：
+
+```yaml
+# 控制面
+grpcTLS:
+  enabled: true
+  certPath: /etc/certs/grpc/tls.crt
+  keyPath: /etc/certs/grpc/tls.key
+  clientCAPath: /etc/certs/grpc/ca.crt
+  requireClientCert: true
+
+adminTLS:
+  enabled: true
+  certPath: /etc/certs/admin/tls.crt
+  keyPath: /etc/certs/admin/tls.key
+
+# 数据面
+xds:
+  tls:
+    enabled: true
+    serverName: nantian-gw-controlplane.nantian-gw.svc
+    caCertPath: /etc/certs/xds/ca.crt
+    clientCertPath: /etc/certs/xds/tls.crt
+    clientKeyPath: /etc/certs/xds/tls.key
+```
+
+## 证书管理
+
+证书可通过以下几种方式配置：
+
+- **cert-manager** — 使用 Kubernetes cert-manager 操作器自动签发和轮换证书
+- **手动配置** — 使用 `openssl` 或 `cfssl` 等工具生成证书，并以 Kubernetes Secret 形式挂载
+- **Vault** — 集成 HashiCorp Vault 进行集中式证书管理
+
+生产部署推荐使用 cert-manager。它无需人工干预即可处理证书签发、续期和轮换。
+
+## 下一步
+
+- [配置概述](/zh/configuration/) — 通用配置结构
+- [安全最佳实践](/zh/operations/) — 运维安全指南
+- [生产环境部署](/zh/installation/production/) — 生产级安装

@@ -1,0 +1,229 @@
+---
+title: Admin API
+---
+
+Nantian Gateway 的控制面和数据面各自暴露一个 HTTP REST Admin API，用于运行时诊断、配置检查和健康探查。Admin API 是运维人员排查问题最常用的入口。
+
+## 控制面 Admin API
+
+控制面 Admin API 暴露在控制面 Pod 的 HTTP 端口上（默认 `8081`），提供集群级别的配置视图和 xDS 客户端管理。
+
+### 端点列表
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/healthz` | 健康检查 |
+| `GET` | `/readyz` | 就绪检查 |
+| `GET` | `/api/v1/config/snapshot` | 获取当前配置快照 |
+| `GET` | `/api/v1/config/snapshot/version` | 获取当前配置快照版本 |
+| `GET` | `/api/v1/gateways` | 列出所有 Gateway |
+| `GET` | `/api/v1/gateways/{namespace}/{name}` | 获取指定 Gateway 详情 |
+| `GET` | `/api/v1/routes` | 列出所有路由（HTTP/gRPC/TCP/UDP/TLS） |
+| `GET` | `/api/v1/routes/{namespace}/{name}` | 获取指定路由详情 |
+| `GET` | `/api/v1/backends` | 列出所有后端集群 |
+| `GET` | `/api/v1/backends/{namespace}/{name}` | 获取指定后端集群详情 |
+| `GET` | `/api/v1/clients` | 列出所有连接的 xDS 客户端 |
+| `GET` | `/api/v1/clients/{node_id}` | 获取指定 xDS 客户端的连接状态 |
+| `GET` | `/api/v1/metrics` | Prometheus 指标端点 |
+### 健康检查
+
+```bash
+# 控制面存活检查
+curl http://<controlplane-pod>:8081/healthz
+# 返回: 200 OK (body: "ok")
+
+# 控制面就绪检查
+curl http://<controlplane-pod>:8081/readyz
+# 返回: 200 OK (body: "ready") 或 503 Service Unavailable
+```
+
+`/healthz` 只检查进程是否存活，`/readyz` 额外检查控制面是否完成了初始资源同步，可以开始接受配置变更。
+
+### 配置快照
+
+```bash
+# 获取当前配置快照版本
+curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
+# 返回示例:
+# {
+#   "id": "snap-20240601-120000-abc123",
+#   "generated_at": "2024-06-01T12:00:00Z",
+#   "gateways": 2,
+#   "routes": 15,
+#   "backends": 8,
+#   "clients_connected": 3
+# }
+
+# 获取完整配置快照
+curl http://<controlplane-pod>:8081/api/v1/config/snapshot
+# 返回当前推送给所有数据面的完整 IR 快照内容
+```
+
+配置快照端点返回的是控制面翻译后的内部表示（IR），不是原始的 Kubernetes 资源。这有助于排查配置翻译是否正确，以及确认数据面收到的配置内容。
+
+### xDS 客户端状态
+
+```bash
+# 列出所有连接的 xDS 客户端
+curl http://<controlplane-pod>:8081/api/v1/clients
+
+# 返回示例:
+# [
+#   {
+#     "node_id": "dataplane-7f8a9b-0",
+#     "cluster": "default",
+#     "version": "v1.2.3",
+#     "connected_since": "2024-06-01T11:55:00Z",
+#     "last_config_version": "snap-20240601-120000-abc123",
+#     "last_config_nonce": "nonce-xyz789",
+#     "last_config_status": "ACK",
+#     "subscriptions": ["http_routes", "backends", "listeners"]
+#   }
+# ]
+
+# 获取指定客户端详情
+curl http://<controlplane-pod>:8081/api/v1/clients/dataplane-7f8a9b-0
+```
+
+`clients` 端点帮助确认数据面是否成功连接、收到了哪些配置、以及最后确认的状态。如果某个数据面长时间显示 `NACK` 状态，说明配置推送可能存在问题。
+
+## 数据面 Admin API
+
+数据面 Admin API 暴露在每个数据面 Pod 的 HTTP 端口上（默认 `8082`），提供单个代理实例的运行时状态。
+
+### 端点列表
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/healthz` | 健康检查 |
+| `GET` | `/readyz` | 就绪检查 |
+| `GET` | `/api/v1/status` | 代理运行时状态 |
+| `GET` | `/api/v1/config` | 当前应用的配置 |
+| `GET` | `/api/v1/config/version` | 当前配置版本 |
+| `GET` | `/api/v1/stats` | 运行时统计信息 |
+| `GET` | `/api/v1/stats/connections` | 活跃连接统计 |
+| `GET` | `/api/v1/stats/backends` | 后端健康状态 |
+| `GET` | `/api/v1/xds/status` | xDS 连接状态 |
+| `GET` | `/api/v1/metrics` | Prometheus 指标端点 |
+### 代理状态
+
+```bash
+# 获取代理运行时状态
+curl http://<dataplane-pod>:8082/api/v1/status
+
+# 返回示例:
+# {
+#   "node_id": "dataplane-7f8a9b-0",
+#   "version": "v1.2.3",
+#   "uptime_seconds": 86400,
+#   "ready": true,
+#   "config_version": "snap-20240601-120000-abc123",
+#   "config_applied_at": "2024-06-01T12:00:01Z",
+#   "listeners": [
+#     {"name": "http-80", "address": "0.0.0.0:80", "protocol": "HTTP", "active": true},
+#     {"name": "https-443", "address": "0.0.0.0:443", "protocol": "HTTPS", "active": true}
+#   ]
+# }
+```
+
+### 运行时统计
+
+```bash
+# 获取活跃连接统计
+curl http://<dataplane-pod>:8082/api/v1/stats/connections
+
+# 返回示例:
+# {
+#   "active_connections": 1250,
+#   "connections_per_second": 45.2,
+#   "total_connections": 3892000,
+#   "connection_errors": 12
+# }
+
+# 获取后端健康状态
+curl http://<dataplane-pod>:8082/api/v1/stats/backends
+
+# 返回示例:
+# [
+#   {
+#     "name": "backend-v1",
+#     "namespace": "default",
+#     "endpoints": [
+#       {"address": "10.0.1.5:8080", "healthy": true, "zone": "us-east-1a"},
+#       {"address": "10.0.1.6:8080", "healthy": true, "zone": "us-east-1b"},
+#       {"address": "10.0.1.7:8080", "healthy": false, "zone": "us-east-1a"}
+#     ]
+#   }
+# ]
+```
+
+### xDS 连接状态
+
+```bash
+# 获取与控制面的 xDS 连接状态
+curl http://<dataplane-pod>:8082/api/v1/xds/status
+
+# 返回示例:
+# {
+#   "connected": true,
+#   "controlplane_address": "nantian-gw-controlplane:9090",
+#   "connected_since": "2024-06-01T11:55:00Z",
+#   "last_config_version": "snap-20240601-120000-abc123",
+#   "last_config_nonce": "nonce-xyz789",
+#   "last_config_status": "ACK",
+#   "stream_reconnects": 0
+# }
+```
+
+## 常用诊断场景
+
+### 场景一：确认配置是否已生效
+
+当你在 Kubernetes 中修改了路由配置却看不到效果时，首先确认配置是否已推送并应用到数据面：
+
+```bash
+# 1. 检查控制面配置快照版本
+curl http://<controlplane>:8081/api/v1/config/snapshot/version
+
+# 2. 检查数据面是否收到了相同版本
+curl http://<dataplane>:8082/api/v1/config/version
+
+# 3. 如果版本不一致，检查 xDS 客户端状态
+curl http://<controlplane>:8081/api/v1/clients
+```
+
+如果控制面快照版本已更新但数据面版本未更新，检查 xDS 客户端是否处于 `NACK` 状态，以及错误详情中是否有配置解析失败的信息。
+
+### 场景二：排查后端不可用
+
+```bash
+# 1. 检查控制面中后端集群的端点列表
+curl http://<controlplane>:8081/api/v1/backends/default/backend-v1
+
+# 2. 检查数据面中后端端点的健康状态
+curl http://<dataplane>:8082/api/v1/stats/backends
+```
+
+控制面返回的是从 Kubernetes EndpointSlice 翻译过来的配置，数据面返回的是实际健康检查的结果。如果控制面列出了端点但数据面显示 `healthy: false`，说明健康检查失败，需要检查后端服务本身是否正常。
+
+### 场景三：检查数据面与控制面的连接
+
+```bash
+# 查看所有数据面的连接状态
+curl http://<controlplane>:8081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
+
+# 查看特定数据面的 xDS 状态
+curl http://<dataplane>:8082/api/v1/xds/status
+```
+
+如果数据面的 `stream_reconnects` 持续增长，说明控制面和数据面之间的 gRPC 连接不稳定，需要检查网络和防火墙配置。
+
+:::tip[jq 工具]
+Admin API 返回 JSON 格式，推荐使用 `jq` 工具格式化输出。如果执行环境没有 `jq`，可以用 `python3 -m json.tool` 代替。
+:::
+
+## 下一步
+
+- 查看 [xDS 协议](/zh/api-reference/xds-proto) 了解控制面和数据面之间的通信协议细节
+- 查看 [故障排查](/zh/operations/troubleshooting) 了解常见问题的诊断方法
+- 查看 [指标参考](/zh/operations/metrics) 了解 Prometheus 指标定义
