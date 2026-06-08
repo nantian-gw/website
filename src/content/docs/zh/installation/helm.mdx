@@ -82,7 +82,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-controlplane"
-    tag: ""                  # 不填就用 Chart.appVersion
+    tag: "latest"              # 不填就用 Chart.appVersion
     pullPolicy: Always
   resources:
     requests:
@@ -117,7 +117,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-dataplane"
-    tag: ""
+    tag: "latest"
     pullPolicy: Always
   resources:
     requests:

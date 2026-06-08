@@ -75,7 +75,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-controlplane"
-    tag: ""                  # Defaults to Chart.appVersion
+    tag: "latest"              # Defaults to Chart.appVersion
     pullPolicy: Always
   resources:
     requests:
@@ -110,7 +110,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-dataplane"
-    tag: ""
+    tag: "latest"
     pullPolicy: Always
   resources:
     requests:
@@ -156,8 +156,8 @@ global:
 controlplane:
   image:
     registry: "registry.example.com"
-    repository: "nantian-gw/controlplane"
-    tag: "v0.1.0"
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "latest"
 
   grpcTLS:
     enabled: true
@@ -174,7 +174,7 @@ dataplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dataplane"
-    tag: "v0.1.0"
+    tag: "latest"
 
   xdsTLS:
     enabled: true
