@@ -1,0 +1,67 @@
+name: Bug Report
+description: Report a bug on the website or documentation.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write in English or Chinese.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Select the nearest area this bug belongs to.
+      options:
+        - landing page
+        - docs content
+        - i18n / translation
+        - release / CI
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the bug and impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps To Reproduce
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      placeholder: Include screenshots if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      value: |
+        - OS:
+        - Browser:
+        - Branch / commit:
