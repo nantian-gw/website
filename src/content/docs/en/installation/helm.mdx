@@ -2,114 +2,106 @@
 title: Helm Installation
 ---
 
-The Helm chart is the recommended way to install Nantian Gateway. It packages the control plane, data plane, and dashboard into a single release with sensible defaults and an escape hatch for every value you might want to override.
-
-The chart is hosted on Cloudflare Pages and requires Helm 3.x.
+The Helm chart is the recommended way to install Nantian Gateway. It packages the control plane, data plane, dashboard, RBAC, NetworkPolicies, services, ConfigMaps, and the default `GatewayClass` into one release.
 
 ## Prerequisites
 
-Install the Gateway API CRDs before deploying the chart:
+Install the Gateway API standard CRDs first:
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
-```
-
-Verify the CRDs are ready:
-
-```bash
 kubectl get crd gateways.gateway.networking.k8s.io
 ```
 
-## Basic install
+You also need Helm 3.x and `kubectl` access to the target cluster.
 
-First, add the Helm repository:
+## Add The Chart Repository
+
+Use the current chart repository URL:
 
 ```bash
-helm repo add nantian-gw https://chart.nantian.dev
+helm repo add nantian-gw https://charts.nantian.dev
 helm repo update
 ```
 
-The simplest install uses only defaults. It creates the `nantian-gw` namespace, deploys two replicas of each component, and registers the GatewayClass:
+Do not use the legacy plural chart host.
+
+## Install With Defaults
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace
 ```
 
-This is what you get out of the box. All components are enabled, the cluster domain is auto-detected, and the data plane connects to the control plane over an unencrypted gRPC channel on port 18080.
+The default release creates namespace `nantian-gw`, two control plane replicas, two data plane replicas, one dashboard replica, the fixed services listed in the installation overview, and a `GatewayClass` named `nantian-gw`.
 
-:::tip[Inspect before you install]
-You can preview every resource the chart will create without touching the cluster. Use `helm template` to render the manifests or `helm install --dry-run` to simulate the install:
+Preview the rendered manifests before installing:
 
 ```bash
-helm template nantian-gw nantian-gw/nantian-gw > rendered.yaml
-helm install nantian-gw nantian-gw/nantian-gw --dry-run
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw > rendered.yaml
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --dry-run
 ```
-:::
 
-## Default values reference
+## Key Default Values
 
-The chart's `values.yaml` is extensively commented. Here are the key sections you'll interact with most often:
+These snippets match the current chart defaults.
 
-**Global settings:**
+### Global And GatewayClass
 
 ```yaml
 global:
-  imageRegistry: ""          # Prepend to all image paths
-  imagePullSecrets: []       # Pull secrets for private registries
-  commonLabels: {}           # Labels applied to all resources
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+  commonLabels: {}
+
+gatewayClass:
+  enabled: true
+  controllerName: "gateway.networking.k8s.io/nantian-gw"
 ```
 
-**Namespace:**
+The chart derives the default `GatewayClass` name from the controller name, so `gateway.networking.k8s.io/nantian-gw` becomes `nantian-gw`.
 
-```yaml
-namespace:
-  create: true               # Let Helm create the namespace
-  name: "nantian-gw"         # Namespace name
-```
-
-**Control plane:**
+### Control Plane
 
 ```yaml
 controlplane:
   enabled: true
   replicas: 2
   image:
-    repository: "nantian-controlplane"
-    tag: "latest"              # Defaults to Chart.appVersion
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "latest"
     pullPolicy: Always
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "500m"
-      memory: "512Mi"
   config:
     grpcAddr: ":18080"
     adminAddr: ":18081"
     metricsAddr: ":18082"
     healthProbeAddr: ":18083"
-    syncPeriod: "30s"
-    leaderElection:
-      enabled: true
-      id: "nantian-controlplane-leader"
-      leaseDuration: "15s"
-      renewDeadline: "10s"
-      retryPeriod: "2s"
-  grpcTLS:
-    enabled: false
-    existingSecret: ""
-    requireClientCert: false
+    features:
+      enableExperimentalGateway: false
+      enableAiGateway: false
 ```
 
-**Data plane:**
+The control plane service split is:
+
+| Service | Port |
+| --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` |
+| `nantian-gw-controlplane-admin` | `18081` |
+| `nantian-gw-controlplane-metrics` | `18082` |
+
+### Data Plane
 
 ```yaml
 dataplane:
   enabled: true
   replicas: 2
   image:
-    repository: "nantian-dataplane"
+    repository: "nantian-gw/dataplane"
     tag: "latest"
     pullPolicy: Always
   resources:
@@ -117,118 +109,120 @@ dataplane:
       cpu: "250m"
       memory: "256Mi"
     limits:
+      cpu: "2000m"
       memory: "1Gi"
   config:
-    nodeId: "dp-kubernetes"
-    cluster: "kubernetes"
-    controlPlaneAddr: ""
     adminAddr: "0.0.0.0:19080"
-    log:
-      level: "info,nantian_core::connectors=off"
-      format: "json"
-      nonBlocking: true
-      nonBlockingBufferedLines: 65536
-      dropWhenFull: true
-    accessLog:
-      enabled: true
-      path: "/var/log/nantian-gw/access.log"
-      mode: "text"
-  xdsTLS:
-    enabled: false
-    domainName: ""
+    runtime:
+      httpListenAddr: "0.0.0.0:10080"
+    experimental:
+      enableExperimentalGateway: false
+      enableAiGateway: false
+  accessLogVolume:
+    enabled: true
+    name: access-logs
+    mountPath: /var/log/nantian-gw
+    sizeLimit: 256Mi
 ```
 
-## Customizing with a values file
+The data plane services are `nantian-gw-dataplane-admin` and `nantian-gw-dataplane-metrics`; both use service port `19080`. Runtime HTTP traffic is handled by the configured listener `0.0.0.0:10080`.
 
-Create a `my-values.yaml` and pass it to Helm:
+### Dashboard
+
+```yaml
+dashboard:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "nantian-gw/dashboard"
+    tag: "latest"
+    pullPolicy: Always
+```
+
+Disable the dashboard when you do not need the web UI:
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw -f my-values.yaml
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --set dashboard.enabled=false
 ```
 
-Here's a `my-values.yaml` that sets a private registry, bumps data plane replicas to 4, and enables gRPC TLS between the planes:
+### HPA, ServiceMonitor, And NetworkPolicy
+
+```yaml
+hpa:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+networkPolicies:
+  enabled: true
+```
+
+Enable `serviceMonitor.enabled` only when the Prometheus Operator CRDs are installed. HPA is off by default; enable it when your cluster has metrics-server and you have validated data plane resource requests.
+
+## Common Overrides
+
+Use a values file for changes you want to keep:
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f my-values.yaml
+```
+
+Example private registry and replica override:
 
 ```yaml
 global:
+  imageRegistry: "registry.example.com"
   imagePullSecrets:
-    - my-registry-secret
-
-controlplane:
-  image:
-    registry: "registry.example.com"
-    repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
-
-  grpcTLS:
-    enabled: true
-    existingSecret: "nantian-grpc-tls"
-
-  config:
-    grpcTLS:
-      enabled: true
-      certPath: "/etc/nantian-gw/grpc-tls/tls.crt"
-      keyPath: "/etc/nantian-gw/grpc-tls/tls.key"
+    - name: registry-credentials
 
 dataplane:
   replicas: 4
-  image:
-    registry: "registry.example.com"
-    repository: "nantian-gw/dataplane"
-    tag: "latest"
-
-  xdsTLS:
-    enabled: true
-    domainName: "nantian-controlplane-grpc.nantian-gw.svc.cluster.local"
-
-  config:
-    controlPlaneAddr: "https://nantian-controlplane-grpc.nantian-gw.svc.cluster.local:18080"
 ```
 
-:::caution[gRPC TLS requires matching certs]
-When you enable gRPC TLS, the data plane's `xdsTLS.domainName` must match the SAN in the control plane's certificate. A mismatch causes the data plane to reject the connection and fail to start.
-:::
+## Experimental Features
 
-## Production configuration
+Experimental Gateway policy, AI, token policy, and Wasm behavior is disabled by default. Configure both planes before using the experimental APIs:
 
-See the [Production Deployment guide](/en/installation/production) for a complete checklist of production-ready settings — resource limits, replica counts, TLS, anti-affinity, PDBs, and more. The settings outlined there should be assembled into a custom values file and passed to Helm:
+- Control plane: `controlplane.config.features.enableExperimentalGateway`
+- Control plane: `controlplane.config.features.enableAiGateway`
+- Data plane: `dataplane.config.experimental.enableExperimentalGateway`
+- Data plane: `dataplane.config.experimental.enableAiGateway`
+
+See [Experimental Features](/en/configuration/experimental-features/) for the complete startup, CRD, and verification flow.
+
+## Verify The Release
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  -f my-production.yaml
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+helm status nantian-gw -n nantian-gw
 ```
 
-Key production defaults:
+If the data plane does not become ready, check whether it can connect to `nantian-gw-controlplane-grpc:18080` and read the control plane and data plane logs.
 
-- `runAsNonRoot: true` with user/group 65532 for both planes
-- `readOnlyRootFilesystem: true` on all containers
-- `allowPrivilegeEscalation: false`
-- Data plane capability drops to `[ALL]` with only `NET_BIND_SERVICE` added
-- gRPC TLS and xDS TLS both enabled
-- JSON-format structured logging with `nonBlocking: true`
-- Access logging enabled with a detailed format string
+## Upgrade And Uninstall
 
-When building your production values file, remember to configure the image registry, tag, and pull secrets to match your environment.
-
-## Upgrading
-
-To upgrade an existing installation:
+Upgrade an existing release:
 
 ```bash
-helm upgrade nantian-gw nantian-gw/nantian-gw -f my-values.yaml
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f my-values.yaml
 ```
 
-Helm diffs the new release against the previous one and applies only the changes. The control plane and data plane use rolling updates, so traffic is not interrupted during the upgrade.
-
-See the [Upgrade Guide](/en/installation/upgrade) for detailed upgrade procedures, including how to handle breaking changes between versions.
-
-## Uninstalling
+Remove the release:
 
 ```bash
-helm uninstall nantian-gw
+helm uninstall nantian-gw -n nantian-gw
+kubectl delete namespace nantian-gw
 ```
 
-This removes all resources created by the chart except the namespace (if it was created by Helm). If you set `namespace.create: false`, the namespace is left intact.
-
-:::note
-Uninstalling the Helm release does not delete Gateway or HTTPRoute resources you created. Those are managed by the Gateway API and persist independently of the chart.
-:::
+Helm uninstall removes chart-managed resources. Gateway API CRDs and application resources you created outside the chart are not removed by the chart uninstall.

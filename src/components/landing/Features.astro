@@ -13,64 +13,64 @@ const features = isZh
       {
         icon: '🚪',
         title: 'Gateway API v1.5.1',
-        description: '完整支持 Gateway、HTTPRoute、GRPCRoute、TCPRoute、UDPRoute、TLSRoute',
+        description: '声明支持的特性由 gateway 仓库的支持矩阵和一致性配置生成',
       },
       {
         icon: '🤖',
-        title: 'AI Gateway',
-        description: 'LLM 路由、负载均衡、Token 策略管理',
+        title: '实验性 AI 网关',
+        description: 'AIService 与 TokenPolicy 默认关闭，开启后用于模型提供方配置和 token 策略',
       },
       {
         icon: '⚡',
         title: '控制面与数据面分离',
-        description: 'Go 控制面 + Rust 数据面，通过 gRPC xDS 协议通信',
+        description: 'Go 控制面监听 Kubernetes 资源，Rust 数据面通过 gRPC/xDS 接收运行时快照',
       },
       {
         icon: '🔌',
-        title: 'Wasm 插件',
-        description: '自定义过滤器、请求/响应转换、安全策略',
+        title: '实验性 Wasm 扩展',
+        description: 'WasmPlugin 支持 URL、ConfigMap 或 inline 模块来源，并绑定到目标资源',
       },
       {
         icon: '📊',
-        title: '可观测性',
-        description: 'Prometheus 指标、Grafana 仪表盘、Admin API',
+        title: '运维可见性',
+        description: '提供 Admin API、Prometheus 指标、Grafana 面板和健康检查端口',
       },
       {
         icon: '🚀',
-        title: '生产就绪',
-        description: 'Kustomize + Helm 部署、高可用、Leader Election',
+        title: 'Helm 与 Kustomize',
+        description: 'Helm chart 发布在 charts.nantian.dev，仓库也提供 Kustomize overlays',
       },
     ]
   : [
       {
         icon: '🚪',
         title: 'Gateway API v1.5.1',
-        description: 'Full support for Gateway, HTTPRoute, GRPCRoute, TCPRoute, UDPRoute, TLSRoute',
+        description: 'Declared support is generated from the gateway repository support matrix and conformance profile',
       },
       {
         icon: '🤖',
-        title: 'AI Gateway',
-        description: 'LLM routing, load balancing, token policy management',
+        title: 'Experimental AI Gateway',
+        description: 'AIService and TokenPolicy are disabled by default and configure model providers and token policy when enabled',
       },
       {
         icon: '⚡',
         title: 'Split-plane Architecture',
-        description: 'Go control plane + Rust data plane over gRPC xDS',
+        description: 'The Go control plane watches Kubernetes resources; the Rust data plane receives runtime snapshots over gRPC/xDS',
       },
       {
         icon: '🔌',
-        title: 'Wasm Plugins',
-        description: 'Custom filters, request/response transforms, security policies',
+        title: 'Experimental Wasm Extensions',
+        description: 'WasmPlugin supports URL, ConfigMap, or inline module sources bound to target resources',
       },
       {
         icon: '📊',
-        title: 'Observability',
-        description: 'Prometheus metrics, Grafana dashboards, Admin API',
+        title: 'Operations Visibility',
+        description: 'Admin APIs, Prometheus metrics, Grafana dashboards, and health probe ports are part of the stack',
       },
       {
         icon: '🚀',
-        title: 'Production Ready',
-        description: 'Kustomize + Helm, HA, Leader Election',
+        title: 'Helm And Kustomize',
+        description: 'The Helm chart is published at charts.nantian.dev and repository-local Kustomize overlays are available',
       },
     ];
 

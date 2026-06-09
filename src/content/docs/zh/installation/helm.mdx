@@ -2,208 +2,227 @@
 title: Helm 安装
 ---
 
-Helm 是 Nantian Gateway 推荐的安装方式。Chart 把控制面、数据面和管理界面打包进一次发布，默认值覆盖了大多数场景，需要覆盖的值也都能在 values.yaml 里找到。
+Helm chart 是安装 Nantian Gateway 的推荐方式。它把控制面、数据面、dashboard、RBAC、NetworkPolicy、Service、ConfigMap 和默认 `GatewayClass` 打包到同一个 release。
 
-Chart 托管在 Cloudflare Pages，要求 Helm 3.x。
+## 前提条件
 
-## 前置条件
-
-安装前请确保集群已安装 Gateway API CRD：
+先安装 Gateway API standard CRD：
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
-```
-
-验证 CRD 已就绪：
-
-```bash
 kubectl get crd gateways.gateway.networking.k8s.io
 ```
 
-## 基础安装
+你还需要 Helm 3.x，以及能访问目标集群的 `kubectl`。
 
-首先添加 Helm 仓库：
+## 添加 Chart 仓库
+
+使用当前 chart 仓库地址：
 
 ```bash
-helm repo add nantian-gw https://chart.nantian.dev
+helm repo add nantian-gw https://charts.nantian.dev
 helm repo update
 ```
 
-最简单的安装方式就是跑一行命令。它会自动创建 `nantian-gw` 命名空间，给每个组件部署两个副本，然后注册 GatewayClass：
+不要使用旧的复数形式 chart host。
+
+## 使用默认值安装
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace
 ```
 
-安装完成之后，你会拿到一套完整的运行环境：控制面两个副本（有主备选举）、数据面两个副本（都接流量）、管理界面一个副本。控制面和数据面之间通过 gRPC 双向流通信，默认用的是 18080 端口。
+默认 release 会创建命名空间 `nantian-gw`、2 个控制面副本、2 个数据面副本、1 个 dashboard 副本、安装概述中列出的固定 Service，以及名为 `nantian-gw` 的 `GatewayClass`。
 
-:::tip[先看再装]
-用 `helm template` 可以把要部署的 YAML 全渲染出来，不碰集群一根毛：
+安装前可以先预览渲染结果：
 
 ```bash
-helm template nantian-gw nantian-gw/nantian-gw > rendered.yaml
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw > rendered.yaml
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --dry-run
 ```
 
-用 `--dry-run` 可以模拟整个安装过程：
+## 关键默认值
 
-```bash
-helm install nantian-gw nantian-gw/nantian-gw --dry-run
-```
+以下片段与当前 chart 默认值一致。
 
-养成先看再装的习惯，尤其是在生产环境变更配置的时候。
-:::
-
-## values.yaml 参数速查
-
-Chart 的 `values.yaml` 注释写得很详细，下面是最常用的几个段。完整的默认值运行 `helm show values` 就能看到。
-
-**全局配置：**
+### 全局与 GatewayClass
 
 ```yaml
 global:
-  imageRegistry: ""          # 所有镜像的前缀，适合离线/私有仓库场景
-  imagePullSecrets: []       # 私有仓库的拉取凭据
-  commonLabels: {}           # 打在全部资源上的标签
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+  commonLabels: {}
+
+gatewayClass:
+  enabled: true
+  controllerName: "gateway.networking.k8s.io/nantian-gw"
 ```
 
-**命名空间：**
+Chart 会根据 controller name 推导默认 `GatewayClass` 名称，因此 `gateway.networking.k8s.io/nantian-gw` 会变成 `nantian-gw`。
 
-```yaml
-namespace:
-  create: true               # 让 Helm 帮你建命名空间
-  name: "nantian-gw"         # 命名空间名字
-```
-
-**控制面：**
+### 控制面
 
 ```yaml
 controlplane:
   enabled: true
   replicas: 2
   image:
-    repository: "nantian-controlplane"
-    tag: "latest"              # 不填就用 Chart.appVersion
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "latest"
     pullPolicy: Always
-  resources:
-    requests:
-      cpu: "100m"
-      memory: "128Mi"
-    limits:
-      cpu: "500m"
-      memory: "512Mi"
   config:
     grpcAddr: ":18080"
     adminAddr: ":18081"
     metricsAddr: ":18082"
     healthProbeAddr: ":18083"
-    syncPeriod: "30s"
-    leaderElection:
-      enabled: true
-      id: "nantian-controlplane-leader"
-      leaseDuration: "15s"
-      renewDeadline: "10s"
-      retryPeriod: "2s"
-  grpcTLS:
-    enabled: false
-    existingSecret: ""
-    requireClientCert: false
+    features:
+      enableExperimentalGateway: false
+      enableAiGateway: false
 ```
 
-**数据面：**
+控制面 Service 拆分如下：
+
+| Service | 端口 |
+| --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` |
+| `nantian-gw-controlplane-admin` | `18081` |
+| `nantian-gw-controlplane-metrics` | `18082` |
+
+### 数据面
 
 ```yaml
 dataplane:
   enabled: true
   replicas: 2
   image:
-    repository: "nantian-dataplane"
+    repository: "nantian-gw/dataplane"
     tag: "latest"
     pullPolicy: Always
   resources:
     requests:
-      cpu: "1"
+      cpu: "250m"
       memory: "256Mi"
     limits:
+      cpu: "2000m"
       memory: "1Gi"
+  config:
+    adminAddr: "0.0.0.0:19080"
+    runtime:
+      httpListenAddr: "0.0.0.0:10080"
+    experimental:
+      enableExperimentalGateway: false
+      enableAiGateway: false
+  accessLogVolume:
+    enabled: true
+    name: access-logs
+    mountPath: /var/log/nantian-gw
+    sizeLimit: 256Mi
 ```
 
-## 常用覆盖场景
+数据面 Service 是 `nantian-gw-dataplane-admin` 和 `nantian-gw-dataplane-metrics`，两者 Service port 都是 `19080`。运行时 HTTP 流量由配置中的监听地址 `0.0.0.0:10080` 处理。
 
-### 自定义镜像
+### Dashboard
 
-如果你用私有镜像仓库，或者需要指定版本号：
-
-```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  --set global.imageRegistry=ghcr.io/nantian-gw \
-  --set controlplane.image.tag=v0.2.0 \
-  --set dataplane.image.tag=v0.2.0
+```yaml
+dashboard:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "nantian-gw/dashboard"
+    tag: "latest"
+    pullPolicy: Always
 ```
 
-### 关闭不需要的组件
-
-在只需要控制面和数据面的场景下，可以关掉管理界面：
+不需要 Web UI 时可以关闭 dashboard：
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
   --set dashboard.enabled=false
 ```
 
-### 自定义命名空间
+### HPA、ServiceMonitor 与 NetworkPolicy
 
-把网关装到一个已存在的命名空间里：
+```yaml
+hpa:
+  enabled: false
 
-```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  --set namespace.create=false \
-  --set namespace.name=my-gateway-ns \
-  -n my-gateway-ns
+serviceMonitor:
+  enabled: false
+
+networkPolicies:
+  enabled: true
 ```
 
-### 开启 gRPC TLS
+只有在集群已安装 Prometheus Operator CRD 时，才开启 `serviceMonitor.enabled`。HPA 默认关闭；启用前请确认集群有 metrics-server，并且已经验证过数据面的资源 requests。
 
-生产环境必须把控制面和数据面之间的 gRPC 通信加密起来。提前把证书存成 Secret，再引用：
+## 常见覆盖
+
+需要保留的修改请写入 values 文件：
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw \
-  --set controlplane.grpcTLS.enabled=true \
-  --set controlplane.grpcTLS.existingSecret=nantian-grpc-tls \
-  --set controlplane.grpcTLS.requireClientCert=true
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f my-values.yaml
 ```
 
-TLS 相关的完整配置参考 [TLS / mTLS](/zh/configuration/tls) 一节。
+私有镜像仓库和副本数覆盖示例：
 
-## 安装后的验证
+```yaml
+global:
+  imageRegistry: "registry.example.com"
+  imagePullSecrets:
+    - name: registry-credentials
 
-Helm 跑完之后，确认所有组件都起起来了：
+dataplane:
+  replicas: 4
+```
+
+## 实验功能
+
+实验性 Gateway policy、AI、token policy 和 Wasm 行为默认关闭。使用实验 API 前，需要同时配置两个平面：
+
+- 控制面：`controlplane.config.features.enableExperimentalGateway`
+- 控制面：`controlplane.config.features.enableAiGateway`
+- 数据面：`dataplane.config.experimental.enableExperimentalGateway`
+- 数据面：`dataplane.config.experimental.enableAiGateway`
+
+完整的启动、CRD 和验证流程见[实验功能](/zh/configuration/experimental-features/)。
+
+## 验证 Release
 
 ```bash
-# 看 Pod 状态
 kubectl get pods -n nantian-gw
-
-# 看 GatewayClass 有没有被领走
 kubectl get gatewayclass nantian-gw
-
-# 看所有创建出来的资源
-kubectl get all -n nantian-gw
+kubectl get svc -n nantian-gw
+helm status nantian-gw -n nantian-gw
 ```
 
-正常情况下你会看到五个 Pod：两个控制面、两个数据面、一个管理界面，全部 `Running`，READY 列显示 `1/1`。GatewayClass 的 `ACCEPTED` 列应该显示 `True`，说明控制面已经认领了这个类。
+如果数据面没有就绪，请检查它是否能连接 `nantian-gw-controlplane-grpc:18080`，并查看控制面和数据面日志。
 
-:::note[数据面就绪时间]
-数据面 Pod 比控制面起来要慢一点。它需要先跟控制面建立 gRPC 流，拿到初始配置快照，然后才能接流量。这段时间通常是 10 到 30 秒。如果数据面一直没就绪，看一下控制面的日志：`kubectl logs -n nantian-gw -l app.kubernetes.io/component=controlplane`。
-:::
+## 升级与卸载
 
-## 卸载
+升级已有 release：
 
-不用了就清干净：
+```bash
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f my-values.yaml
+```
+
+删除 release：
 
 ```bash
 helm uninstall nantian-gw -n nantian-gw
-```
-
-Helm 卸载不会自动删命名空间。如果需要彻底清掉：
-
-```bash
 kubectl delete namespace nantian-gw
 ```
+
+Helm uninstall 会删除 chart 管理的资源。Gateway API CRD 和你在 chart 外创建的应用资源不会被 chart uninstall 删除。

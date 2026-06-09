@@ -2,136 +2,187 @@
 title: 快速开始
 ---
 
-本指南介绍在本地 Kind 集群上安装 Nantian Gateway 的完整流程。完成以下步骤后，控制面、数据面和仪表盘将全部运行。
-
-预计耗时：约五分钟。
+本指南会使用 Helm 安装 Nantian Gateway，创建一个 demo 后端，绑定一个 `HTTPRoute`，并通过数据面发送一次请求。整个流程不依赖本地示例文件。
 
 ## 开始之前
 
-请先完成[环境要求](/zh/getting-started/prerequisites)中的步骤：
+你需要：
 
-- 一个运行中的 Kubernetes 集群（本地开发推荐 Kind）
-- `kubectl` 和 `helm` 已安装并可在 `PATH` 中访问
-- Gateway API CRD 已安装到集群
+- 一个运行中的 Kubernetes 集群。
+- 已配置到该集群的 `kubectl`。
+- `helm`。
+- 可选的 `curl`，用于最后的请求测试。
 
-## 第一步：安装 Helm Chart
+以下命令使用 Helm chart 默认值。Helm 会创建名为 `nantian-gw` 的 `GatewayClass`；demo 清单会创建自己的 `Gateway` 和 `HTTPRoute`。
 
-Nantian Gateway 以 Helm Chart 形式分发。Chart 通过 Helm 仓库 `nantian-gw/nantian-gw` 提供。
+## 安装 Gateway API CRD
 
-本地开发可直接从 Chart 目录安装：
+安装标准 Gateway API v1.5.1 CRD：
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
 ```
 
-安装前查看默认配置：
+这会让 Kubernetes 识别 `Gateway`、`HTTPRoute`、`GRPCRoute` 和 `ReferenceGrant` 等标准资源。
+
+## 安装 Nantian Gateway
+
+添加 chart 仓库，并安装到默认命名空间：
 
 ```bash
-helm show values nantian-gw/nantian-gw
+helm repo add nantian-gw https://charts.nantian.dev
+helm repo update
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace
 ```
 
-:::tip[生产环境配置]
-生产部署请参考[生产环境部署指南](/zh/installation/production)获取完整清单 —— 资源限制、TLS、副本数、反亲和等。
-:::
+该安装会创建控制面、数据面、dashboard、Service、RBAC、NetworkPolicy，以及默认的 `GatewayClass`。
 
-## 第二步：验证安装
+## 等待 Gateway Pod
 
-Helm 安装完成后，验证所有 Pod 均在运行：
+等待所有 Nantian Gateway Pod 就绪：
 
 ```bash
+kubectl wait --for=condition=ready pod --all -n nantian-gw --timeout=180s
 kubectl get pods -n nantian-gw
 ```
 
-预期输出：
-
-```
-NAME                                    READY   STATUS    RESTARTS   AGE
-nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          30s
-nantian-gw-controlplane-xxxxxxxxx-xxxxx  1/1     Running   0          20s
-nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          25s
-nantian-gw-dataplane-xxxxxxxxx-xxxxx     1/1     Running   0          15s
-nantian-gw-dashboard-xxxxxxxxx-xxxxx     1/1     Running   0          10s
-```
-
-部署应包含两个控制面副本、两个数据面副本和一个仪表盘 Pod。每个 Pod 的 READY 列应显示 `1/1`，STATUS 列显示 `Running`。
-
-:::note[启动顺序]
-数据面 Pod 通常比控制面需要更长时间达到就绪状态。数据面必须先与控制面建立 gRPC 流并接收初始配置快照，然后才能接受流量。此过程通常在 10 至 30 秒内完成。
-:::
-
-验证 GatewayClass 资源已创建：
+这一步证明 workload 已经被调度，并且 readiness probe 通过。如果 Pod 没有就绪，请查看日志：
 
 ```bash
-kubectl get gatewayclass
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
 ```
 
-预期输出：
+## 验证 GatewayClass
 
-```
-NAME               CONTROLLER                                    ACCEPTED   AGE
-nantian-gateway    gateway.nantian.io/gateway-controller         True       1m
-```
-
-## 第三步：部署示例应用
-
-Chart 包含一个示例应用，用于演示 Gateway API 路由模型。部署它以验证端到端连通性：
+查看 Helm chart 创建的 `GatewayClass`：
 
 ```bash
-kubectl apply -f gateway/examples/httpbin.yaml
+kubectl get gatewayclass nantian-gw
 ```
 
-此清单为 [httpbin](https://httpbin.org) 测试应用创建 Deployment、Service 和 HTTPRoute。
+controller name 应该是 `gateway.networking.k8s.io/nantian-gw`。如果该 class 不存在，请确认 Helm release 安装成功，并且没有把 `gatewayClass.enabled` 设置为 `false`。
 
-验证路由已创建：
+## 创建 Demo Route
+
+使用一个 inline manifest 创建命名空间、echo 后端、`Gateway` 和 `HTTPRoute`：
 
 ```bash
-kubectl get httproute
+kubectl create namespace nantian-demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n nantian-demo -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo
+  template:
+    metadata:
+      labels:
+        app: echo
+    spec:
+      containers:
+        - name: echo
+          image: docker.io/ealen/echo-server:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo
+spec:
+  selector:
+    app: echo
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: nantian-demo
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo
+spec:
+  parentRefs:
+    - name: nantian-demo
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /echo
+      backendRefs:
+        - name: echo
+          port: 80
+YAML
 ```
 
-预期输出：
+这一步证明 Kubernetes 可以接受标准 Gateway API 对象，并且 route 可以引用同命名空间内的 Service 后端。
 
-```
-NAME                   HOSTNAMES   AGE
-httpbin-route                               1m
-```
+## 查看 Route 状态
 
-## 第四步：测试网关
-
-通过网关向示例应用发送请求：
+等待后端 Pod 就绪，并查看 Gateway API 资源：
 
 ```bash
-curl -s http://localhost:18080/get
+kubectl wait --for=condition=ready pod -l app=echo -n nantian-demo --timeout=180s
+kubectl get gateway,httproute -n nantian-demo
+kubectl describe httproute echo -n nantian-demo
 ```
 
-预期响应：
+如果 route 没有 attached，请查看 `kubectl describe httproute` 输出中的 `Parents` 部分。常见原因包括缺少 `GatewayClass`、listener 不匹配，或者后端 Service 名称/端口不匹配。
 
-```json
-{
-  "args": {},
-  "headers": {
-    "Accept": "*/*",
-    "Host": "httpbin.example.com",
-    "User-Agent": "curl/8.0.0"
-  },
-  "origin": "127.0.0.1",
-  "url": "http://httpbin.example.com/get"
-}
+## 通过数据面发送请求
+
+打开一个终端，转发数据面运行时 HTTP 端口：
+
+```bash
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 10080:10080
 ```
 
-响应确认请求已通过数据面到达后端服务。`Host` 请求头由网关设置，`origin` 反映数据面的 IP 地址。
+在另一个终端中，通过网关发送请求：
 
-## 部署内容
+```bash
+curl -i http://localhost:10080/echo
+```
 
-Helm 安装创建了以下组件：
+成功响应说明数据面已经收到运行时快照，并把请求路由到了 echo Service。
 
-- **控制面**（2 副本） — 监听 Kubernetes 资源，转换配置，并通过 gRPC xDS 推送至数据面实例
-- **数据面**（2 副本） — 处理客户端流量，终止 TLS，执行路由，并将请求转发至后端服务
-- **仪表盘**（1 副本） — 提供基于 Web 的管理界面，用于监控和配置
-- **GatewayClass** — 定义网关控制器实现
-- **Gateway** — 配置 HTTP 和 HTTPS 流量的监听器
+## 清理
+
+删除 demo 命名空间和 Helm release：
+
+```bash
+kubectl delete namespace nantian-demo
+helm uninstall nantian-gw -n nantian-gw
+kubectl delete namespace nantian-gw
+```
+
+Gateway API CRD 是集群级依赖，不会被这些命令删除。
+
+## 故障排查
+
+如果 Pod 没有就绪，请查看控制面和数据面日志，并确认可以从 `ghcr.io` 拉取镜像。如果 `GatewayClass` 缺失或没有 accepted，请检查 Helm release values 和 controller name `gateway.networking.k8s.io/nantian-gw`。如果 route 没有 attached，请查看 `kubectl describe httproute echo -n nantian-demo`，并确认 `Gateway` 名为 `nantian-demo`、listener protocol 是 `HTTP`、后端 Service 名为 `echo` 且端口为 `80`。
 
 ## 下一步
 
-- [第一个路由](/zh/getting-started/first-route) — 为您的服务定义自定义路由规则
-- [核心概念](/zh/concepts/) — 了解 Gateway API 资源模型和分离式平面架构
-- [配置概述](/zh/configuration/) — 为您的环境自定义网关
+- [Helm 安装](/zh/installation/helm/)
+- [实验功能](/zh/configuration/experimental-features/)
+- [运维](/zh/operations/)

@@ -6,6 +6,10 @@ Nantian Gateway uses YAML configuration files rather than command-line flags or 
 
 This chapter covers every available configuration option for both components.
 
+## Experimental Features
+
+Experimental AI, Wasm, token policy, and Gateway policy behavior is disabled by default. Start with [Experimental Features](/en/configuration/experimental-features/) before creating `AIService`, `TokenPolicy`, `WasmPlugin`, or experimental `BackendLBPolicy` resources.
+
 ## How configuration works
 
 The control plane reads its configuration from a file you specify with the `--config` flag at startup. The default path depends on your deployment method: Helm charts mount a ConfigMap at `/etc/nantian/config.yaml`, while local development picks up `configs/controlplane/config.yaml` from the repository.

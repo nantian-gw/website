@@ -47,16 +47,16 @@ Each route type can be attached to one or more Gateways, and multiple routes can
 These CRDs are **experimental** (`v1alpha1`). APIs may change incompatibly in future releases.
 :::
 
-Nantian Gateway extends the standard Gateway API with four custom resource definitions under the `gateway.nantian.io/v1alpha1` API group:
+Nantian Gateway extends the standard Gateway API with custom and experimental resources:
 
 | CRD | Description |
 |-----|-------------|
-| `AIService` | Manages connections to AI model providers. Defines provider type (OpenAI, Anthropic, Ollama), API endpoint, supported models, authentication method, and request timeout. A single `AIService` can contain multiple backends, each representing a different AI provider or model. |
-| `TokenPolicy` | Controls AI API usage through token-based rate limiting and quota management. Attaches to routes to enforce per-user, per-model, or per-request token budgets, preventing runaway costs and ensuring fair resource distribution. |
-| `WasmPlugin` | Injects custom request and response processing logic at the listener or route level. Uses WebAssembly (Wasm) modules to extend the data plane with custom filters, transformations, authentication, or observability without modifying the gateway binary. |
-| `BackendLBPolicy` | Configures load balancing strategy and session persistence for backend services. Supports round-robin, random, least-request, and ring-hash algorithms, with optional cookie-based or header-based session affinity. |
+| `AIService` | `gateway.nantian.dev/v1alpha1` resource that configures one AI provider/model target. |
+| `TokenPolicy` | `gateway.nantian.dev/v1alpha1` resource that attaches token and request limits to local Gateway API targets. |
+| `WasmPlugin` | `gateway.nantian.dev/v1alpha1` resource that loads a Wasm module and binds it to target resources. |
+| `BackendLBPolicy` | `gateway.networking.k8s.io/v1alpha2` Gateway API experimental resource for backend load-balancing behavior. |
 
-All four CRDs can be referenced at the route level or backend level, giving you flexible control over AI service connections, token limits, Wasm plugin injection, and load balancing behavior. See the [Custom CRDs](/en/api-reference/crds) reference for full field specifications.
+Enable the relevant experimental feature flags before creating these resources. See the [Custom And Experimental Resources](/en/api-reference/crds) reference for current fields and YAML examples.
 
 ## Admin API Endpoints
 

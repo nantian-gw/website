@@ -806,16 +806,19 @@ When built-in filters aren't enough, Nantian Gateway's Wasm plugin system lets y
 Wasm plugins are distributed as `.wasm` binaries and managed through the `WasmPlugin` CRD:
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: WasmPlugin
 metadata:
   name: custom-auth
 spec:
-  pluginURL: oci://registry.example.com/plugins/auth:v1.2.0
-  phase: OnRequestHeaders
-  selector:
-    matchLabels:
-      app: payment-service
+  wasm:
+    url: https://example.com/plugins/custom-auth.wasm
+  hooks:
+    - onRequest
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: payment-service
 ```
 
 The plugin runs inside the data plane's wasmtime runtime, with access to host functions for logging, metrics, and HTTP dispatch. Plugins are sandboxed and cannot access the host filesystem or network unless explicitly granted.

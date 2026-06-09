@@ -2,255 +2,79 @@
 title: 安装概述
 ---
 
-Nantian Gateway 部署到 Kubernetes 集群里，由三个部分组成：Go 控制面、Rust 数据面代理、管理界面。你有两条安装路径可以选：Helm（推荐）和 Kustomize。两条路最终跑起来的系统完全一样，区别在于你团队怎么管理 Kubernetes 负载。
+Nantian Gateway 在 Kubernetes 中以三个 workload 运行：Go 控制面、Rust 数据面和可选 dashboard。Helm 是大多数用户和运维人员的推荐安装路径。需要基于 patch 管理清单或接入 GitOps 时，也可以使用 Kustomize overlays。
 
-这个章节覆盖了从快速 Helm 安装到生产加固高可用部署的全部内容。
+## 安装方式
 
-## 安装方式对比
+| 方式 | 适合场景 | 说明 |
+| --- | --- | --- |
+| [Helm](/zh/installation/helm/) | 大多数安装、升级和 values 覆盖。 | 使用 chart 仓库 `https://charts.nantian.dev`。 |
+| [Kustomize](/zh/installation/kustomize/) | GitOps 或仓库内清单自定义。 | 使用组件仓库中的 overlays。 |
 
-| 方式 | 适合谁 | 复杂程度 |
-|------|--------|----------|
-| [Helm](/zh/installation/helm) | 大多数团队。模板化、升级、回滚、values 覆盖都很方便。 | 低 |
-| [Kustomize](/zh/installation/kustomize) | GitOps 工作流、不需要模板、喜欢 patch 方式的团队。 | 中等 |
+安装网关前需要先安装 Gateway API CRD。快速开始使用 Gateway API v1.5.1 standard CRD bundle。
 
-Helm 是推荐路径。Chart 通过 Helm 仓库 `nantian-gw/nantian-gw` 分发，覆盖了三个组件的模板、RBAC、证书，还有可选的 Prometheus ServiceMonitor。
+## Helm 会安装什么
 
-## 部署了什么
+默认 Helm 安装使用 `nantian-gw` 命名空间，并创建以下主要资源：
 
-一次默认的 Helm 安装在 `nantian-gw` 命名空间里创建这些资源：
+| 资源 | 默认名称 | 默认数量或端口 | 作用 |
+| --- | --- | --- | --- |
+| Namespace | `nantian-gw` | 1 | 当 `namespace.create: true` 时创建组件命名空间。 |
+| 控制面 Deployment | `nantian-gw-controlplane` | 2 replicas | 监听 Kubernetes 资源、翻译资源、写入状态并发布快照。 |
+| 数据面 Deployment | `nantian-gw-dataplane` | 2 replicas | 接收快照并处理运行时流量。 |
+| Dashboard Deployment | `nantian-gw-dashboard` | 1 replica | 面向用户和运维人员的 Web UI。 |
+| GatewayClass | `nantian-gw` | 1 | 使用 controller `gateway.networking.k8s.io/nantian-gw`。 |
 
-| 资源 | 副本数 | 职责 |
-|------|--------|------|
-| 控制面 | 2 | 监听 Gateway API 资源，翻译成 xDS 配置，推送给数据面 |
-| 数据面 | 2 | Rust 代理，做 TLS 拆解、流量路由、策略执行 |
-| 管理界面 | 1 | Web 界面，看网关、路由和数据面状态 |
-| GatewayClass | 1 | 注册 `gateway.networking.k8s.io/nantian-gw` 控制器 |
+Helm chart 会创建 `GatewayClass`，但不会创建你的应用 `Gateway` 或 `HTTPRoute`。这些资源需要在安装后由用户在应用命名空间中创建。
 
-控制面和数据面通过 gRPC 双向流通信，协议是 xDS。数据面启动后主动连接控制面 18080 端口的 gRPC 服务，然后以增量（delta）形式接收配置快照。
+## Service 与端口
 
-:::note
-数据面 Pod 在能接流量之前，必须先和控制面建好 gRPC 流。这个握手过程一般在 Pod 启动后 10 到 30 秒内完成。安装初期你会看到数据面 Pod 短暂处于 `NotReady` 状态，这是正常的。
-:::
+当前 Helm 模板会为控制面、数据面 admin/metrics 和 dashboard 创建固定的 ClusterIP Service：
 
-## 部署架构
+| Service | 端口 | 作用 |
+| --- | --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` | 数据面 xDS/gRPC 连接。 |
+| `nantian-gw-controlplane-admin` | `18081` | 控制面 Admin API。 |
+| `nantian-gw-controlplane-metrics` | `18082` | 控制面 Prometheus metrics。 |
+| `nantian-gw-dataplane-admin` | `19080` | 数据面 Admin API。 |
+| `nantian-gw-dataplane-metrics` | `19080` | 数据面 metrics 抓取入口。 |
+| `nantian-gw-dashboard` | `3000` | Dashboard Web UI。 |
 
-Nantian Gateway 在集群内以三个独立工作负载运行。下图展示了它们之间的关系以及与外部流量的交互。
+数据面运行时 HTTP 监听地址配置为 `0.0.0.0:10080`。请根据环境暴露该监听器，例如本地测试使用 port-forward，集群入口使用 Kubernetes Service overlay。不要把控制面 gRPC、admin 或 metrics Service 暴露到集群外。
 
-```
-                    ┌──────────────────────────────────────────────┐
-                    │              Kubernetes Cluster               │
-                    │                                               │
-  Client Traffic    │   ┌──────────┐    ┌──────────────────┐       │
-  ──────────────►   │   │  Service │    │    Dashboard     │       │
-       :80/:443     │   │ (LB/NP)  │    │   (Port 3000)    │       │
-                    │   └────┬─────┘    └────────┬─────────┘       │
-                    │        │                    │                 │
-                    │   ┌────▼────────────────────▼──────────┐     │
-                    │   │          Data Plane Pods            │     │
-                    │   │   (Rust, ports 10080/10443)         │     │
-                    │   │   ┌──────┐  ┌──────┐  ┌──────┐     │     │
-                    │   │   │ DP-1 │  │ DP-2 │  │ DP-3 │     │     │
-                    │   │   └──┬───┘  └──┬───┘  └──┬───┘     │     │
-                    │   └──────┼─────────┼─────────┼─────────┘     │
-                    │          │ gRPC/xDS│(port    │               │
-                    │          │         │ 18080)  │               │
-                    │   ┌──────▼─────────▼─────────▼──────────┐   │
-                    │   │         Control Plane               │   │
-                    │   │   (Go, ports 18080/18082)           │   │
-                    │   │   Leader election via Lease         │   │
-                    │   └────────────────┬────────────────────┘   │
-                    │                    │                         │
-                    │          Watches Gateway API CRDs            │
-                    │                    │                         │
-                    │   ┌────────────────▼────────────────────┐   │
-                    │   │        Kubernetes API Server         │   │
-                    │   └─────────────────────────────────────┘   │
-                    │                                               │
-                    └──────────────────────────────────────────────┘
-```
+## 默认 Chart 行为
 
-**流量路径**：客户端请求经过 Kubernetes Service（LoadBalancer 或 NodePort）路由到数据面 Pod。每个数据面 Pod 负责 TLS 拆解、请求检查，然后按 HTTPRoute 规则转发到对应的后端 Service。
+Chart 默认值偏保守：
 
-**控制路径**：控制面通过 Kubernetes API 监听 Gateway API 资源（`Gateway`、`HTTPRoute` 等），将其翻译成 xDS 配置快照，再通过持久的 gRPC 双向流推送给每个数据面。
+- 镜像使用 `global.imageRegistry: "ghcr.io"`，仓库分别是 `nantian-gw/nantian-controlplane`、`nantian-gw/dataplane` 和 `nantian-gw/dashboard`。
+- 控制面和数据面默认各运行 2 个副本；dashboard 默认 1 个副本。
+- HPA 默认关闭，配置为 `hpa.enabled: false`。
+- Prometheus Operator ServiceMonitor 默认关闭，配置为 `serviceMonitor.enabled: false`。
+- NetworkPolicy 默认开启，配置为 `networkPolicies.enabled: true`。
+- 数据面默认开启 `accessLogVolume.enabled: true`，挂载到 `/var/log/nantian-gw`，`sizeLimit: 256Mi`。
+- 实验性 Gateway 和 AI 功能在两个平面里都默认关闭。
 
-**管理界面**：从 Kubernetes API 读取 Gateway 和 HTTPRoute 状态，并通过控制面的 admin 端点（18082 端口）轮询数据面健康信息。管理界面本身是无状态的。
+## 安装后检查
 
-## 命名空间与资源布局
+安装后先检查 workload 和 GatewayClass：
 
-所有组件都安装在 `nantian-gw` 命名空间里。一次默认部署会创建以下 Kubernetes 资源：
-
-| 资源 | Kind | 名称 | 组件标签 |
-|------|------|------|----------|
-| 命名空间 | Namespace | `nantian-gw` | (无) |
-| 控制面工作负载 | Deployment | `nantian-gw-controlplane` | `controlplane` |
-| 数据面工作负载 | Deployment | `nantian-gw-dataplane` | `dataplane` |
-| 管理界面工作负载 | Deployment | `nantian-gw-dashboard` | `dashboard` |
-| 控制面 gRPC | Service (ClusterIP) | `nantian-gw-controlplane` | `controlplane` |
-| 数据面入口 | Service | `nantian-gw-dataplane` | `dataplane` |
-| 管理界面 UI | Service (ClusterIP) | `nantian-gw-dashboard` | `dashboard` |
-| 网关注册 | GatewayClass | `nantian-gw` | (无) |
-| 主备选举 | Lease | `nantian-gw-controller-leader` | (无) |
-
-所有资源都带有以下 Kubernetes 推荐标签：
-- `app.kubernetes.io/name: nantian-gw`
-- `app.kubernetes.io/part-of: nantian-gw`
-- `app.kubernetes.io/managed-by: Helm`（或用 Kustomize 装的话就是 `kustomize`）
-
-组件标签（`app.kubernetes.io/component`）是 Service 和 PodDisruptionBudget 的主要选择器。如果你要写 NetworkPolicy 或者自定义 RBAC 规则，用这个标签来做匹配，升级时就不会出问题。
-
-同时还会创建 ServiceAccount、ClusterRole 和 ClusterRoleBinding。控制面拥有 Gateway API 资源的读权限和 Gateway 状态子资源的写权限。数据面和管理界面的 Pod 使用受限的 ServiceAccount，没有任何 API 访问权限。
-
-## 端口分配与网络要求
-
-每个组件暴露一组特定的端口。所有 Service 默认都是 ClusterIP 类型。通过 Helm values 或 Kustomize overlay 来控制对外暴露方式。
-
-| 组件 | 端口 | 协议 | Service 类型 | 对外 | 用途 |
-|------|------|------|-------------|------|------|
-| 控制面 | 18080 | gRPC | ClusterIP | 否 | 向数据面推送 xDS 配置 |
-| 控制面 | 18082 | HTTP | ClusterIP | 否 | Admin API（健康检查、指标、调试） |
-| 数据面 | 10080 | HTTP | 可配置 | 可选 | 入口 HTTP 流量 |
-| 数据面 | 10443 | HTTPS | 可配置 | 可选 | 入口 HTTPS 流量（TLS 拆解） |
-| 管理界面 | 3000 | HTTP | ClusterIP | 否 | Web 界面（通过 port-forward 或 Ingress 暴露） |
-
-如果你启用了 NetworkPolicy，需要放行以下流量：
-
-| 来源 | 目标 | 端口 | 原因 |
-|------|------|------|------|
-| 数据面 Pod | 控制面 Pod | 18080 | xDS/gRPC 配置流 |
-| 管理界面 Pod | 控制面 Pod | 18082 | Admin API 查询 |
-| kubelet | 所有 Pod | 健康检查端点 | Readiness 和 Liveness 探针 |
-| 外部客户端 | 数据面 Service | 10080, 10443 | 入口应用流量 |
-
-控制面的 gRPC 端口（18080）和 admin 端口（18082）绝对不要暴露到集群外面。数据面端口（10080 和 10443）是唯一需要外部可达的端口，你可以通过 Service 类型设置（LoadBalancer、NodePort 或者 ClusterIP 配合 Ingress）来控制暴露方式。
-
-## 存储与状态
-
-Nantian Gateway 是无状态的。它不需要数据库、持久卷，也不依赖任何外部存储。
-
-**配置状态**：所有 Gateway API 资源（`Gateway`、`HTTPRoute`、`GatewayClass` 等）存储在 Kubernetes API Server 的 etcd 里。控制面通过 watch 读取这些资源，在内存里维护一份运行时表示。没有单独的配置数据库需要管理或备份。
-
-**主备选举**：控制面通过 Kubernetes Lease 对象（`nantian-gw-controller-leader`）做选举。活跃的 leader 持有 lease，负责向数据面推送配置。备用副本保持空闲状态，当 leader 停止续约时接管。Lease 持续时间为 15 秒，续约时限为 10 秒，最坏情况下 15 秒内完成故障切换。
-
-**数据面状态**：数据面代理的配置全部在内存里，来自控制面通过 gRPC/xDS 推送的数据。数据面 Pod 不挂载任何持久存储。Pod 重启后会重新连接控制面，接收当前配置快照，然后恢复流量处理。
-
-**恢复机制**：整个集群重启（所有 Pod 都重启）可以正常恢复。控制面启动、赢得选举、从 API Server（底层是 etcd）watch Gateway API 资源、重新计算配置、推送给数据面。从第一个控制面 Pod 启动算起，整个过程一般需要 30 到 60 秒。
-
-**指标**：Prometheus 指标从控制面的 admin 端点（18082 端口）采集。本地不存储任何指标数据。你需要外部 Prometheus 实例和（可选的）Grafana 来做采集和可视化。
-
-## 资源要求
-
-Helm Chart 里的默认资源请求是按评估和开发场景调的。生产环境需要更高的限制。
-
-| 组件 | 环境 | 请求 CPU | 请求内存 | 限制 CPU | 限制内存 |
-|------|------|----------|----------|----------|----------|
-| 控制面 | 开发 | 100m | 128Mi | 500m | 512Mi |
-| 控制面 | 生产 | 200m | 256Mi | 1 | 1Gi |
-| 数据面 | 开发 | 500m | 256Mi | 1 | 1Gi |
-| 数据面 | 生产 | 2 | 512Mi | (不设) | 2Gi |
-| 管理界面 | 通用 | 50m | 64Mi | 200m | 256Mi |
-
-数据面承载的是实际流量，所以它的 CPU 请求应该对应用预期吞吐量。生产环境数据面的 CPU 限制故意不设，这样代理在流量突发时可以占用节点上可用的 CPU。内存限制是硬上限，防止失控的代理耗光节点内存。
-
-**需要监控什么**：
-- **CPU 限流**：检查控制面和数据面的 `container_cpu_cfs_throttled_seconds_total`。频繁限流说明 CPU 限制太低了。
-- **内存使用**：关注 `container_memory_working_set_bytes` 和内存限制的比值。正常负载下，数据面应该远低于它的内存限制。
-- **gRPC 流健康**：控制面在 admin 端点上暴露 `nantian_gw_xds_streams_active` 指标。这个值应该等于数据面副本数。数值下降表示有数据面断连了。
-- **主备选举**：Lease 对象应该始终有 holder。用 `kubectl get lease -n nantian-gw` 检查。
-
-完整的产品资源规划指南见[生产环境部署](/zh/installation/production)。
-
-## 前提条件
-
-安装之前，确保你已经就绪：
-
-- Kubernetes 1.24 或更高版本（Gateway API v1 资源组 `gateway.networking.k8s.io/v1` 必须可用）
-- Gateway API CRD 已经装到集群里（参考[环境要求](/zh/getting-started/prerequisites)）
-- `kubectl` 配好能连到你的集群
-- `helm` 3.x（如果用 Helm 安装）或自带 Kustomize 的 `kubectl`（如果用 Kustomize 安装）
-
-## 选择你的路径
-
-第一次上手？直接从 [Helm 安装](/zh/installation/helm)开始，它覆盖了默认安装、常见的 values 覆盖，以及部署前怎么检查 Chart。
-
-如果你用的是 GitOps 工具（Argo CD、Flux），翻到 [Kustomize 安装](/zh/installation/kustomize)那一页。它把部署拆成 base + overlay 结构，更适合声明式的环境管理。
-
-熟悉基础之后，接着看[生产环境部署](/zh/installation/production)和[高可用配置](/zh/installation/ha)。这两篇覆盖了加固、资源规划、反亲和规则、全链路 TLS 和多可用区部署模式。
-
-## 安装后验证
-
-装完之后，按下面几步确认一切正常：
-
-**1. 检查 Pod 状态**
 ```bash
 kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
 ```
-所有 Pod 应该显示 `Running`，每个组件的 `READY` 数应该等于副本数。
 
-**2. 验证 GatewayClass**
+如果 Pod 没有就绪，请查看最近日志：
+
 ```bash
-kubectl get gatewayclass
-```
-你应该能看到 `nantian-gw`，并且状态显示 `Accepted: True`。
-
-**3. 检查主备选举**
-```bash
-kubectl get lease -n nantian-gw
-```
-`nantian-gw-controller-lease` 的 `HOLDER` 列不应为空，说明控制面 leader 是活跃的。
-
-**4. 创建测试 Gateway 和 HTTPRoute**
-
-把以下内容保存为 `test-gateway.yaml`：
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: test-gateway
-spec:
-  gatewayClassName: nantian-gw
-  listeners:
-    - name: http
-      port: 80
-      protocol: HTTP
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: test-route
-spec:
-  parentRefs:
-    - name: test-gateway
-  rules:
-    - backendRefs:
-        - name: test-backend
-          port: 80
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
 ```
 
-应用它：
-```bash
-kubectl apply -f test-gateway.yaml
-```
+随后按照[快速开始](/zh/getting-started/quick-start/)创建 demo `Gateway` 和 `HTTPRoute`。
 
-然后检查 Gateway 是否显示 `Programmed: True`：
-```bash
-kubectl get gateway test-gateway
-```
+## 下一步读哪一页
 
-如果测试 Gateway 被接受并且编程成功，说明控制面和数据面之间通信正常。
-
-**5. 查看日志（如果有问题）**
-```bash
-kubectl logs -n nantian-gw deployment/nantian-gw-controlplane --tail=50
-kubectl logs -n nantian-gw deployment/nantian-gw-dataplane --tail=50
-```
-
-控制面日志会显示 Gateway API watch 事件和 xDS 快照发布。数据面日志会显示 gRPC 连接状态和配置接收情况。
-
-确认一切正常后，清理测试资源：
-```bash
-kubectl delete -f test-gateway.yaml
-```
-
-## 下一步
-
-装完之后，前往[快速上手](/zh/getting-started/quick-start)验证系统是否正常运行，并创建你的第一条路由。如果准备上生产了，在把网关暴露到线上流量之前，先通读[生产环境部署](/zh/installation/production)指南。
+- 阅读 [Helm 安装](/zh/installation/helm/)了解仓库配置、默认值、常见覆盖和卸载命令。
+- 创建 `AIService`、`TokenPolicy`、`WasmPlugin` 或实验性 `BackendLBPolicy` 前，先阅读[实验功能](/zh/configuration/experimental-features/)。
+- 阅读[运维](/zh/operations/)查看安装后的首次检查、Service 名称、日志、metrics 和 admin 访问方式。

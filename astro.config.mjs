@@ -47,6 +47,7 @@ const sidebar = [
     translations: { 'zh-CN': '配置' },
     items: [
       { label: 'Overview', link: 'configuration/', translations: { 'zh-CN': '概述' } },
+      { label: 'Experimental Features', link: 'configuration/experimental-features', translations: { 'zh-CN': '实验功能' } },
       { label: 'Control Plane', link: 'configuration/controlplane', translations: { 'zh-CN': '控制面' } },
       { label: 'Data Plane', link: 'configuration/dataplane', translations: { 'zh-CN': '数据面' } },
       { label: 'TLS / mTLS', link: 'configuration/tls', translations: { 'zh-CN': 'TLS / mTLS' } },
@@ -123,6 +124,9 @@ export default defineConfig({
         zh: { label: '中文', lang: 'zh-CN' },
       },
       sidebar,
+      components: {
+        Footer: './src/components/docs/Footer.astro',
+      },
       editLink: {
         baseUrl: 'https://github.com/nantian-gw/website/edit/main/',
       },

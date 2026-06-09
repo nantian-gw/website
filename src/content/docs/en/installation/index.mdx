@@ -2,255 +2,79 @@
 title: Installation Overview
 ---
 
-Nantian Gateway deploys into a Kubernetes cluster as three components: a Go control plane, Rust data plane proxies, and a management dashboard. You have two primary installation paths: Helm (recommended) and Kustomize. Both produce the same running system, so the choice depends on how your team manages Kubernetes workloads.
+Nantian Gateway runs in Kubernetes as three workloads: a Go control plane, a Rust data plane, and an optional dashboard. Helm is the recommended install path for most users and operators. Kustomize overlays are available when you need patch-based manifests or GitOps workflows.
 
-This section covers everything you need to get Nantian Gateway running, from a quick Helm install to a hardened production deployment with high availability.
+## Installation Methods
 
-## Installation methods
+| Method | Best for | Notes |
+| --- | --- | --- |
+| [Helm](/en/installation/helm/) | Most installations, upgrades, and value overrides. | Uses the chart repository at `https://charts.nantian.dev`. |
+| [Kustomize](/en/installation/kustomize/) | GitOps or repository-local manifest customization. | Uses overlays from the component repositories. |
 
-| Method | Best for | Complexity |
-|--------|----------|------------|
-| [Helm](/en/installation/helm) | Most teams. Templating, upgrades, rollbacks, and value overrides built in. | Low |
-| [Kustomize](/en/installation/kustomize) | GitOps workflows, teams that need patch-based overlays without templating. | Medium |
+Install Gateway API CRDs before installing the gateway. The quick start uses the Gateway API v1.5.1 standard CRD bundle.
 
-Helm is the recommended path. The chart is distributed via the Helm repository as `nantian-gw/nantian-gw` and includes templates for all three components, RBAC, certificates, and optional ServiceMonitor resources for Prometheus.
+## What Helm Installs
 
-## What gets installed
+A default Helm install uses the `nantian-gw` namespace and creates these main resources:
 
-A default Helm installation creates these resources in the `nantian-gw` namespace:
+| Resource | Default name | Default count or port | Purpose |
+| --- | --- | --- | --- |
+| Namespace | `nantian-gw` | 1 | Component namespace when `namespace.create: true`. |
+| Control plane Deployment | `nantian-gw-controlplane` | 2 replicas | Watches Kubernetes resources, translates them, updates status, and publishes snapshots. |
+| Data plane Deployment | `nantian-gw-dataplane` | 2 replicas | Receives snapshots and handles runtime traffic. |
+| Dashboard Deployment | `nantian-gw-dashboard` | 1 replica | Web UI for users and operators. |
+| GatewayClass | `nantian-gw` | 1 | Uses controller `gateway.networking.k8s.io/nantian-gw`. |
 
-| Resource | Replicas | Purpose |
-|----------|----------|---------|
-| Control plane | 2 | Watches Gateway API resources, translates to xDS config, pushes to data planes |
-| Data plane | 2 | Rust proxy that terminates TLS, routes traffic, enforces policies |
-| Dashboard | 1 | Web UI for monitoring gateways, routes, and data plane status |
-| GatewayClass | 1 | Registers the `gateway.networking.k8s.io/nantian-gw` controller |
+The Helm chart creates the `GatewayClass`; it does not create your application `Gateway` or `HTTPRoute`. Create those resources in application namespaces after installation.
 
-The control plane communicates with data planes over gRPC bidirectional streams using the xDS protocol. Data planes connect to the control plane's gRPC service (port 18080 by default) and receive configuration snapshots as deltas.
+## Services And Ports
 
-:::note
-The data plane pods need to establish a gRPC stream with the control plane before they can accept traffic. This normally takes 10 to 30 seconds after the pod starts. You'll see the data plane pods cycle through `NotReady` briefly during initial installation.
-:::
+The current Helm templates create fixed ClusterIP services for control plane, data plane admin/metrics, and dashboard access:
 
-## Deployment Architecture
+| Service | Port | Purpose |
+| --- | --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` | Data plane xDS/gRPC connection. |
+| `nantian-gw-controlplane-admin` | `18081` | Control plane admin API. |
+| `nantian-gw-controlplane-metrics` | `18082` | Control plane Prometheus metrics. |
+| `nantian-gw-dataplane-admin` | `19080` | Data plane admin API. |
+| `nantian-gw-dataplane-metrics` | `19080` | Data plane metrics scrape entry. |
+| `nantian-gw-dashboard` | `3000` | Dashboard web UI. |
 
-Nantian Gateway runs inside your Kubernetes cluster as three distinct workloads. The diagram below shows how they relate to each other and to external traffic.
+The data plane runtime HTTP listener is configured as `0.0.0.0:10080`. Expose this listener according to your environment, for example with port-forwarding in local tests or a Kubernetes Service overlay for cluster ingress. Do not expose the control plane gRPC, admin, or metrics services outside the cluster.
 
-```
-                    ┌──────────────────────────────────────────────┐
-                    │              Kubernetes Cluster               │
-                    │                                               │
-  Client Traffic    │   ┌──────────┐    ┌──────────────────┐       │
-  ──────────────►   │   │  Service │    │    Dashboard     │       │
-       :80/:443     │   │ (LB/NP)  │    │   (Port 3000)    │       │
-                    │   └────┬─────┘    └────────┬─────────┘       │
-                    │        │                    │                 │
-                    │   ┌────▼────────────────────▼──────────┐     │
-                    │   │          Data Plane Pods            │     │
-                    │   │   (Rust, ports 10080/10443)         │     │
-                    │   │   ┌──────┐  ┌──────┐  ┌──────┐     │     │
-                    │   │   │ DP-1 │  │ DP-2 │  │ DP-3 │     │     │
-                    │   │   └──┬───┘  └──┬───┘  └──┬───┘     │     │
-                    │   └──────┼─────────┼─────────┼─────────┘     │
-                    │          │ gRPC/xDS│(port    │               │
-                    │          │         │ 18080)  │               │
-                    │   ┌──────▼─────────▼─────────▼──────────┐   │
-                    │   │         Control Plane               │   │
-                    │   │   (Go, ports 18080/18082)           │   │
-                    │   │   Leader election via Lease         │   │
-                    │   └────────────────┬────────────────────┘   │
-                    │                    │                         │
-                    │          Watches Gateway API CRDs            │
-                    │                    │                         │
-                    │   ┌────────────────▼────────────────────┐   │
-                    │   │        Kubernetes API Server         │   │
-                    │   └─────────────────────────────────────┘   │
-                    │                                               │
-                    └──────────────────────────────────────────────┘
-```
+## Default Chart Behavior
 
-**Traffic flow**: Client requests hit a Kubernetes Service (LoadBalancer or NodePort) that routes to data plane pods. Each data plane pod terminates TLS, inspects the request, and forwards it to the backend Service matching the HTTPRoute rules.
+The chart defaults are intentionally conservative:
 
-**Control flow**: The control plane watches Gateway API resources (`Gateway`, `HTTPRoute`, etc.) through the Kubernetes API. It translates these into xDS configuration snapshots and pushes them to every data plane over persistent gRPC bidirectional streams.
+- Images use `global.imageRegistry: "ghcr.io"` with repositories `nantian-gw/nantian-controlplane`, `nantian-gw/dataplane`, and `nantian-gw/dashboard`.
+- Control plane and data plane each run two replicas by default; dashboard runs one replica.
+- HPA is disabled by default with `hpa.enabled: false`.
+- Prometheus Operator ServiceMonitor resources are disabled by default with `serviceMonitor.enabled: false`.
+- NetworkPolicies are enabled by default with `networkPolicies.enabled: true`.
+- The data plane has `accessLogVolume.enabled: true`, mounted at `/var/log/nantian-gw` with `sizeLimit: 256Mi`.
+- Experimental Gateway and AI features are disabled by default in both planes.
 
-**Dashboard**: Reads Gateway and HTTPRoute status from the Kubernetes API and polls the control plane's admin endpoint (port 18082) for data plane health. The dashboard itself is stateless.
+## Post-Install Checks
 
-## Namespace & Resource Layout
+After installation, verify the workloads and GatewayClass:
 
-Everything installs into the `nantian-gw` namespace. A default deployment creates these Kubernetes resources:
-
-| Resource | Kind | Name | Component Label |
-|----------|------|------|-----------------|
-| Namespace | Namespace | `nantian-gw` | (N/A) |
-| Control plane workload | Deployment | `nantian-gw-controlplane` | `controlplane` |
-| Data plane workload | Deployment | `nantian-gw-dataplane` | `dataplane` |
-| Dashboard workload | Deployment | `nantian-gw-dashboard` | `dashboard` |
-| Control plane gRPC | Service (ClusterIP) | `nantian-gw-controlplane` | `controlplane` |
-| Data plane ingress | Service | `nantian-gw-dataplane` | `dataplane` |
-| Dashboard UI | Service (ClusterIP) | `nantian-gw-dashboard` | `dashboard` |
-| Gateway registration | GatewayClass | `nantian-gw` | (none) |
-| Leader election | Lease | `nantian-gw-controller-leader` | (none) |
-
-All resources carry these standard Kubernetes recommended labels:
-- `app.kubernetes.io/name: nantian-gw`
-- `app.kubernetes.io/part-of: nantian-gw`
-- `app.kubernetes.io/managed-by: Helm` (or `kustomize`, depending on install method)
-
-The component label (`app.kubernetes.io/component`) is the primary selector for Services and PodDisruptionBudgets. If you write NetworkPolicies or additional RBAC rules, target this label to stay compatible with upgrades.
-
-ServiceAccount, ClusterRole, and ClusterRoleBinding resources are also created. The control plane gets read access to Gateway API resources and write access to Gateway status subresources. Data plane and dashboard pods run with a restricted ServiceAccount that has no API access.
-
-## Port Allocation & Network Requirements
-
-Each component exposes a specific set of ports. All services are ClusterIP by default. You control external exposure through Helm values or Kustomize overlays.
-
-| Component | Port | Protocol | Service Type | External? | Purpose |
-|-----------|------|----------|-------------|-----------|---------|
-| Control plane | 18080 | gRPC | ClusterIP | No | xDS configuration push to data planes |
-| Control plane | 18082 | HTTP | ClusterIP | No | Admin API (health, metrics, debug) |
-| Data plane | 10080 | HTTP | Configurable | Optional | Incoming HTTP traffic |
-| Data plane | 10443 | HTTPS | Configurable | Optional | Incoming HTTPS traffic (TLS termination) |
-| Dashboard | 3000 | HTTP | ClusterIP | No | Web UI (use port-forward or Ingress to expose) |
-
-If you use a NetworkPolicy controller, allow these flows:
-
-| Source | Destination | Port | Reason |
-|--------|-------------|------|--------|
-| Data plane pods | Control plane pods | 18080 | xDS/gRPC config stream |
-| Dashboard pod | Control plane pods | 18082 | Admin API queries |
-| kubelet | All pods | health endpoints | Readiness and liveness probes |
-| External clients | Data plane Service | 10080, 10443 | Incoming application traffic |
-
-The control plane's gRPC port (18080) and admin port (18082) should never be exposed outside the cluster. The data plane ports (10080 and 10443) are the only ones that need external reachability, and you control how they're exposed through the Service type setting (LoadBalancer, NodePort, or ClusterIP behind an Ingress).
-
-## Storage & State
-
-Nantian Gateway is stateless. It does not require a database, persistent volumes, or external storage of any kind.
-
-**Configuration state**: All Gateway API resources (`Gateway`, `HTTPRoute`, `GatewayClass`, etc.) live in the Kubernetes API server's etcd store. The control plane reads them through watches and keeps an in-memory representation. There is no separate config database to manage or back up.
-
-**Leader election**: The control plane uses a Kubernetes Lease object (`nantian-gw-controller-leader`) for leader election. The active leader holds the lease and pushes configuration to data planes. Standby replicas sit idle and take over if the leader stops renewing. The lease duration is 15 seconds with a 10-second renew deadline, so failover completes within 15 seconds in the worst case.
-
-**Data plane state**: Data plane proxies keep their configuration in memory, received from the control plane over gRPC/xDS streams. No persistent storage is attached to data plane pods. If a pod restarts, it reconnects to the control plane, receives the current configuration snapshot, and resumes handling traffic.
-
-**Recovery behavior**: A full cluster restart (all pods down, all pods back up) recovers cleanly. The control plane starts, wins leader election, watches Gateway API resources from the API server (backed by etcd), recomputes the configuration, and pushes it to data planes. The entire process typically takes 30 to 60 seconds from the first control plane pod starting.
-
-**Metrics**: Prometheus metrics are scraped from the control plane's admin endpoint (port 18082). No metrics are stored locally. You need an external Prometheus instance and optional Grafana to collect and visualize them.
-
-## Resource Requirements
-
-The default resource requests in the Helm chart are tuned for evaluation and development. Production workloads need higher limits.
-
-| Component | Env | Request CPU | Request Memory | Limit CPU | Limit Memory |
-|-----------|-----|-------------|----------------|-----------|--------------|
-| Control plane | Dev | 100m | 128Mi | 500m | 512Mi |
-| Control plane | Prod | 200m | 256Mi | 1 | 1Gi |
-| Data plane | Dev | 500m | 256Mi | 1 | 1Gi |
-| Data plane | Prod | 2 | 512Mi | (unset) | 2Gi |
-| Dashboard | Dev/Prod | 50m | 64Mi | 200m | 256Mi |
-
-The data plane carries the traffic load, so its CPU request should reflect expected throughput. For production data planes, the CPU limit is intentionally left unset so the proxy can burst to available node CPU during traffic spikes. The memory limit is the hard cap that prevents a runaway proxy from exhausting node memory.
-
-**What to monitor**:
-- **CPU throttling**: Check `container_cpu_cfs_throttled_seconds_total` for the control plane and data plane. Frequent throttling means the CPU limit is too low.
-- **Memory usage**: Watch `container_memory_working_set_bytes` against the memory limit. The data plane should stay well below its limit under normal load.
-- **gRPC stream health**: The control plane exposes `nantian_gw_xds_streams_active` on its admin endpoint. This should equal the number of data plane replicas. A drop means a data plane disconnected.
-- **Leader election**: The Lease object should always have a holder. Check with `kubectl get lease -n nantian-gw`.
-
-For a full breakdown of production resource planning, see the [Production deployment](/en/installation/production) guide.
-
-## Prerequisites
-
-Before installing, make sure you have:
-
-- Kubernetes 1.24 or later (the Gateway API v1.0 resources `gateway.networking.k8s.io/v1` must be available)
-- Gateway API CRDs installed (see [Prerequisites](/en/getting-started/prerequisites))
-- `kubectl` configured to talk to your cluster
-- `helm` 3.x (for Helm installs) or `kubectl` with Kustomize built in (for Kustomize installs)
-
-## Choosing your path
-
-Start with the [Helm installation guide](/en/installation/helm) if you're new to the project. It covers the default install, common value overrides, and how to inspect the chart before deploying.
-
-Use the [Kustomize guide](/en/installation/kustomize) if your team uses GitOps tooling like Argo CD or Flux and you prefer raw manifests over Helm templating.
-
-Once you're comfortable with the basics, work through the [Production deployment](/en/installation/production) and [High availability](/en/installation/ha) guides. These cover hardening, resource planning, anti-affinity rules, TLS everywhere, and multi-zone deployment patterns.
-
-## Post-Installation Verification
-
-After installation, run through these checks to confirm everything is working:
-
-**1. Check pod status**
 ```bash
 kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
 ```
-All pods should show `Running` and `READY` should match the replica count for each component.
 
-**2. Verify the GatewayClass**
+If a pod is not ready, inspect recent logs:
+
 ```bash
-kubectl get gatewayclass
-```
-You should see `nantian-gw` listed with `Accepted: True`.
-
-**3. Check leader election**
-```bash
-kubectl get lease -n nantian-gw
-```
-The lease `nantian-gw-controller-lease` should have a non-empty `HOLDER` column. This confirms the control plane leader is active.
-
-**4. Create a test Gateway and HTTPRoute**
-
-Save the following to `test-gateway.yaml`:
-```yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: test-gateway
-spec:
-  gatewayClassName: nantian-gw
-  listeners:
-    - name: http
-      port: 80
-      protocol: HTTP
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: test-route
-spec:
-  parentRefs:
-    - name: test-gateway
-  rules:
-    - backendRefs:
-        - name: test-backend
-          port: 80
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
 ```
 
-Apply it:
-```bash
-kubectl apply -f test-gateway.yaml
-```
+Then create a demo `Gateway` and `HTTPRoute` as shown in the [Quick Start](/en/getting-started/quick-start/).
 
-Then check that the Gateway shows `Programmed: True`:
-```bash
-kubectl get gateway test-gateway
-```
+## Choosing The Next Page
 
-If the test Gateway is accepted and programmed, the control plane and data planes are communicating correctly.
-
-**5. Inspect logs (if something is wrong)**
-```bash
-kubectl logs -n nantian-gw deployment/nantian-gw-controlplane --tail=50
-kubectl logs -n nantian-gw deployment/nantian-gw-dataplane --tail=50
-```
-
-The control plane logs show Gateway API watch events and xDS snapshot publications. The data plane logs show gRPC connection status and configuration acceptance.
-
-After you've confirmed everything is running, clean up the test resources:
-```bash
-kubectl delete -f test-gateway.yaml
-```
-
-## What's next
-
-After installation, head to the [Quick Start](/en/getting-started/quick-start) to verify everything is running and create your first route. If you're deploying to production, read the [Production deployment](/en/installation/production) guide before exposing the gateway to live traffic.
+- Use [Helm Installation](/en/installation/helm/) for repository setup, default values, common overrides, and uninstall commands.
+- Use [Experimental Features](/en/configuration/experimental-features/) before creating `AIService`, `TokenPolicy`, `WasmPlugin`, or experimental `BackendLBPolicy` resources.
+- Use [Operations](/en/operations/) for first checks after install, service names, logs, metrics, and admin access.

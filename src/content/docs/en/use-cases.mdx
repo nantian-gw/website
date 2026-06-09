@@ -15,30 +15,20 @@ Nantian Gateway's built-in AI gateway module handles these concerns at the proxy
 AI providers use different API formats. OpenAI, Anthropic, and Ollama each have their own request and response schemas. Nantian Gateway normalizes these differences, letting your applications speak one format while the gateway translates to whatever each backend expects.
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: AIService
 metadata:
-  name: llm-routing
+  name: openai-gpt4o
 spec:
-  backends:
-    - name: openai-gpt4
-      provider: openai
-      endpoint: https://api.openai.com/v1
-      models:
-        - gpt-4
-        - gpt-4-turbo
-    - name: anthropic-claude
-      provider: anthropic
-      endpoint: https://api.anthropic.com
-      models:
-        - claude-3-opus
-        - claude-3-sonnet
-    - name: ollama-local
-      provider: ollama
-      endpoint: http://ollama.internal:11434
-      models:
-        - llama3
-        - mistral
+  provider: openai
+  format: openai
+  model: gpt-4o
+  auth:
+    type: bearer
+    secret: openai-api-key
+    key: token
+    header: Authorization
+  timeout: 60s
 ```
 
 Applications send requests to a single gateway endpoint. The gateway routes to the correct provider based on the requested model, handling protocol conversion transparently.
@@ -50,22 +40,21 @@ AI APIs charge by token count, not by request count. A single request with a 10,
 Nantian Gateway's `TokenPolicy` CRD enforces limits based on actual token usage:
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: TokenPolicy
 metadata:
   name: team-quotas
 spec:
-  rules:
-    - selector:
-        team: engineering
-      limit:
-        tokensPerMinute: 100000
-        tokensPerDay: 5000000
-    - selector:
-        team: marketing
-      limit:
-        tokensPerMinute: 50000
-        tokensPerDay: 2000000
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ai-route
+  tokensPerMinute: 100000
+  tokensPerHour: 5000000
+  requestsPerMinute: 1000
+  scope: route
+  burst: 1.5
+  onLimit: reject
 ```
 
 The gateway counts tokens on every request and response, rejecting traffic that exceeds quotas before it reaches the provider. This prevents surprise bills and gives teams predictable cost boundaries.
@@ -313,16 +302,19 @@ When built-in filters aren't enough, Nantian Gateway's Wasm plugin system lets y
 Wasm plugins are distributed as `.wasm` binaries and managed through the `WasmPlugin` CRD:
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: WasmPlugin
 metadata:
   name: custom-auth
 spec:
-  pluginURL: oci://registry.example.com/plugins/auth:v1.2.0
-  phase: OnRequestHeaders
-  selector:
-    matchLabels:
-      app: payment-service
+  wasm:
+    url: https://example.com/plugins/custom-auth.wasm
+  hooks:
+    - onRequest
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: payment-service
 ```
 
 The plugin runs inside the data plane's wasmtime runtime, with access to host functions for logging, metrics, and HTTP dispatch. Plugins are sandboxed and cannot access the host filesystem or network unless explicitly granted.

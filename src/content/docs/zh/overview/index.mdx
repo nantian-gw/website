@@ -2,124 +2,56 @@
 title: 什么是 Nantian Gateway
 ---
 
-Nantian Gateway 是 [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) 的一个实现，它为云原生场景提供高性能的南北向流量入口、流量治理和 API 网关能力。项目基于 Gateway API v1.5.1 规范，声明支持 55 个特性，覆盖 HTTP、gRPC、TCP、UDP 和 TLS 路由。
+Nantian Gateway 是一个基于 Kubernetes Gateway API 的分离式网关栈。Go 控制面监听 Kubernetes 资源，把 Gateway API 和 Nantian 扩展资源转换为内部路由状态，写入状态，并通过 gRPC/xDS 发布运行时快照。Rust 数据面接收这些快照并处理真实流量。
 
-和其他网关实现相比，Nantian Gateway 有两个明显不同的设计选择。第一个是**控制面与数据面分离架构**（split-plane architecture）：控制面用 Go 编写，数据面用 Rust 编写，两者之间通过 gRPC 双向 xDS 流通信。第二个是**AI 网关能力**作为一等公民直接内置在数据面中，而不是挂在外部组件上。
+当你需要以 Kubernetes 原生方式管理入口流量和 API 路由，并希望同时具备标准 Gateway API 资源、运维 API、可观测性资产，以及面向 AI 和 Wasm 工作负载的实验性扩展点时，可以使用 Nantian Gateway。
 
-## 它是怎么工作的
+## 这组仓库包含什么
 
-简单来说，Nantian Gateway 监听 Kubernetes 集群中的 Gateway API 资源，比如 `Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute` 和 `TLSRoute`。Go 控制面把这些资源翻译成内部 IR（中间表示），然后通过 gRPC/xDS 流推送到 Rust 数据面代理。
+Nantian Gateway 拆分为多个组件仓库，每个组件可以用自己的构建、测试和发布流程演进。
 
-数据面负责实际的请求处理：TLS 拆解、HTTP 路由、请求头修改、流量拆分、限流、AI 协议转换等。控制面负责翻译和分发，数据面负责执行，两者各司其职，独立扩缩。
+- `gateway/` 包含 Go 控制面、Kubernetes reconciler、translator、CRD 清单、Admin API 和一致性工具。
+- `dataplane/` 包含 Rust 数据面 workspace，负责接收运行时快照并处理流量。
+- `helm-charts/` 打包可安装的 Helm chart，发布地址是 `https://charts.nantian.dev`。
+- `dashboard/` 包含面向运维人员的 Web 管理界面。
+- `website/` 包含当前 Astro/Starlight 文档站。
+- `proto/` 维护组件之间共享的 protobuf 契约。
 
-## 核心概念
+## 它如何工作
 
-### Gateway API 原生
+Gateway API 资源是系统的事实来源。用户创建 `Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute`、`TLSRoute`、`ReferenceGrant` 和 Gateway API policy 等资源。启用实验功能后，Nantian 扩展资源也可以参与同一套工作流。
 
-所有路由配置都通过标准的 Gateway API 资源完成。你的 `HTTPRoute` 配置写法和其他兼容实现完全一样，这意味着迁移成本低，学习曲线平缓，API 界面也足够熟悉。
-
-### 控制面与数据面通信
-
-控制面不内嵌代理。配置通过 gRPC 双向流（xDS 协议）推送到数据面。这样做的好处很明显：数据面保持轻量，两个平面可以独立扩缩，运维边界也更清晰。
-
-### 用于 AI 和 Wasm 的自定义资源
-
-Nantian Gateway 自带四个自定义 CRD，扩展了 Gateway API 的能力：
-
-- [**AIService**](../api-reference/crds/): 管理 AI 模型提供方的连接，包括认证、模型路由和提供方配置
-- [**TokenPolicy**](../api-reference/crds/): 基于 token 数量对 AI API 调用做限流和配额控制
-- [**WasmPlugin**](../api-reference/crds/): 在监听器或路由级别绑定 Wasm 扩展，注入自定义请求/响应处理逻辑
-- [**BackendLBPolicy**](../api-reference/crds/): 配置后端负载均衡和会话保持策略
-
-这些 CRD 让你用同样的 Kubernetes 原生工作流来管理 AI 流量和自定义扩展，不必额外搭建独立服务。
-
-### 内置 AI 网关
-
-Rust 数据面内嵌了一个 AI 网关模块，负责处理多 AI 提供方的协议适配。支持 OpenAI、Anthropic 和 Ollama 三种格式，能力包括 token 计数、API 密钥管理、限流、PII 脱敏和模型 A/B 测试。所有这些都在代理进程内部完成，不需要额外的网络跳转。
-
-### Wasm 运行时
-
-基于 [wasmtime](https://wasmtime.dev/) 的插件引擎运行在数据面层面，允许你在请求和响应的生命周期钩子中注入自定义逻辑。插件以标准 `.wasm` 模块的形式分发，通过 `WasmPlugin` CRD 管理。
-
-## 功能概览
-
-Nantian Gateway 的功能覆盖路由、流量治理、安全、可观测性和扩展性五个维度。
-
-### 路由
-
-- **HTTP 路由**：支持路径、请求头、查询参数和方法匹配
-- **gRPC 路由**：支持命名路由规则，精确到方法级别
-- **TCP 和 UDP 路由**：覆盖非 HTTP 负载
-- **TLS 透传和拆解**：支持同一监听器上的混合模式
-- **Host 重写**和**路径重写/重定向**
-- 支持 301、302、303、307、308 状态码重定向
-
-### 流量治理
-
-- **请求镜像**：按百分比将请求复制到多个后端
-- **后端超时**：支持请求级和后端级超时控制
-- **CORS 配置**：在路由级别配置跨域策略
-- **请求头修改**：同时支持请求和响应方向的头部变更
-- **后端协议支持**：HTTP/1.1、HTTP/2（h2c）、gRPC、WebSocket
-
-### 安全
-
-- **后端 TLS 策略**：支持 SAN 校验和客户端证书
-- **前端 TLS**：支持客户端证书校验和非安全回退
-- **ReferenceGrant**：允许跨命名空间引用后端
-- **监听器隔离**：防止跨监听器请求泄漏
-
-### 服务网格
-
-Nantian Gateway 支持 Gateway API Mesh 资源，包括：
-
-- 基于集群 IP 匹配的消费者路由
-- Mesh 级别的 HTTP 路由操作（请求头修改、路径重写、重定向）
-- 无 Sidecar 的网格配置，通过 Gateway API Mesh 模型实现
-
-### 可观测性
-
-- 控制面和数据面均暴露 **Prometheus** 指标
-- **Grafana** 仪表盘模板，提供集群级可见性
-- **Admin API**：运行时诊断和配置检查
-- **健康检查和就绪探针**：支持 Kubernetes 原生的存活检测
-
-### 扩展性
-
-- **Wasm 插件系统**：自定义请求/响应钩子
-- **AI 网关**模块：多提供方 AI 流量管理
-- **扩展过滤器**：自定义 Gateway API 过滤器集成
-
-## 架构速览
-
+```text
+Gateway API resources -> Go control plane -> internal snapshot -> gRPC/xDS -> Rust data plane -> backends
 ```
-┌──────────────────────────────────────────────────────┐
-│  Kubernetes 集群                                      │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────┐  │
-│  │ Gateway  │  │ HTTPRoute│  │ EndpointSlice     │  │
-│  └────┬─────┘  └────┬─────┘  └────────┬──────────┘  │
-│       └──────────────┼───────────────┘               │
-│                      │ watch                         │
-│              ┌───────┴────────┐                      │
-│              │  Nantian GW    │                      │
-│              │  Control Plane │                      │
-│              │  (Go)          │     ── gRPC/xDS ──►  │
-│              └───────┬────────┘                      │
-│                      │                               │
-│              ┌───────┴────────┐                      │
-│              │  Data Plane    │                      │
-│              │  (Rust)        │────────────────────  │
-│              └────────────────┘                      │
-└──────────────────────────────────────────────────────┘
-                        │
-                        ▼
-              ┌──────────────────┐
-              │  后端服务 (Pod)   │
-              └──────────────────┘
-```
+
+控制面监听 Kubernetes 资源，把可接受的对象转换为运行时快照格式，更新状态条件，并暴露 Admin API 与 metrics 端点供排查。数据面连接控制面，通过 gRPC/xDS 接收快照，并在运行时监听端口处理流量。Dashboard 和 Admin API 为运维人员提供运行中系统的可见性。
+
+## 稳定能力与实验能力
+
+Gateway API 路由是主要能力。请通过 Gateway API support 页面和 gateway 仓库中生成的支持声明来理解支持范围，不要依赖宽泛的营销式表述。
+
+Nantian 还包含实验性 API：
+
+- `AIService` 使用 `gateway.nantian.dev/v1alpha1`，描述一个 AI provider/model 目标。
+- `TokenPolicy` 使用 `gateway.nantian.dev/v1alpha1`，把 token 或请求限额附加到本地 Gateway API 目标资源。
+- `WasmPlugin` 使用 `gateway.nantian.dev/v1alpha1`，把 Wasm 模块绑定到目标资源。
+- `BackendLBPolicy` 使用 Gateway API 实验版本 `gateway.networking.k8s.io/v1alpha2`，配置后端负载均衡行为。
+
+实验功能默认关闭。创建这些资源前，需要先开启对应的控制面和数据面 feature flag；在 API 仍处于实验阶段时，也要预期 schema 或运行时行为可能变化。
+
+## 运维入口
+
+Helm 是推荐给用户和运维人员的安装路径。Chart 会安装控制面、数据面、dashboard、Service、RBAC、NetworkPolicy，以及一个默认名为 `nantian-gw` 的 `GatewayClass`。仓库内也提供 Kustomize overlays，用于开发和自定义部署。
+
+控制面在 `18080` 暴露 gRPC，在 `18081` 暴露 Admin API，在 `18082` 暴露 metrics，在 `18083` 暴露健康检查。数据面的运行时 HTTP 监听地址是 `0.0.0.0:10080`，Admin API 与 metrics Service 端口是 `19080`。Dashboard Service 在 Helm chart 中使用端口 `3000`。
+
+日常运维可以先查看 Kubernetes Pod 状态、`GatewayClass` 状态、Route 绑定状态、控制面和数据面日志、Prometheus metrics、Grafana dashboard，以及 Admin API。
 
 ## 下一步
 
-- [快速开始（5 分钟部署）](../getting-started/quick-start/)
-- [了解整体架构](../architecture/)
-- [和 Envoy Gateway 对比](../comparison/)
+- [快速开始](/zh/getting-started/quick-start/)
+- [Helm 安装](/zh/installation/helm/)
+- [实验功能](/zh/configuration/experimental-features/)
+- [运维](/zh/operations/)
+- [API 参考](/zh/api-reference/)

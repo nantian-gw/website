@@ -8,13 +8,13 @@ const isZh = lang === 'zh';
 
 const heading = isZh ? '快速开始' : 'Quick Start';
 const subtitle = isZh
-  ? '三条命令，即刻部署'
-  : 'Three commands to get started';
+  ? '添加 Helm 仓库，安装网关，然后进入完整快速开始'
+  : 'Add the Helm repository, install the gateway, then follow the full quick start';
 
 const commands = [
-  'helm repo add nantian https://charts.nantian.dev',
-  'helm install nantian-gw nantian/nantian-gw --namespace nantian-gw --create-namespace',
-  'kubectl apply -f https://raw.githubusercontent.com/nantian-gw/gateway/main/examples/hello-world.yaml',
+  'helm repo add nantian-gw https://charts.nantian.dev',
+  'helm repo update',
+  'helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace',
 ];
 
 const copyLabel = isZh ? '复制' : 'Copy';

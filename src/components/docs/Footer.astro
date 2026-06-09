@@ -1,0 +1,93 @@
+---
+import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
+
+const isZh = Astro.url.pathname.startsWith('/zh/');
+
+const labels = isZh
+  ? {
+      aria: '文档页脚',
+      heading: '继续阅读',
+      quickStart: '快速开始',
+      helm: 'Helm 安装',
+      experimental: '实验功能',
+      operations: '运维',
+      api: 'API 参考',
+      github: 'GitHub',
+      license: 'License',
+    }
+  : {
+      aria: 'Documentation footer',
+      heading: 'Continue with Nantian Gateway',
+      quickStart: 'Quick Start',
+      helm: 'Helm Install',
+      experimental: 'Experimental Features',
+      operations: 'Operations',
+      api: 'API Reference',
+      github: 'GitHub',
+      license: 'License',
+    };
+
+const prefix = isZh ? '/zh' : '/en';
+
+const links = [
+  { label: labels.quickStart, href: `${prefix}/getting-started/quick-start/` },
+  { label: labels.helm, href: `${prefix}/installation/helm/` },
+  { label: labels.experimental, href: `${prefix}/configuration/experimental-features/` },
+  { label: labels.operations, href: `${prefix}/operations/` },
+  { label: labels.api, href: `${prefix}/api-reference/` },
+  { label: labels.github, href: 'https://github.com/nantian-gw/gateway', external: true },
+  { label: labels.license, href: 'https://github.com/nantian-gw/gateway/blob/main/LICENSE', external: true },
+];
+---
+
+<DefaultFooter />
+
+<footer class="ntgw-docs-footer" aria-label={labels.aria}>
+  <h2>{labels.heading}</h2>
+  <nav aria-label={labels.aria}>
+    {
+      links.map((link) => (
+        <a
+          href={link.href}
+          target={link.external ? '_blank' : undefined}
+          rel={link.external ? 'noopener noreferrer' : undefined}
+        >
+          {link.label}
+        </a>
+      ))
+    }
+  </nav>
+</footer>
+
+<style>
+  .ntgw-docs-footer {
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+
+  .ntgw-docs-footer h2 {
+    margin: 0 0 0.75rem;
+    color: var(--sl-color-white);
+    font-size: var(--sl-text-sm);
+    line-height: 1.4;
+  }
+
+  .ntgw-docs-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+  }
+
+  .ntgw-docs-footer a {
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    text-decoration: none;
+  }
+
+  .ntgw-docs-footer a:hover,
+  .ntgw-docs-footer a:focus-visible {
+    color: var(--sl-color-text-accent);
+    text-decoration: underline;
+  }
+</style>

@@ -9,11 +9,11 @@ const isZh = lang === 'zh';
 
 const heading = isZh ? 'Nantian Gateway' : 'Nantian Gateway';
 const subtitle = isZh
-  ? 'Kubernetes Gateway API 实现 — 控制面与数据面分离'
-  : 'Split-plane Kubernetes Gateway API Implementation';
+  ? 'Kubernetes Gateway API 控制面与 Rust 数据面'
+  : 'Kubernetes Gateway API control plane with a Rust data plane';
 const tagline = isZh
-  ? '控制面与数据面分离 · Go 控制面 · Rust 数据面 · 55+ 特性'
-  : 'Split-plane Kubernetes Gateway API · Go Control Plane · Rust Data Plane · 55 Features';
+  ? '标准 Gateway API 路由 · Go 控制面 · gRPC/xDS · 实验性 AI 与 Wasm 扩展'
+  : 'Standard Gateway API routing · Go control plane · gRPC/xDS · Experimental AI and Wasm extensions';
 const quickStartLabel = isZh ? '快速开始' : 'Quick Start';
 const quickStartHref = isZh
   ? '/zh/getting-started/quick-start/'

@@ -15,30 +15,20 @@ Nantian Gateway 内置的 AI 网关模块在代理层解决这些问题。
 不同的 AI 提供方用不同的 API 格式。OpenAI、Anthropic、Ollama 各有各的请求和响应结构。Nantian Gateway 把这些差异做了一层归一化，你的应用只需要用一种格式发请求，网关负责翻译成各个后端认的格式。
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: AIService
 metadata:
-  name: llm-routing
+  name: openai-gpt4o
 spec:
-  backends:
-    - name: openai-gpt4
-      provider: openai
-      endpoint: https://api.openai.com/v1
-      models:
-        - gpt-4
-        - gpt-4-turbo
-    - name: anthropic-claude
-      provider: anthropic
-      endpoint: https://api.anthropic.com
-      models:
-        - claude-3-opus
-        - claude-3-sonnet
-    - name: ollama-local
-      provider: ollama
-      endpoint: http://ollama.internal:11434
-      models:
-        - llama3
-        - mistral
+  provider: openai
+  format: openai
+  model: gpt-4o
+  auth:
+    type: bearer
+    secret: openai-api-key
+    key: token
+    header: Authorization
+  timeout: 60s
 ```
 
 应用只往一个网关地址发请求。网关根据请求指定的模型路由到对应的提供方，协议转换在后台透明完成。
@@ -50,22 +40,21 @@ AI API 按 token 数量收费，不是按请求数量计费。一个 10000 token
 Nantian Gateway 的 `TokenPolicy` CRD 按实际 token 使用量来限制：
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: TokenPolicy
 metadata:
   name: team-quotas
 spec:
-  rules:
-    - selector:
-        team: engineering
-      limit:
-        tokensPerMinute: 100000
-        tokensPerDay: 5000000
-    - selector:
-        team: marketing
-      limit:
-        tokensPerMinute: 50000
-        tokensPerDay: 2000000
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ai-route
+  tokensPerMinute: 100000
+  tokensPerHour: 5000000
+  requestsPerMinute: 1000
+  scope: route
+  burst: 1.5
+  onLimit: reject
 ```
 
 网关在每次请求和响应时统计 token 数，超配额的流量在到达提供方之前就被拒绝。从根本上避免意外账单，给各个团队划定可预测的成本边界。
@@ -311,14 +300,17 @@ spec:
 Wasm 插件通过 `WasmPlugin` CRD 管理，可以绑定到特定监听器或路由上：
 
 ```yaml
-apiVersion: gateway.nantian.io/v1alpha1
+apiVersion: gateway.nantian.dev/v1alpha1
 kind: WasmPlugin
 metadata:
   name: custom-auth
 spec:
-  plugin: custom-auth.wasm
-  phase: onRequestHeaders
+  wasm:
+    url: https://example.com/plugins/custom-auth.wasm
+  hooks:
+    - onRequest
   targetRefs:
-    - kind: HTTPRoute
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
       name: secure-api
 ```
