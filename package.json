@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro build",
+    "build": "npm run setup:browser && astro build",
+    "build:astro": "astro build",
     "preview": "astro preview",
     "check": "astro check",
     "lint": "astro check",

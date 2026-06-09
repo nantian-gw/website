@@ -54,4 +54,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run setup:browser:ci
-      - run: npm run build
+      - run: npm run build:astro

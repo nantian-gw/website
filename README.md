@@ -33,9 +33,10 @@ npm run setup:browser    # Install Chromium for Mermaid rendering in clean envir
 npm run build            # Production build
 ```
 
-`npm run build` intentionally runs only `astro build`. Run `npm run setup:browser`
-once in clean local environments, or whenever Playwright reports that Chromium is
-missing.
+`npm run build` installs the Playwright Chromium browser before running `astro build`
+because Mermaid rendering in MDX uses Playwright during static generation. CI can
+run `npm run setup:browser:ci` followed by `npm run build:astro` to install browser
+system dependencies separately and avoid duplicate browser setup.
 
 ## Translation
 

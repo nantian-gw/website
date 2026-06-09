@@ -8,10 +8,11 @@ function read(path) {
   return readFileSync(new URL(path, root), "utf8");
 }
 
-test("package scripts keep browser setup separate from the Astro build", () => {
+test("default build command installs the browser before the Astro build", () => {
   const pkg = JSON.parse(read("package.json"));
 
-  assert.equal(pkg.scripts.build, "astro build");
+  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build");
+  assert.equal(pkg.scripts["build:astro"], "astro build");
   assert.equal(pkg.scripts["setup:browser"], "npx playwright install chromium");
   assert.equal(pkg.scripts["setup:browser:ci"], "npx playwright install --with-deps chromium");
   assert.equal(pkg.scripts.test, "node --test test/*.test.mjs");
@@ -19,8 +20,8 @@ test("package scripts keep browser setup separate from the Astro build", () => {
   for (const [name, script] of Object.entries(pkg.scripts)) {
     assert.doesNotMatch(
       script,
-      /playwright install.*&&.*astro build/,
-      `${name} must not combine browser installation with the Astro build`,
+      /npx playwright install chromium && astro build/,
+      `${name} should call the named setup script instead of duplicating the browser install command`,
     );
   }
 });
@@ -30,11 +31,21 @@ test("CI runs hardening tests and installs the browser before building", () => {
 
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run setup:browser:ci/);
-  assert.match(ci, /npm run build/);
+  assert.match(ci, /npm run build:astro/);
   assert.ok(
-    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build"),
+    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:astro"),
     "CI must install the browser before running the build",
   );
+});
+
+test("Cloudflare Pages config declares the static output directory", () => {
+  const config = JSON.parse(read("wrangler.jsonc"));
+
+  assert.equal(config.name, "website");
+  assert.equal(config.pages_build_output_dir, "./dist");
+  assert.equal(config.compatibility_date, "2026-06-07");
+  assert.equal(config.main, undefined);
+  assert.equal(config.assets, undefined);
 });
 
 test("Cloudflare Pages headers include wildcard security headers", () => {
