@@ -27,9 +27,15 @@ The dev server runs at `http://localhost:4321`.
 ## Lint & Build
 
 ```bash
-npm run check    # Type check
-npm run build    # Production build
+npm run check            # Type check
+npm test                 # Repository hardening checks
+npm run setup:browser    # Install Chromium for Mermaid rendering in clean environments
+npm run build            # Production build
 ```
+
+`npm run build` intentionally runs only `astro build`. Run `npm run setup:browser`
+once in clean local environments, or whenever Playwright reports that Chromium is
+missing.
 
 ## Translation
 

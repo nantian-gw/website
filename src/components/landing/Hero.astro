@@ -486,4 +486,20 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
       justify-content: center;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .starfield-layer,
+    .hero-content,
+    .btn,
+    .btn-arrow {
+      animation: none !important;
+      transition: none !important;
+      transform: none !important;
+    }
+
+    .btn:hover .btn-arrow,
+    .btn-secondary:hover .btn-arrow {
+      transform: none !important;
+    }
+  }
 </style>

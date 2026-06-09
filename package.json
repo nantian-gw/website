@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "npx playwright install chromium && astro build",
+    "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
-    "lint": "astro check"
+    "lint": "astro check",
+    "setup:browser": "npx playwright install chromium",
+    "setup:browser:ci": "npx playwright install --with-deps chromium",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.39.3",

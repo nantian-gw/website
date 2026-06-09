@@ -259,3 +259,23 @@ blockquote {
   animation: twinkle var(--duration) ease-in-out infinite;
   animation-delay: var(--delay);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .star,
+  .glow-hover {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .glow-hover:hover {
+    box-shadow: none;
+    transform: none !important;
+  }
+}
