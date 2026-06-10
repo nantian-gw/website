@@ -7,10 +7,18 @@ const { lang = 'en' } = Astro.props;
 const isZh = lang === 'zh';
 
 const docsLabel = isZh ? '文档' : 'Docs';
+const aboutLabel = isZh ? '关于项目' : 'About';
+const contactLabel = isZh ? '联系我们' : 'Contact';
+const privacyLabel = isZh ? '隐私政策' : 'Privacy';
+const termsLabel = isZh ? '服务条款' : 'Terms';
 const communityLabel = isZh ? '社区' : 'Community';
 const builtWith = isZh ? '基于 Astro 构建' : 'Built with Astro';
 
 const docsHref = lang === 'zh' ? `/${lang}/getting-started/prerequisites/` : `/${lang}/`;
+const aboutHref = lang === 'zh' ? '/zh/about/' : '/about/';
+const contactHref = lang === 'zh' ? '/zh/contact/' : '/contact/';
+const privacyHref = lang === 'zh' ? '/zh/privacy/' : '/privacy/';
+const termsHref = lang === 'zh' ? '/zh/terms/' : '/terms/';
 const githubHref = 'https://github.com/nantian-gw/gateway';
 const communityHref = 'https://github.com/nantian-gw/gateway/discussions';
 ---
@@ -27,6 +35,10 @@ const communityHref = 'https://github.com/nantian-gw/gateway/discussions';
     <!-- Center: Links -->
     <nav class="footer-links" aria-label={isZh ? '页脚链接' : 'Footer links'}>
       <a href={docsHref} class="footer-link">{docsLabel}</a>
+      <a href={aboutHref} class="footer-link">{aboutLabel}</a>
+      <a href={contactHref} class="footer-link">{contactLabel}</a>
+      <a href={privacyHref} class="footer-link">{privacyLabel}</a>
+      <a href={termsHref} class="footer-link">{termsLabel}</a>
       <a href={githubHref} class="footer-link" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href={communityHref} class="footer-link" target="_blank" rel="noopener noreferrer">{communityLabel}</a>
     </nav>

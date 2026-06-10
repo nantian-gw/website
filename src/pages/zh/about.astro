@@ -1,0 +1,45 @@
+---
+import ContentLayout from '../../layouts/ContentLayout.astro';
+---
+
+<ContentLayout
+  lang="zh"
+  title="关于南天网关 (About Nantian Gateway)"
+  description="了解南天网关的项目背景、核心愿景、维护团队和开源社区贡献者。"
+  heading="关于南天网关"
+  intro="基于 Go 和 Rust 异构协同的下一代云原生网关解决方案。"
+>
+  <section>
+    <h2>项目背景</h2>
+    <p>
+      南天网关（Nantian Gateway）诞生于一个简单而深刻的认知：尽管 Kubernetes 准入（Ingress）和 API 网关领域长期以来被复杂的单体架构或重配置引擎所主导，但现代微服务与云原生架构更渴求一种更简单、更安全且更快速的流量路由基础设施。
+    </p>
+    <p>
+      为此，我们构建了南天网关，将 Go 语言成熟、经过生产级检验的生态系统（负责监听、调度和翻译 Kubernetes 集群状态，作为控制面）与 Rust 语言极致速度、内存安全且无垃圾回收（GC）抖动的运行时（基于 Cloudflare Pingora 处理实时数据面流量，作为数据面）完美结合。通过严格遵守标准的 <strong>Kubernetes Gateway API (v1.5.1)</strong> 规范，我们彻底摒弃了私有 CRD 路由定义和专属配置语言，保障用户的无锁定自由。
+    </p>
+  </section>
+
+  <section>
+    <h2>我们的愿景</h2>
+    <p>
+      我们的愿景是赋能云原生团队一个大一统的智能网关，既能在极致性能下解决传统流量代理，又能开箱即用地作为高效安全的 **AI 网关（AI Gateway）**。我们深信开源标准的力量、坚守极致的性能优化，并提供一个基于现代 WebAssembly (Wasm) 的插件生态系统实现动态扩展。
+    </p>
+  </section>
+
+  <section>
+    <h2>维护者与社区</h2>
+    <p>
+      南天网关由 <strong>南天网关开源社区（Nantian Gateway Open Source Community）</strong> 活跃开发和共同维护。我们是一个由云原生架构师、平台研发专家和 AI 领域研究者组成的国际化团队，对高性能网络、系统编程与 Kubernetes 生态充满热情。
+    </p>
+    <p>
+      作为一个由社区驱动的项目，我们热忱地欢迎任何形式的贡献，包括文档撰写、代码修改、架构设计、问题（Issues）反馈和讨论。您可以通过我们官方的 GitHub 仓库参与进日常开发中来。
+    </p>
+  </section>
+
+  <section>
+    <h2>共同参与</h2>
+    <p>
+      无论您是准备部署一个能支撑千万级请求的高性能 Ingress 控制器，还是需要利用大模型限流和 API 密钥保护您的 AI 后端，亦或是想通过 Wasm 插件引擎写点自定义逻辑，我们都非常期待您的加入。欢迎阅读我们的 <a href="/zh/getting-started/quick-start/">快速开始指南</a> 或在我们的 <a href="https://github.com/nantian-gw/gateway/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions</a> 中发起讨论。
+    </p>
+  </section>
+</ContentLayout>

@@ -1,0 +1,45 @@
+---
+import ContentLayout from '../layouts/ContentLayout.astro';
+---
+
+<ContentLayout
+  lang="en"
+  title="About Nantian Gateway"
+  description="Learn about the background, goals, maintainers, and contributors behind Nantian Gateway."
+  heading="About Nantian Gateway"
+  intro="Next-generation cloud-native networking built on the synergy of Go and Rust."
+>
+  <section>
+    <h2>Project Background</h2>
+    <p>
+      Nantian Gateway was born from a simple realization: while Kubernetes ingress and API gateways have traditionally been dominated by complex, monolithic architectures or configuration-heavy engines, modern microservices demand simpler, safer, and faster routing infrastructures.
+    </p>
+    <p>
+      We built Nantian Gateway to combine the rich, production-tested ecosystem of Go (for controlling and interpreting Kubernetes cluster states) with the blazing-fast, memory-safe, and GC-less runtime of Rust (for handling active data-plane traffic). By keeping configuration aligned strictly with standard <strong>Kubernetes Gateway API (v1.5.1)</strong> specifications, we eliminate custom CRDs and proprietary configuration structures, offering a standardized approach.
+    </p>
+  </section>
+
+  <section>
+    <h2>Our Vision</h2>
+    <p>
+      Our vision is to empower cloud-native teams with a unified gateway that solves traditional routing while serving as a secure, fast **AI Gateway** out of the box. We believe in open-source standards, deep performance optimization (leveraging Pingora), and extensibility through a modern Wasm-based plugin ecosystem.
+    </p>
+  </section>
+
+  <section>
+    <h2>Maintainers & Community</h2>
+    <p>
+      Nantian Gateway is actively developed and maintained by the <strong>Nantian Gateway Open Source Community</strong>. We are a collection of cloud-native engineers, platform developers, and AI researchers passionate about high-performance networking and Kubernetes.
+    </p>
+    <p>
+      As a community-driven project, we welcome contributions of all forms—including documentation, code, design, issues, and discussions. You can find us and join our conversations on our official GitHub repository.
+    </p>
+  </section>
+
+  <section>
+    <h2>Join the Journey</h2>
+    <p>
+      Whether you are looking to deploy a high-performance ingress controller for millions of requests, secure your AI API keys with rate-limiting, or explore our Wasm plugin engine, we would love to have you onboard. Check out our <a href="/getting-started/quick-start/">Quick Start Guide</a> or connect with us via <a href="https://github.com/nantian-gw/gateway/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions</a>.
+    </p>
+  </section>
+</ContentLayout>
