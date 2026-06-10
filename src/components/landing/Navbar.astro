@@ -1,4 +1,6 @@
 ---
+import Search from 'astro-pagefind/components/Search.astro';
+
 interface Props {
   lang?: 'en' | 'zh';
 }
@@ -10,6 +12,7 @@ const t = {
   github: 'GitHub',
   switchLang: lang === 'zh' ? 'EN' : '中文',
   switchHref: lang === 'zh' ? '/' : '/zh/',
+  searchPlaceholder: lang === 'zh' ? '搜索…' : 'Search…',
 };
 
 const docsHref = `/${lang}/concepts/`;
@@ -43,6 +46,15 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
 
     <!-- Right: Nav links + Language switcher (desktop) -->
     <div class="hidden md:flex items-center gap-1">
+      <!-- Site search (Pagefind) -->
+      <div class="navbar-search">
+        <Search
+          instance="landing"
+          className="pagefind-searchbox"
+          searchboxOptions={{ placeholder: t.searchPlaceholder }}
+        />
+      </div>
+
       <!-- Docs -->
       <a
         href={docsHref}

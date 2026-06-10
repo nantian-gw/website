@@ -2,6 +2,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 import starlightVersions from 'starlight-versions';
+import pagefind from 'astro-pagefind';
 
 const sidebar = [
   {
@@ -184,6 +185,7 @@ export default defineConfig({
       ],
       customCss: ['./src/styles/custom.css'],
     }),
+    pagefind(),
   ],
   vite: {},
 });
