@@ -15,8 +15,8 @@ export interface Props {
   canonical?: string;
 }
 const {
-  title = 'Nantian Gateway',
-  description = 'Kubernetes Gateway API implementation with split-plane architecture',
+  title = 'Nantian Gateway - Lightweight Kubernetes Gateway API | Go + Rust',
+  description = 'Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency.',
   lang = 'en',
   canonical = 'https://nantian.dev/',
 } = Astro.props;
@@ -34,6 +34,16 @@ const jsonLd = {
     'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
     'query-input': 'required name=search_term_string',
   },
+};
+const orgJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  'name': 'Nantian Gateway',
+  'url': 'https://nantian.dev/',
+  'logo': 'https://nantian.dev/logo.svg',
+  'sameAs': [
+    'https://github.com/nantian-gw/gateway'
+  ]
 };
 ---
 
@@ -65,6 +75,7 @@ const jsonLd = {
     <meta name="twitter:image" content="https://nantian.dev/og-image.png" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script type="application/ld+json" set:html={JSON.stringify(orgJsonLd)} />
     <slot name="head" />
   </head>
   <body class="bg-[var(--color-bg-base)] text-[var(--color-text-primary)] antialiased">
