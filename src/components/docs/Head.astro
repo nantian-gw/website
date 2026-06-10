@@ -1,0 +1,9 @@
+---
+// Starlight Head override — enables Astro view transitions so docs navigation
+// swaps content in place instead of full-page reloads (no header/search flicker).
+import Default from '@astrojs/starlight/components/Head.astro';
+import { ClientRouter } from 'astro:transitions';
+---
+
+<Default {...Astro.props}><slot /></Default>
+<ClientRouter />

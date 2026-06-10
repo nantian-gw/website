@@ -126,6 +126,7 @@ export default defineConfig({
       sidebar,
       components: {
         Footer: './src/components/docs/Footer.astro',
+        Head: './src/components/docs/Head.astro',
       },
       editLink: {
         baseUrl: 'https://github.com/nantian-gw/website/edit/main/',
