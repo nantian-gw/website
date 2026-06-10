@@ -1,0 +1,303 @@
+---
+title: 测试指南
+slug: zh/1.5/contributing/testing
+---
+
+Nantian Gateway 的测试体系覆盖控制面（Go）、数据面（Rust）和端到端集成测试三个层面。本页说明如何运行各类测试、编写新测试以及理解 CI 流水线。
+
+## 测试体系概览
+
+| 测试类型 | 语言 | 框架 | 目录 | 速度 |
+|---------|------|------|------|------|
+| 控制面单元测试 | Go | `testing` + `testify` | `gateway/internal/*/` | 快（秒级） |
+| 控制面集成测试 | Go | `envtest` | `gateway/internal/*/` | 中（分钟级） |
+| 数据面单元测试 | Rust | `cargo test` | `dataplane/src/*/` | 快（秒级） |
+| 数据面集成测试 | Rust | `cargo test --test` | `dataplane/tests/` | 中（分钟级） |
+| 端到端测试 | Go | Gateway API Conformance | `gateway/test/e2e/` | 慢（十分钟级） |
+| 合规性测试 | Go | Gateway API Conformance | `gateway/test/conformance/` | 慢（十分钟级） |
+
+## 控制面测试
+
+### 运行单元测试
+
+```bash
+cd gateway
+
+# 运行所有单元测试
+go test ./internal/...
+
+# 运行特定包的测试
+go test ./internal/translator/...
+
+# 运行特定测试函数
+go test -run TestTranslateHTTPRoute ./internal/translator/
+
+# 带详细输出
+go test -v ./internal/...
+
+# 带覆盖率报告
+go test -coverprofile=coverage.out ./internal/...
+go tool cover -html=coverage.out
+```
+
+### 运行集成测试
+
+控制面的集成测试使用 `controller-runtime` 的 `envtest` 框架，在本地启动一个真实的 API Server 二进制：
+
+```bash
+# 运行集成测试（需要先设置 envtest 环境）
+go test -tags=integration ./internal/controller/...
+
+# 首次运行需要安装 envtest 二进制
+go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+```
+
+:::note[envtest 环境]
+`envtest` 会下载一个轻量级的 Kubernetes API Server 二进制（约 100MB）。首次运行时需要网络连接。下载后的二进制会缓存在本地，后续运行不需要重新下载。
+:::
+
+### 编写控制面测试
+
+控制面测试遵循 Go 社区的标准实践。单元测试文件与源文件放在同一目录，以 `_test.go` 结尾。
+
+```go
+// gateway/internal/translator/httproute_test.go
+package translator
+
+import (
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+    gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+)
+
+func TestTranslateHTTPRoute(t *testing.T) {
+    route := &gwv1.HTTPRoute{
+        // ... 构造测试数据
+    }
+
+    result, err := TranslateHTTPRoute(route)
+
+    require.NoError(t, err)
+    assert.Equal(t, "expected-name", result.Name)
+    assert.Len(t, result.Rules, 2)
+}
+```
+
+测试最佳实践：
+
+* 使用 `testify/assert` 做断言，`testify/require` 做前置条件检查
+* 测试函数命名遵循 `Test<FunctionName>_<Scenario>` 格式
+* 使用表驱动测试覆盖多种输入场景
+* 模拟外部依赖（Kubernetes Client、gRPC 客户端等）
+
+## 数据面测试
+
+### 运行单元测试
+
+```bash
+cd dataplane
+
+# 运行所有测试
+cargo test
+
+# 运行特定模块的测试
+cargo test --lib proxy::http
+
+# 运行特定测试函数
+cargo test test_http_route_match
+
+# 显示测试输出
+cargo test -- --nocapture
+
+# 并行运行（默认按 CPU 核数并行）
+cargo test -- --test-threads=4
+```
+
+### 运行集成测试
+
+数据面的集成测试位于 `dataplane/tests/` 目录：
+
+```bash
+# 运行所有集成测试
+cargo test --test integration
+
+# 运行特定集成测试文件
+cargo test --test proxy_integration
+```
+
+### 编写数据面测试
+
+Rust 测试放在源码文件内部（单元测试）或 `tests/` 目录（集成测试）：
+
+```rust
+// dataplane/src/proxy/http.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_prefix_match() {
+        let matcher = PathMatcher::new("PathPrefix", "/api/v1");
+        assert!(matcher.matches("/api/v1/users"));
+        assert!(!matcher.matches("/other/path"));
+    }
+
+    #[tokio::test]
+    async fn test_http_route_resolution() {
+        let route = build_test_route();
+        let backend = resolve_backend(&route, &build_test_request()).await;
+        assert!(backend.is_some());
+    }
+}
+```
+
+测试最佳实践：
+
+* 单元测试放在 `#[cfg(test)] mod tests` 中
+* 异步测试使用 `#[tokio::test]` 属性
+* 使用 `assert!`、`assert_eq!`、`assert_ne!` 宏做断言
+* 对复杂场景使用 `rstest` 或 `test-case` crate 做参数化测试
+
+## 端到端测试
+
+端到端测试验证控制面和数据面在真实 Kubernetes 集群中的协同工作：
+
+```bash
+cd gateway
+
+# 运行端到端测试（需要 Kind 集群）
+make test-e2e
+
+# 手动运行
+go test -tags=e2e ./test/e2e/... -v
+```
+
+端到端测试的流程：
+
+1. 在 Kind 集群中安装 Nantian Gateway
+2. 部署示例后端服务
+3. 创建 Gateway 和 HTTPRoute 资源
+4. 通过端口转发向网关发送请求
+5. 验证响应内容和状态码
+
+## Gateway API 合规性测试
+
+Nantian Gateway 运行 Gateway API 官方的合规性测试套件，验证对规范的实现程度：
+
+```bash
+cd gateway
+
+# 运行合规性测试
+make test-conformance
+
+# 手动运行
+go test -tags=conformance ./test/conformance/... -v
+```
+
+合规性测试会生成一份报告，列出所有通过和未通过的特性。这份报告是项目声明特性支持情况的依据。
+
+## 代码质量检查
+
+### Go 代码
+
+```bash
+cd gateway
+
+# 代码格式
+gofmt -w .
+
+# Lint 检查
+golangci-lint run ./...
+
+# 静态分析
+go vet ./...
+```
+
+### Rust 代码
+
+```bash
+cd dataplane
+
+# 代码格式
+cargo fmt
+
+# Lint 检查
+cargo clippy -- -D warnings
+
+# 检查未使用的依赖
+cargo udeps
+```
+
+### Protobuf
+
+```bash
+cd proto
+
+# 格式检查
+buf format -d
+
+# Lint 检查
+buf lint
+```
+
+## CI 流水线
+
+Nantian Gateway 使用 GitHub Actions 进行持续集成。每个 PR 会触发以下检查：
+
+| 检查项 | 说明 | 触发条件 |
+|--------|------|---------|
+| Go Unit Tests | 控制面单元测试 | 所有 PR |
+| Go Integration Tests | 控制面集成测试 | 所有 PR |
+| Rust Unit Tests | 数据面单元测试 | 所有 PR |
+| Rust Integration Tests | 数据面集成测试 | 所有 PR |
+| Go Lint | golangci-lint | 所有 PR |
+| Rust Lint | clippy + fmt | 所有 PR |
+| Proto Lint | buf lint | proto 变更 |
+| E2E Tests | 端到端测试 | 合并到 main 前 |
+| Conformance Tests | Gateway API 合规性测试 | 合并到 main 前 |
+CI 配置文件位于 `.github/workflows/` 目录。
+
+:::tip[本地运行 CI]
+在推送 PR 之前，建议在本地运行 CI 中会执行的检查：
+
+```bash
+# 控制面测试 (Go)
+cd gateway
+go test ./internal/...
+golangci-lint run ./...
+
+# 数据面测试 (Rust)
+cd dataplane
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
+cargo fmt --all -- --check
+```
+
+CI 工作流文件位于各自仓库的 `.github/workflows/ci.yml` 中。
+:::
+
+## 测试覆盖率
+
+项目使用 Codecov 追踪测试覆盖率：
+
+```bash
+# Go 覆盖率
+cd gateway
+go test -coverprofile=coverage.out ./internal/...
+go tool cover -func=coverage.out
+
+# Rust 覆盖率（需要 cargo-tarpaulin）
+cd dataplane
+cargo install cargo-tarpaulin
+cargo tarpaulin --out Html
+```
+
+覆盖率报告会随 CI 自动上传到 Codecov。项目不设硬性的覆盖率门槛，但鼓励新代码附带对应的测试用例。
+
+## 下一步
+
+* 查看 [发布流程](/zh/1.5/contributing/release) 了解版本发布规则
+* 查看 [开发环境](/zh/1.5/contributing/development) 了解本地开发环境搭建
+* 查看 [贡献概述](/zh/1.5/contributing/) 了解完整的贡献流程

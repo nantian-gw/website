@@ -1,0 +1,185 @@
+---
+title: 配置概述
+slug: zh/1.5/configuration
+---
+
+Nantian Gateway 用 YAML 配置文件而不是命令行参数或环境变量。控制面和数据面各有一份自己的配置文件，分开维护，因为它们作为独立进程跑的，职责不同。
+
+这一章覆盖了两个组件所有可配的选项。
+
+## 实验功能
+
+实验性 AI、Wasm、TokenPolicy 和 Gateway policy 行为默认关闭。创建 `AIService`、`TokenPolicy`、`WasmPlugin` 或实验性 `BackendLBPolicy` 资源前，请先阅读[实验功能](/zh/1.5/configuration/experimental-features/)。
+
+## 配置是怎么生效的
+
+控制面启动时通过 `--config` 参数读配置文件。默认路径看你怎么部署的：Helm chart 把 ConfigMap 挂载到 `/etc/nantian/config.yaml`，本地开发直接用仓库里 `configs/controlplane/config.yaml` 这一份。
+
+数据面同理。配置文件在仓库里是 `configs/dataplane/config.yaml`，或者通过 `--config` 指向你自己的路径。
+
+两份文件都用标准 YAML 语法，字段名是 camelCase。时长值用 Go 的 duration 格式：`30s` 表示三十秒，`2m` 表示两分钟，`200ms` 表示 200 毫秒。以 `Ms` 结尾的数值（比如 `timeoutMs`）直接用毫秒数，不带 Go 后缀。
+
+## 配置来源
+
+这份文档里出现的所有默认值都是从 `gateway/internal/config/config.go` 的配置加载代码里直接取的。你在 YAML 里省略某个字段的时候，网关会填上下面表格里列出来的默认值。
+
+任何字段都可以在配置文件里覆盖。用 Helm 的用户应该改 `values.yaml`，不要直接改配置文件，因为 ConfigMap 是 Helm 从 values 模板渲染出来的。
+
+:::tip[配置校验]
+网关在启动时会做基本的校验。不合法的 duration 格式、缺失必填字段、冲突的选项都会导致进程在开始接连接之前就 fatal 退出。在推到生产环境之前，一定先用 dry-run 验证一下你的配置。
+:::
+
+## 章节结构
+
+| 页面 | 内容 |
+|------|------|
+| [控制面](/zh/1.5/configuration/controlplane) | 服务地址、Reconciler 调优、主备选举、节点漂移检测、Admin API |
+| [数据面](/zh/1.5/configuration/dataplane) | 代理运行时、上游连接、健康检查、限流、熔断 |
+| [TLS / mTLS](/zh/1.5/configuration/tls) | Admin TLS、gRPC TLS with mTLS、xDS 传输加密 |
+| [gRPC xDS](/zh/1.5/configuration/xds) | Keepalive 计时器、连接管理、快照生命周期 |
+| [可观测性](/zh/1.5/configuration/observability) | 结构化日志、Prometheus 指标、pprof、访问日志、OpenTelemetry 追踪 |
+| [性能调优](/zh/1.5/configuration/tuning) | 缓冲区大小、连接池尺寸、超时、保护性限制 |
+
+## 关键概念
+
+在开始配置之前，先理解几个关键概念能省不少时间。
+
+### 配置热加载
+
+Nantian Gateway 不支持配置热加载。任何配置变更都需要重启对应组件才会生效。控制面重启时，Leader 选举机制保证配置变更不会中断流量。数据面重启时，滚动更新保证始终有足够的副本在接流量。
+
+这个设计决定是故意的。热加载引入的状态转换复杂度远大于重启带来的那几秒不可用。在 Kubernetes 里，Deployment 的滚动更新就是最好的"配置推送"机制。
+
+### 控制面和数据面的配置边界
+
+两份配置文件是独立的，但有些配置需要在两边对齐。比如 gRPC TLS：控制面配了 TLS 证书，数据面就必须配对应的 TLS 传输参数才能连上。再比如 `controllerName`：控制面用它来认领 Gateway 资源，数据面不需要知道这个值。
+
+对齐的约束在每页的配置表格里都有说明。如果某个参数需要两边一致，表格里会标出来。
+
+### 默认值策略
+
+默认值偏向"安全"和"能用"而不是"高性能"。比如 gRPC TLS 默认关闭，日志级别默认 `info`，连接池默认 32768。这些值足够你跑起来，但生产环境需要根据流量特征调参。具体的调优建议在[性能调优](/zh/1.5/configuration/tuning)那页有详细说明。
+
+## 完整控制面配置示例
+
+下面是一份有代表性的控制面配置文件，涵盖了日常最常改动的几个段落。这不是完整文件，完整版在仓库 `configs/controlplane/config.yaml` 里，但这份示例把关键配置项都标上了注释：
+
+```yaml
+grpcAddr: ":18080"           # xDS gRPC，数据面节点连这个地址
+adminAddr: ":18081"          # Admin API
+metricsAddr: ":18082"        # Prometheus /metrics
+controllerName: "gateway.networking.k8s.io/nantian-gw"
+namespace: "nantian-gw"
+
+# Reconciler 调优
+syncPeriod: 30s
+reconcilerRunner:
+  settleDelay: "300ms"
+  retryBackoff: "1s"
+
+# 主备选举（多副本部署时）
+leaderElection:
+  enabled: true
+  leaseDuration: "15s"
+  renewDeadline: "10s"
+
+# gRPC 长连接保活
+grpcRuntime:
+  keepaliveTime: "30s"
+  keepaliveTimeout: "10s"
+  maxConnectionAge: "30m"
+
+# Admin API 请求体限制
+adminLimits:
+  maxRequestBodyBytes: 2097152   # 2 MiB
+
+# TLS（默认关闭，生产环境再开）
+adminTLS:
+  enabled: false
+grpcTLS:
+  enabled: false
+
+# 日志
+log:
+  level: "info"
+  format: "json"
+
+# 功能开关
+features:
+  enableExperimentalGateway: false
+  enableAiGateway: false
+```
+
+## 配置校验与试运行
+
+网关启动时会对所有配置项做校验。格式不对的 duration、缺失的必填字段、互相冲突的选项都会导致进程在接流量之前直接 fatal 退出。
+
+你可以用 `--dry-run` 参数在不启动完整网关的情况下验证配置文件：
+
+```bash
+nantian-gw --config ./my-config.yaml --dry-run
+```
+
+这个模式会解析 YAML、填充默认值、跑完整校验流程，然后退出。返回码 0 表示配置没问题，有任何错误都会打印具体到哪个字段的报错信息。
+
+:::caution
+试运行只检查配置的语法和语义，不会验证地址能不能通、证书有没有过期、Kubernetes API 能不能连上。这些属于运行时检查。
+:::
+
+把试运行步骤加到 CI 流水线或者 pre-commit hook 里，在配置错误进集群之前就拦住：
+
+```yaml
+# GitHub Actions 示例
+- name: 校验网关配置
+  run: nantian-gw --config deploy/production/controlplane.yaml --dry-run
+```
+
+## 环境差异化配置
+
+不同环境下配置的侧重点不一样。下表总结了各环境之间的差异：
+
+| 配置项 | 开发 / Minikube | 预发布 | 生产 |
+|--------|----------------|--------|------|
+| TLS | 全部关闭 | 自签或预发布 CA 证书 | 正式证书，开启 mTLS |
+| 日志格式 | `text` | `json` | `json` |
+| 日志级别 | `debug` 或 `info` | `info` | `info`（或 `warn`） |
+| 主备选举 | 可关（单副本跑） | 开启（2 副本） | 开启（2+ 副本） |
+| pprof | `enabled: true` | `enabled: false` | `enabled: false` |
+| 超时 | 偏短（反馈快） | 跟生产对齐 | 偏保守 |
+| Admin 鉴权 | 无 | 无或 token | 必须配 Bearer Token |
+
+通过 Helm 的 values 文件来管理这些差异。保留一份 `values.yaml` 放公共默认值，然后按环境叠加覆盖：
+
+```
+deploy/helm/
+  values.yaml              # 公共默认值
+  values-dev.yaml          # 开发环境覆盖
+  values-staging.yaml      # 预发布环境覆盖
+  values-production.yaml   # 生产环境覆盖
+```
+
+部署时指定对应的 values 文件：
+
+```bash
+helm upgrade --install nantian-gw ./deploy/helm \
+  -f deploy/helm/values.yaml \
+  -f deploy/helm/values-production.yaml
+```
+
+## 配置文件位置与优先级
+
+网关启动时只读一份配置文件，不会合并多个文件。解析顺序从高到低是：
+
+1. **`--config` 参数** — 显式指定的路径，优先级最高。
+2. **Helm ConfigMap 挂载** — `/etc/nantian/config.yaml`，Helm chart 自动挂载的。
+3. **仓库默认路径** — 工作目录下的 `configs/controlplane/config.yaml`。
+
+Helm 部署时，chart 会把 `values.yaml` 渲染成 ConfigMap 挂到 `/etc/nantian/config.yaml`。进程启动不带 `--config`，自然就走到这个挂载路径。要改 Helm 部署的配置，改 `values.yaml` 然后 upgrade，不要直接 `kubectl edit configmap`，Helm 下次 upgrade 会把你的手工改动覆盖掉。
+
+本地开发时直接用仓库里的默认配置，也可以通过 `--config` 覆盖：
+
+```bash
+go run ./cmd/nantian-gw --config /tmp/my-config.yaml
+```
+
+不确定到底读了哪个配置文件？看启动日志里带 `"path"` 字段的那一行就行。

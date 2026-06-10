@@ -1,0 +1,113 @@
+---
+title: 实验功能
+slug: zh/1.5/configuration/experimental-features
+---
+
+Nantian Gateway 提供一些默认关闭的实验功能。这些 API 可用于测试 AI 路由、token policy、Wasm 扩展和实验性 Gateway API policy，但它们的 schema 和运行时行为可能变化。
+
+:::caution[实验性 API]
+请有意识地开启这些功能。安装所需 CRD，开启对应的控制面和数据面 flag，并在依赖实验行为前测试完整路由路径。
+:::
+
+## Feature Flags
+
+| Plane | Helm value | Default | Controls |
+| --- | --- | --- | --- |
+| Control plane | `controlplane.config.features.enableExperimentalGateway` | `false` | 在控制面 scheme 中注册实验性 Gateway policy 相关类型，包括 `BackendLBPolicy`、`TokenPolicy` 和 `WasmPlugin` 支持。 |
+| Control plane | `controlplane.config.features.enableAiGateway` | `false` | 在控制面 scheme 中注册 `AIService` 支持。 |
+| Data plane | `dataplane.config.experimental.enableExperimentalGateway` | `false` | 开启数据面中已实现的实验性 gateway 运行时行为。 |
+| Data plane | `dataplane.config.experimental.enableAiGateway` | `false` | 开启数据面 AI gateway 运行时行为。 |
+
+控制面 flag 决定 manager 能注册和 reconcile 哪些资源。数据面 flag 决定快照到达后哪些实验性运行时行为会启用。
+
+## 使用 Helm 开启
+
+创建 `experimental-values.yaml`：
+
+```yaml
+controlplane:
+  config:
+    features:
+      enableExperimentalGateway: true
+      enableAiGateway: true
+
+dataplane:
+  config:
+    experimental:
+      enableExperimentalGateway: true
+      enableAiGateway: true
+```
+
+安装或升级时应用：
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f experimental-values.yaml
+```
+
+重启后的 Pod 会读取渲染后的 ConfigMap。rollout 后请查看日志，确认两个平面都以预期配置启动。
+
+## 使用 Kustomize 开启
+
+Kustomize 用户应编辑或替换 base 清单生成的 ConfigMap。`gateway/deploy/kubernetes/base/kustomization.yaml` 使用：
+
+* `gateway/configs/controlplane/config.yaml`
+* `gateway/configs/dataplane/config.yaml`
+
+数据面仓库也维护运行时默认配置：`dataplane/configs/dataplane/config.yaml`；更新数据面示例时需要保持一致。
+
+控制面片段：
+
+```yaml
+features:
+  enableExperimentalGateway: true
+  enableAiGateway: true
+```
+
+数据面片段：
+
+```yaml
+experimental:
+  enableExperimentalGateway: true
+  enableAiGateway: true
+```
+
+优先使用 overlay，不要直接在 base 文件里做不可追踪的修改。
+
+## 所需 CRD
+
+核心资源如 `Gateway` 和 `HTTPRoute` 需要标准 Gateway API CRD。实验资源还需要对应 CRD：
+
+* 用于 `BackendLBPolicy` 的 Gateway API experimental CRD。
+* gateway base manifest 中的 Nantian CRD：
+  * `aiservices.gateway.nantian.dev`
+  * `tokenpolicies.gateway.nantian.dev`
+  * `wasmplugins.gateway.nantian.dev`
+
+Nantian CRD 是 `gateway.nantian.dev/v1alpha1` 下的 namespaced 扩展资源。`BackendLBPolicy` 是 `gateway.networking.k8s.io/v1alpha2` 下的 Gateway API experimental 资源。
+
+## 验证
+
+先检查 CRD：
+
+```bash
+kubectl get crd aiservices.gateway.nantian.dev
+kubectl get crd tokenpolicies.gateway.nantian.dev
+kubectl get crd wasmplugins.gateway.nantian.dev
+kubectl get crd backendlbpolicies.gateway.networking.k8s.io
+```
+
+再通过日志检查运行配置：
+
+```bash
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
+```
+
+缺少 CRD 会导致资源创建失败。控制面 feature flag 关闭时，资源可能不会注册到 manager scheme。数据面 flag 关闭时，即使控制面接受对象，也可能不会启用对应实验性运行时行为。
+
+## 使用这些 API
+
+CRD 和 flag 准备好后，请创建符合当前 schema 的资源。`AIService`、`TokenPolicy`、`WasmPlugin` 和 `BackendLBPolicy` 示例见[自定义与实验资源](/zh/1.5/api-reference/crds/)。

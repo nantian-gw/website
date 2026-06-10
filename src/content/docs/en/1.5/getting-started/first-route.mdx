@@ -1,0 +1,447 @@
+---
+title: Your First Route
+slug: en/1.5/getting-started/first-route
+---
+
+Now that Nantian Gateway is running, let's create a Gateway resource and an HTTPRoute to proxy traffic to a backend service. This is the core workflow you'll use every time you expose a service through the gateway.
+
+By the end of this guide, you'll have a working HTTP route that accepts requests on port 10080 and forwards them to a sample application.
+
+## Overview
+
+The Kubernetes Gateway API defines three resources that work together:
+
+1. **GatewayClass**: Defines a class of gateway controllers. Nantian Gateway creates one automatically during installation with the controller name `gateway.networking.k8s.io/nantian-gw`.
+2. **Gateway**: A request for a point where traffic can be translated to Services within the cluster. You create this to tell the gateway to start listening on a port.
+3. **HTTPRoute**: Defines rules for matching HTTP traffic and forwarding it to backend services. This is where you specify paths, headers, and destination services.
+
+The flow is: GatewayClass defines which controller handles the request, Gateway opens a listener port, and HTTPRoute maps incoming requests to backend pods.
+
+## Step 1: Deploy a sample backend
+
+First, create a simple echo server that responds to HTTP requests. This gives us something to route traffic to.
+
+Create a file called `echo-server.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: echo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-server
+  namespace: echo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: echo-server
+  template:
+    metadata:
+      labels:
+        app: echo-server
+    spec:
+      containers:
+        - name: echo-server
+          image: ealen/echo-server:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-server
+  namespace: echo
+spec:
+  selector:
+    app: echo-server
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+```
+
+Apply it:
+
+```bash
+kubectl apply -f echo-server.yaml
+```
+
+Expected output:
+
+```
+namespace/echo created
+deployment.apps/echo-server created
+service/echo-server created
+```
+
+Verify the echo server is running:
+
+```bash
+kubectl get pods -n echo
+```
+
+Expected output:
+
+```
+NAME                           READY   STATUS    RESTARTS   AGE
+echo-server-xxxxxxxxx-xxxxx    1/1     Running   0          30s
+echo-server-xxxxxxxxx-xxxxx    1/1     Running   0          25s
+```
+
+## Step 2: Create a Gateway
+
+Now create a Gateway resource that tells Nantian Gateway to listen for HTTP traffic. The Gateway references the GatewayClass that was created during installation.
+
+Create a file called `gateway.yaml`:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: echo
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+Apply it:
+
+```bash
+kubectl apply -f gateway.yaml
+```
+
+Expected output:
+
+```
+gateway.gateway.networking.k8s.io/my-gateway created
+```
+
+Check the Gateway status:
+
+```bash
+kubectl get gateway -n echo
+```
+
+Expected output:
+
+```
+NAME         CLASS        ADDRESS          PROGRAMMED   AGE
+my-gateway   nantian-gw   <pending>        True         10s
+```
+
+The `PROGRAMMED` column should show `True` once the control plane has processed the Gateway. The `ADDRESS` column may show `<pending>` until the data plane allocates an address, which is normal for non-cloud environments.
+
+:::note[Gateway status]
+The control plane reconciles Gateway resources and pushes the configuration to the data plane over gRPC. The data plane then opens the requested listener port. The `PROGRAMMED` status becomes `True` when the control plane has successfully processed the Gateway configuration.
+:::
+
+You can also inspect the Gateway in detail:
+
+```bash
+kubectl describe gateway my-gateway -n echo
+```
+
+Look for the `Status` section. A healthy Gateway shows:
+
+```
+Status:
+  Addresses:
+  Conditions:
+    Last Transition Time:  ...
+    Message:               ...
+    Observed Generation:   1
+    Reason:                Programmed
+    Status:                True
+    Type:                  Programmed
+  Listeners:
+    Attached Routes:  0
+    Conditions:
+      Last Transition Time:  ...
+      Message:               ...
+      Observed Generation:   1
+      Reason:                Programmed
+      Status:                True
+      Type:                  Programmed
+    Name:  http
+```
+
+## Step 3: Create an HTTPRoute
+
+Now create an HTTPRoute that matches incoming requests and forwards them to the echo server.
+
+Create a file called `httproute.yaml`:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: echo
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: echo-server
+          port: 80
+```
+
+Apply it:
+
+```bash
+kubectl apply -f httproute.yaml
+```
+
+Expected output:
+
+```
+httproute.gateway.networking.k8s.io/echo-route created
+```
+
+Check the route status:
+
+```bash
+kubectl get httproute -n echo
+```
+
+Expected output:
+
+```
+NAME         HOSTNAMES   AGE
+echo-route               10s
+```
+
+Make sure the route is accepted by describing it:
+
+```bash
+kubectl describe httproute echo-route -n echo
+```
+
+The `Status` section should show:
+
+```
+Status:
+  Parents:
+    Conditions:
+      Last Transition Time:  ...
+      Message:               ...
+      Observed Generation:   1
+      Reason:                Accepted
+      Status:                True
+      Type:                  Accepted
+    Controller Name:  gateway.networking.k8s.io/nantian-gw
+    Parent Ref:
+      Kind:       Gateway
+      Name:       my-gateway
+      Namespace:  echo
+```
+
+The `Accepted` condition tells you the control plane validated the route and pushed it to the data plane.
+
+:::tip[Route troubleshooting]
+If the route shows `Accepted: False`, check that the parent Gateway exists and is in the same namespace. Also verify that the backend Service exists and the port number matches. The `Message` field in the status condition will tell you exactly what went wrong.
+:::
+
+## Step 4: Test the traffic
+
+The data plane listens on port `10080` inside the cluster. Depending on how you set up your Kind cluster, you have a few ways to reach it.
+
+### Option A: Port mapping (Kind with extraPortMappings)
+
+If you used the standard Kind config with port mappings, the gateway is reachable on your host at port `18080`:
+
+```bash
+curl http://localhost:18080/
+```
+
+### Option B: Port forwarding
+
+If you didn't set up port mappings, port-forward to the data plane service:
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:10080
+```
+
+Then in another terminal:
+
+```bash
+curl http://localhost:8080/
+```
+
+### Option C: Within the cluster
+
+Run a temporary pod inside the cluster to test:
+
+```bash
+kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
+  curl -s http://nantian-gw-dataplane.nantian-gw.svc:10080/
+```
+
+### Expected response
+
+The echo server returns a JSON response with details about the request:
+
+```json
+{
+  "host": {
+    "hostname": "localhost",
+    "ip": "::ffff:10.244.x.x",
+    "ips": []
+  },
+  "http": {
+    "method": "GET",
+    "baseUrl": "",
+    "originalUrl": "/",
+    "protocol": "http"
+  },
+  "request": {
+    "params": {
+      "0": "/"
+    },
+    "query": {},
+    "cookies": {},
+    "body": {},
+    "headers": {
+      "host": "localhost:18080",
+      "user-agent": "curl/8.x.x",
+      "accept": "*/*"
+    }
+  },
+  "environment": {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "HOSTNAME": "echo-server-xxxxxxxxx-xxxxx",
+    "NODE_VERSION": "x.x.x"
+  }
+}
+```
+
+The response confirms that the request traveled through the Nantian Gateway data plane and reached the echo server backend. The `HOSTNAME` field shows which echo server pod handled the request, and the `host` header reflects the original request.
+
+## Step 5: Try path-based routing
+
+Let's add a second route to demonstrate path matching. Deploy another backend:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whoami
+  namespace: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whoami
+  template:
+    metadata:
+      labels:
+        app: whoami
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: whoami
+  namespace: echo
+spec:
+  selector:
+    app: whoami
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+```
+
+Apply it and update the HTTPRoute to add a path rule:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-route
+  namespace: echo
+spec:
+  parentRefs:
+    - name: my-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /whoami
+      backendRefs:
+        - name: whoami
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: echo-server
+          port: 80
+```
+
+Apply the updated route:
+
+```bash
+kubectl apply -f httproute.yaml
+```
+
+Now test the routing:
+
+```bash
+# Requests to /whoami go to the whoami service
+curl http://localhost:18080/whoami
+
+# Everything else goes to the echo server
+curl http://localhost:18080/hello
+```
+
+The gateway inspects the request path and forwards it to the matching backend. Routes are evaluated in order, so the more specific `/whoami` prefix is checked before the catch-all `/` rule.
+
+## Cleanup
+
+When you're done experimenting, remove the resources:
+
+```bash
+kubectl delete namespace echo
+```
+
+Or to keep the namespace but remove the Gateway API resources:
+
+```bash
+kubectl delete httproute echo-route -n echo
+kubectl delete gateway my-gateway -n echo
+```
+
+## What's next
+
+You've deployed a Gateway and HTTPRoute and verified traffic flows through the data plane. Here are some next steps:
+
+* **Installation options**: Learn about [Helm customization](/en/1.5/installation/helm), [Kustomize overlays](/en/1.5/installation/kustomize), and [production deployment](/en/1.5/installation/production).
+* **TLS configuration**: Set up [TLS listeners and mTLS](/en/1.5/configuration/tls) for secure traffic.
+* **Observability**: Enable [metrics scraping](/en/1.5/operations/metrics) and set up [Grafana dashboards](/en/1.5/operations/grafana).
+* **Architecture**: Read the [architecture overview](/en/1.5/architecture/) to understand the control plane and data plane split.
+* **API reference**: Browse the [Gateway API resources](/en/1.5/api-reference/gateway-api) and [custom CRDs](/en/1.5/api-reference/crds).

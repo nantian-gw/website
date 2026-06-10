@@ -1,0 +1,184 @@
+---
+title: gRPC xDS Configuration
+slug: en/1.5/configuration/xds
+---
+
+The control plane and data plane communicate over a bidirectional gRPC stream using the xDS protocol. This page covers the gRPC runtime settings that govern connection lifecycle, keepalive behavior, and snapshot delivery.
+
+All settings on this page live under the `grpcRuntime` key in the control plane configuration.
+
+## How xDS Works in Nantian Gateway
+
+xDS configuration delivery follows a bidirectional gRPC streaming lifecycle between the data plane and the control plane:
+
+1. **Dial**: The data plane opens a gRPC connection to the control plane's xDS endpoint, sending its node identifier and the current configuration version it holds.
+
+2. **Accept and authenticate**: The control plane accepts the connection, performs TLS handshake (and mTLS if configured), and starts a bidirectional xDS stream.
+
+3. **Initial snapshot**: The control plane pushes a full state-of-the-world (SotW) snapshot containing all known configuration: listeners, clusters, routes, and endpoints. This is the complete routing picture.
+
+4. **ACK and apply**: The data plane receives the snapshot, parses it, applies it to the local Envoy/NGINX runtime, and sends an ACK back to the control plane. From this point the data plane is routing traffic with the latest configuration.
+
+5. **Delta updates**: When a Kubernetes resource changes (a Gateway, HTTPRoute, Service, or EndpointSlice), the control plane rebuilds only the affected parts of the snapshot and pushes a delta containing just the changed resources. The data plane applies the delta and sends another ACK.
+
+6. **Reconnection**: If the gRPC stream breaks due to a network issue or a control plane restart, the data plane reconnects with exponential backoff. On reconnect, the control plane computes a delta between the data plane's last known version and the current state, pushing only what changed.
+
+## Keepalive
+
+gRPC keepalive pings detect dead connections without waiting for TCP timeouts. The control plane enforces keepalive policy on incoming data plane connections:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `grpcRuntime.keepaliveTime` | string | `30s` | Interval between keepalive pings sent by the server |
+| `grpcRuntime.keepaliveTimeout` | string | `10s` | How long to wait for a ping response before closing the connection |
+| `grpcRuntime.minPingInterval` | string | `15s` | Minimum interval the server accepts between client pings |
+
+The server sends pings every `keepaliveTime`. If no response arrives within `keepaliveTimeout`, the connection is considered dead and gets closed. The data plane detects the closed connection and reconnects automatically.
+
+`minPingInterval` prevents misbehaving clients from flooding the server with pings. If a client sends pings faster than this interval, the server responds with a GOAWAY frame and closes the connection.
+
+:::note[Data plane keepalive]
+The data plane also sends its own keepalive pings. These are governed by gRPC client defaults, not by the control plane configuration. The `minPingInterval` setting on the control plane determines whether the data plane's ping rate is acceptable.
+:::
+
+## Connection lifecycle
+
+These settings control how long gRPC connections can live:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `grpcRuntime.maxConnectionIdle` | string | `2m` | Close connections that have been idle for this duration |
+| `grpcRuntime.maxConnectionAge` | string | `30m` | Force-close connections after this duration, regardless of activity |
+| `grpcRuntime.maxConnectionAgeGrace` | string | `30s` | Grace period after maxConnectionAge before forcible close |
+
+`maxConnectionIdle` cleans up connections from data planes that have disconnected without properly closing the stream. After two minutes of no activity, the server terminates the connection.
+
+`maxConnectionAge` enforces connection rotation. Every 30 minutes, the server initiates a graceful close. The data plane reconnects on a new connection, distributing load across control plane replicas and preventing very long-lived connections from accumulating state.
+
+The `maxConnectionAgeGrace` gives the data plane time to finish in-flight RPCs before the connection is forcibly terminated. The server sends a GOAWAY frame at `maxConnectionAge`, then waits `maxConnectionAgeGrace` before closing the TCP connection.
+
+## Connection Flow
+
+Below is the sequence between the data plane (DP) and the control plane (CP) from startup through a delta update:
+
+```
+DP                        CP
+ |                         |
+ |--- Dial xDS endpoint -->|
+ |                         |
+ |<-- Accept, TLS handshake-|
+ |                         |
+ |--- Node ID + version -->|   (DP identifies itself)
+ |                         |
+ |<-- SotW snapshot --------|   (full config push)
+ |                         |
+ |--- ACK (nonce: n1) ---->|   (DP confirms receipt)
+ |                         |
+ |       ...runtime...     |
+ |                         |
+ |                    [K8s Gateway resource changed]
+ |                         |
+ |<-- Delta snapshot -------|   (only changed resources)
+ |                         |
+ |--- ACK (nonce: n2) ---->|
+ |                         |
+ |       ...runtime...     |
+ |                         |
+ |--- GOAWAY (age) ------->|   (or network break)
+ |                         |
+ |--- Wait + reconnect --->|
+ |                         |
+ |<-- Delta from v1 to vN--|   (catch-up on reconnect)
+ |                         |
+ |--- ACK (nonce: n3) ---->|
+```
+
+## Snapshot delivery
+
+Configuration snapshots flow from the control plane to data planes over the xDS stream. These settings govern snapshot transmission:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `grpcRuntime.snapshotSendTimeout` | string | `5s` | Timeout for sending a complete snapshot to a data plane |
+| `grpcRuntime.snapshotAckTimeout` | string | `30s` | How long to wait for a data plane to acknowledge a snapshot |
+| `grpcRuntime.permitWithoutStream` | bool | `false` | Allow the control plane to operate without any connected data planes |
+
+The `snapshotSendTimeout` limits how long the server spends pushing a snapshot to a single data plane. If the data plane is slow to receive (due to network issues or resource constraints), the server moves on after this timeout and logs a warning.
+
+The `snapshotAckTimeout` is the window during which the data plane must acknowledge receipt and begin applying the snapshot. If the data plane doesn't acknowledge within this period, the control plane marks the node as stale and may trigger a full resync on the next snapshot cycle.
+
+`permitWithoutStream` changes the control plane's startup behavior. When `false` (default), the control plane won't mark itself ready until at least one data plane connects. When `true`, the control plane becomes ready immediately, which is useful in development or when data planes connect later.
+
+### Snapshot Delivery Model
+
+Nantian Gateway uses the delta xDS protocol for incremental configuration delivery:
+
+**Initial sync.** When a data plane first connects, the control plane builds and sends a full SotW snapshot covering every resource type: listeners, clusters, routes, and endpoints. This snapshot carries a nonce, a unique identifier the data plane must echo back in its ACK.
+
+**Delta pushes.** After the initial sync, the control plane tracks a per-resource-type version for each connected data plane. When a Kubernetes resource changes, the control plane's snapshot builder rebuilds only the affected types. The resulting delta contains the resources that were added, updated, or removed since the last acknowledged version.
+
+**Trigger conditions.** A snapshot rebuild is triggered by changes to any of these resources: Gateway (new or modified ingress point), HTTPRoute (routing rules changed), Service (backend port or selector changed), and EndpointSlice (backend IPs added or removed).
+
+**ACK/NACK protocol.** Every snapshot, whether full or delta, carries a nonce. The data plane must respond with an ACK (echoing the nonce) or a NACK (echoing the nonce plus an error detail). An ACK tells the control plane the snapshot was parsed and applied. A NACK tells the control plane something was rejected and the previous version is still in use.
+
+**NACK handling.** On a NACK, the control plane retries the same snapshot once. If the data plane NACKs a second time, the control plane logs the error, closes the connection, and waits for the data plane to reconnect. On reconnect the data plane falls back to a fresh SotW sync. Persistent NACKs typically point to a data plane version mismatch or a malformed configuration resource.
+
+## Data plane xDS transport
+
+The data plane has its own xDS transport settings under the `xdsTransport` key:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `xdsTransport.staleStreamTimeoutMs` | int | `30000` | How long to wait for new data on a stale stream before reconnecting (ms) |
+| `xdsTransport.snapshotFreshnessTimeoutMs` | int | `90000` | How long a snapshot remains valid without updates before the data plane considers it stale (ms) |
+
+The `staleStreamTimeoutMs` detects broken streams. If the data plane receives no data on the xDS stream for this period, it assumes the connection is dead and reconnects. This complements the server-side keepalive mechanism.
+
+The `snapshotFreshnessTimeoutMs` is a safety timer. If the data plane doesn't receive a new snapshot within this window, it considers its current configuration stale. A stale configuration still forwards traffic, but the data plane logs warnings and emits a metric so operators can investigate.
+
+:::caution[Stale snapshots]
+A stale snapshot means the data plane hasn't heard from the control plane in over 90 seconds (by default). This could indicate a control plane outage, a network partition, or a gRPC stream issue. The data plane continues serving traffic with its last known configuration, but no new routes or backend changes will take effect until the connection recovers.
+:::
+
+## gRPC Health Checks
+
+xDS streams use the standard [gRPC health checking protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md). Each data plane connection is tracked as a serving status by the control plane:
+
+* **SERVING**: The xDS stream is active and the data plane is processing snapshots.
+* **NOT\_SERVING**: The stream is closed or the data plane has not yet been created. The control plane won't push snapshots to a NOT\_SERVING endpoint.
+
+The data plane queries the control plane's health service at startup and periodically during operation. If the control plane reports NOT\_SERVING (for example, during a leader election in multi-replica deployments), the data plane backs off and retries. This prevents a data plane from hammering an unready control plane.
+
+Health check responses are lightweight (single RPC per check) and consume negligible bandwidth compared to the snapshot stream. The default gRPC health check interval is 5 seconds.
+
+## Troubleshooting
+
+### Connection refused
+
+If the data plane logs `connection refused` on startup, check that the control plane's gRPC server is listening on the expected port. Verify the `controlPlaneAddr` in the data plane config matches the control plane's `--grpc-port` flag. Also confirm no firewall or network policy is blocking the port between the data plane and control plane.
+
+### TLS handshake failure
+
+A TLS handshake failure typically means mismatched certificates. Check that `xdsTransport.caCertPath` points to the CA that signed the control plane's certificate. For mTLS setups, ensure `xdsTransport.clientCertPath` and `xdsTransport.clientKeyPath` are both set and that the control plane trusts the client CA. Use `openssl s_client -connect <cp-host>:<grpc-port>` to test the TLS handshake manually.
+
+### NACK loop
+
+If the data plane repeatedly NACKs the same snapshot, check the data plane version against the control plane version. A version mismatch is the most common cause: newer control planes may emit xDS resources the older data plane does not understand. Other causes include malformed Gateway API resources (check `kubectl describe` for validation errors) or resource type conflicts (two HTTPRoutes claiming the same hostname with incompatible settings).
+
+After two consecutive NACKs, the control plane closes the connection. The data plane reconnects and restarts the sync from a fresh SotW snapshot. If NACKs persist after the reconnect, the resource causing the rejection must be fixed.
+
+### Stale config
+
+If routes are not updating despite kubectl showing the correct resources, the snapshot delivery pipeline may be stuck. Check the control plane logs for snapshot send failures or ACK timeouts. Confirm the data plane has an active xDS stream (the control plane's metrics endpoint shows connected data plane count). If the stream is alive but snapshots aren't flowing, inspect `snapshotSendTimeout` and `snapshotAckTimeout`: values too low for the snapshot size can cause send/ack cycles that never complete.
+
+## Tuning for scale
+
+Default keepalive and connection lifecycle settings work well for clusters with up to a few dozen data planes. For larger deployments, consider these adjustments:
+
+**Increase `maxConnectionAge`** to `1h` or higher if you have hundreds of data planes. Frequent reconnections from all data planes simultaneously can create a thundering herd on the control plane.
+
+**Reduce `keepaliveTime`** to `10s` in environments with aggressive load balancers or firewalls that drop idle connections. Shorter keepalive intervals keep NAT and firewall state tables from expiring.
+
+**Increase `snapshotSendTimeout`** to `15s` for very large configurations (thousands of routes, hundreds of backends). Serializing and transmitting a large snapshot takes time, and a short timeout can cause unnecessary retransmissions.
+
+**Set `permitWithoutStream`** to `true` in blue/green deployment scenarios where new control plane instances start before data planes are migrated.

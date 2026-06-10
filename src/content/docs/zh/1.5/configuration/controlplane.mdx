@@ -1,0 +1,326 @@
+---
+title: 控制面配置
+slug: zh/1.5/configuration/controlplane
+---
+
+控制面配置文件位于 `gateway/configs/controlplane/config.yaml`。它控制控制面进程的各个方面：服务器地址、Kubernetes 控制器行为、Admin API 设置、TLS、gRPC 运行时参数和功能开关。
+
+## 服务器地址
+
+控制面监听四个不同的地址：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `grpcAddr` | string | `:18080` | 用于向数据面传输 xDS 配置的 gRPC 服务器地址 |
+| `adminAddr` | string | `:18081` | 供仪表盘和内部工具使用的 HTTP Admin API 服务器 |
+| `metricsAddr` | string | `:18082` | Prometheus 指标端点 |
+| `healthProbeAddr` | string | `:18083` | Kubernetes 健康检查和就绪探针端点 |
+
+每个地址遵循 Go 的 `net.Listen` 格式。主机部分为空（如 `:18080`）表示绑定到所有网络接口。使用 `127.0.0.1:18081` 将 Admin API 限制为仅本地访问。
+
+:::caution[暴露 Admin API]
+Admin API 提供对网关资源的完整读写访问。切勿在未配置 TLS 和认证的情况下将 `adminAddr` 暴露到外部网络。请参阅 [TLS 配置](/zh/1.5/configuration/tls) 页面了解安全配置方法。
+:::
+
+## 控制器配置
+
+这些设置控制控制面如何与 Kubernetes API 服务器交互并管理网关资源。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `controllerName` | string | `gateway.networking.k8s.io/nantian-gw` | 此实例响应的 GatewayClass 控制器名称 |
+| `statusAddress` | string | `127.0.0.1` | 在 Gateway 状态 `addresses` 字段中使用的 IP 地址 |
+| `statusAddresses` | \[]string | — | Gateway 状态的附加地址（主机名或 IP） |
+| `namespace` | string | `nantian-gw` | 控制面运行的命名空间 |
+| `syncPeriod` | duration | `30s` | 完整资源重新同步的间隔 |
+| `syncSettleDelay` | duration | `200ms` | 处理一批变更前等待累积的延迟 |
+
+### 协调器运行器
+
+控制处理 Kubernetes 资源变更的协调循环。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `reconcilerRunner.settleDelay` | duration | `300ms` | 变更事件后开始协调之前的延迟 |
+| `reconcilerRunner.retryBackoff` | duration | `1s` | 协调失败时的重试间隔 |
+
+### 节点状态
+
+控制控制面如何跟踪和持久化数据面节点状态。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `nodeStatus.leasePrefix` | string | `aeg-node` | Kubernetes API 中节点租约对象的前缀 |
+| `nodeStatus.persistTimeout` | duration | `2s` | 将节点状态持久化到 API 服务器的超时时间 |
+| `nodeStatus.persistDebounce` | duration | `250ms` | 节点状态持久化操作的最小间隔 |
+
+### 节点漂移
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `nodeDrift.warningThreshold` | duration | `15s` | 无心跳的节点被视为漂移的持续时间 |
+
+## Admin API 配置
+
+### 就绪检查
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminReadiness.mode` | string | `snapshot` | 就绪检查模式：`snapshot`（构建首个快照后即就绪）或 `always` |
+
+### 限制
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminLimits.maxRequestBodyBytes` | int | `2097152`（2 MB） | Admin API 请求体的最大大小 |
+| `adminLimits.maxResponseBodyBytes` | int | `8388608`（8 MB） | Admin API 响应体的最大大小 |
+
+### 运行时
+
+Admin API 的 HTTP 服务器运行时设置：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminRuntime.readHeaderTimeout` | duration | `5s` | 读取请求头的最大时间 |
+| `adminRuntime.readTimeout` | duration | `30s` | 读取完整请求的最大时间 |
+| `adminRuntime.writeTimeout` | duration | `30s` | 写入响应的最大时间 |
+| `adminRuntime.idleTimeout` | duration | `2m` | 关闭连接前的最大空闲时间 |
+
+### 数据面聚合
+
+Admin API 可以聚合来自已连接数据面实例的响应：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminRuntime.dataplaneAggregation.serviceName` | string | `nantian-dataplane-admin` | 数据面 Admin 端点的 Kubernetes Service 名称 |
+| `adminRuntime.dataplaneAggregation.namespace` | string | `nantian-gw` | 数据面 Admin Service 的命名空间 |
+| `adminRuntime.dataplaneAggregation.portName` | string | `admin` | 数据面 Admin Service 的端口名称 |
+| `adminRuntime.dataplaneAggregation.timeout` | duration | `2s` | 数据面聚合请求的超时时间 |
+| `adminRuntime.dataplaneAggregation.bearerTokenFile` | string | `""` | 用于向数据面认证的 bearer token 文件路径 |
+
+### 认证
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminAuth.bearerToken` | string | `""` | Admin API 认证的静态 bearer token |
+| `adminAuth.bearerTokenFile` | string | `""` | 包含 bearer token 的文件路径 |
+| `adminAuth.rateLimitRPS` | int64 | `0` | Admin API 每秒请求数限制（0 = 无限制） |
+
+`rateLimitRPS` 字段对 Admin API 应用速率限制，防止过多请求。设置为 `0` 禁用速率限制。
+
+## 转换器限制
+
+控制将 Kubernetes 资源转换为内部配置的转换器的资源限制：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `translatorLimits.maxInputObjects` | int | `0` | 最大输入对象数（0 = 无限制） |
+| `translatorLimits.maxSnapshotObjects` | int | `0` | 配置快照中的最大对象数（0 = 无限制） |
+| `translatorLimits.maxSnapshotEndpoints` | int | `0` | 配置快照中的最大端点数（0 = 无限制） |
+
+## 日志
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `log.level` | string | `info` | 最低日志级别：`debug`、`info`、`warn`、`error` |
+| `log.format` | string | `json` | 输出格式：`json` 或 `text` |
+| `log.addSource` | bool | `false` | 在日志条目中包含源文件和行号 |
+
+## 领导者选举
+
+控制面使用 Kubernetes 领导者选举实现高可用：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `leaderElection.enabled` | bool | `true` | 启用领导者选举（单副本部署时禁用） |
+| `leaderElection.id` | string | `nantian-controlplane-leader` | 领导者选举锁的标识 |
+| `leaderElection.leaseDuration` | duration | `15s` | 领导者持有租约的持续时间 |
+| `leaderElection.renewDeadline` | duration | `10s` | 领导者续约的截止时间 |
+| `leaderElection.retryPeriod` | duration | `2s` | 非领导者获取租约的尝试间隔 |
+
+## 仪表盘 API
+
+控制面包含用于 Web 管理界面的内置仪表盘 API：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `dashboardApi.enabled` | bool | `true` | 启用仪表盘 API 端点 |
+| `dashboardApi.basePath` | string | `/api/dashboard` | 仪表盘 API 端点的 URL 路径前缀 |
+| `dashboardApi.dataplaneAdminUrl` | string | `http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080` | 数据面 Admin API 访问的 URL 模板 |
+| `dashboardApi.requestTimeout` | duration | `5s` | 仪表盘 API 请求的超时时间 |
+| `dashboardApi.resourceMutationsEnabled` | bool | `true` | 允许通过仪表盘 API 进行资源变更 |
+
+## 性能分析
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `pprof.enabled` | bool | `false` | 启用 Go pprof 性能分析端点 |
+| `pprof.addr` | string | `127.0.0.1:6060` | pprof HTTP 服务器的地址 |
+| `pprof.bearerToken` | string | `""` | pprof 端点认证的 bearer token |
+| `pprof.bearerTokenFile` | string | `""` | 包含 pprof bearer token 的文件路径 |
+
+调试性能问题时启用 pprof。pprof 服务器应仅绑定到 localhost。配置 bearer token 后，pprof 端点需要认证。
+
+## TLS 配置
+
+详细 TLS 配置请参阅 [TLS / mTLS](/zh/1.5/configuration/tls) 页面。
+
+### Admin TLS
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `adminTLS.enabled` | bool | `false` | 在 Admin HTTP 服务器上启用 TLS |
+| `adminTLS.certPath` | string | `""` | 服务器证书路径（PEM 格式） |
+| `adminTLS.keyPath` | string | `""` | 服务器私钥路径（PEM 格式） |
+| `adminTLS.clientCAPath` | string | `""` | 用于验证客户端证书的 CA 证书路径（mTLS） |
+| `adminTLS.requireClientCert` | bool | `false` | 要求并验证客户端证书（mTLS） |
+
+Admin TLS 强制使用 ECDHE 密码套件（最低 TLS 1.2）以确保前向安全性。设置 `clientCAPath` 后，服务器会验证客户端证书。将 `requireClientCert` 设为 `true` 可拒绝无有效客户端证书的连接。
+
+### gRPC TLS
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `grpcTLS.enabled` | bool | `false` | 在 gRPC 服务器上启用 TLS |
+| `grpcTLS.certPath` | string | `""` | 服务器证书路径（PEM 格式） |
+| `grpcTLS.keyPath` | string | `""` | 服务器私钥路径（PEM 格式） |
+| `grpcTLS.clientCAPath` | string | `""` | 用于验证客户端证书的 CA 证书路径 |
+| `grpcTLS.requireClientCert` | bool | `false` | 要求并验证客户端证书（mTLS） |
+
+## gRPC 运行时
+
+这些设置控制 xDS 通信的 gRPC 服务器行为：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `grpcRuntime.keepaliveTime` | duration | `30s` | 向已连接数据面发送 keepalive ping 的间隔 |
+| `grpcRuntime.keepaliveTimeout` | duration | `10s` | keepalive ping 响应的超时时间 |
+| `grpcRuntime.minPingInterval` | duration | `15s` | 数据面客户端 ping 的最小间隔 |
+| `grpcRuntime.maxConnectionIdle` | duration | `2m` | 关闭 gRPC 连接前的最大空闲时间 |
+| `grpcRuntime.maxConnectionAge` | duration | `30m` | gRPC 连接的最大生命周期 |
+| `grpcRuntime.maxConnectionAgeGrace` | duration | `30s` | 达到最大连接龄后强制关闭前的宽限期 |
+| `grpcRuntime.snapshotSendTimeout` | duration | `5s` | 发送配置快照的超时时间 |
+| `grpcRuntime.snapshotAckTimeout` | duration | `30s` | 接收快照确认的超时时间 |
+| `grpcRuntime.permitWithoutStream` | bool | `false` | 允许没有活跃 xDS 流的数据面 |
+
+## 功能开关
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `features.enableExperimentalGateway` | bool | `false` | 启用实验性 Gateway API 功能 |
+| `features.enableAiGateway` | bool | `false` | 启用内置 AI 网关模块 |
+
+## 完整配置示例
+
+```yaml
+grpcAddr: ":18080"
+adminAddr: ":18081"
+metricsAddr: ":18082"
+healthProbeAddr: ":18083"
+controllerName: "gateway.networking.k8s.io/nantian-gw"
+statusAddress: "127.0.0.1"
+namespace: "nantian-gw"
+syncPeriod: 30s
+syncSettleDelay: 200ms
+
+reconcilerRunner:
+  settleDelay: "300ms"
+  retryBackoff: "1s"
+
+nodeStatus:
+  leasePrefix: "aeg-node"
+  persistTimeout: "2s"
+  persistDebounce: "250ms"
+
+nodeDrift:
+  warningThreshold: "15s"
+
+adminReadiness:
+  mode: "snapshot"
+
+adminLimits:
+  maxRequestBodyBytes: 2097152
+  maxResponseBodyBytes: 8388608
+
+adminRuntime:
+  readHeaderTimeout: "5s"
+  readTimeout: "30s"
+  writeTimeout: "30s"
+  idleTimeout: "2m"
+  dataplaneAggregation:
+    serviceName: "nantian-dataplane-admin"
+    namespace: "nantian-gw"
+    portName: "admin"
+    timeout: "2s"
+    bearerTokenFile: ""
+
+translatorLimits:
+  maxInputObjects: 0
+  maxSnapshotObjects: 0
+  maxSnapshotEndpoints: 0
+
+adminAuth:
+  bearerToken: ""
+  bearerTokenFile: ""
+  rateLimitRPS: 0
+
+dashboardApi:
+  enabled: true
+  basePath: "/api/dashboard"
+  dataplaneAdminUrl: "http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080"
+  requestTimeout: "5s"
+  resourceMutationsEnabled: true
+
+pprof:
+  enabled: false
+  addr: "127.0.0.1:6060"
+  bearerToken: ""
+  bearerTokenFile: ""
+
+log:
+  level: "info"
+  format: "json"
+  addSource: false
+
+leaderElection:
+  enabled: true
+  id: "nantian-controlplane-leader"
+  leaseDuration: "15s"
+  renewDeadline: "10s"
+  retryPeriod: "2s"
+
+adminTLS:
+  enabled: false
+  certPath: ""
+  keyPath: ""
+  clientCAPath: ""
+  requireClientCert: false
+
+grpcTLS:
+  enabled: false
+  certPath: ""
+  keyPath: ""
+  clientCAPath: ""
+  requireClientCert: false
+
+grpcRuntime:
+  keepaliveTime: "30s"
+  keepaliveTimeout: "10s"
+  minPingInterval: "15s"
+  maxConnectionIdle: "2m"
+  maxConnectionAge: "30m"
+  maxConnectionAgeGrace: "30s"
+  snapshotSendTimeout: "5s"
+  snapshotAckTimeout: "30s"
+  permitWithoutStream: false
+
+features:
+  enableExperimentalGateway: false
+  enableAiGateway: false
+```
+
+## 下一步
+
+* [数据面配置](/zh/1.5/configuration/dataplane) — 数据面配置参考
+* [TLS / mTLS](/zh/1.5/configuration/tls) — 详细的 TLS 配置指南
+* [可观测性](/zh/1.5/configuration/observability) — 日志、指标和链路追踪配置

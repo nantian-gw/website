@@ -1,0 +1,229 @@
+---
+title: Helm Installation
+slug: en/1.5/installation/helm
+---
+
+The Helm chart is the recommended way to install Nantian Gateway. It packages the control plane, data plane, dashboard, RBAC, NetworkPolicies, services, ConfigMaps, and the default `GatewayClass` into one release.
+
+## Prerequisites
+
+Install the Gateway API standard CRDs first:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+kubectl get crd gateways.gateway.networking.k8s.io
+```
+
+You also need Helm 3.x and `kubectl` access to the target cluster.
+
+## Add The Chart Repository
+
+Use the current chart repository URL:
+
+```bash
+helm repo add nantian-gw https://charts.nantian.dev
+helm repo update
+```
+
+Do not use the legacy plural chart host.
+
+## Install With Defaults
+
+```bash
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace
+```
+
+The default release creates namespace `nantian-gw`, two control plane replicas, two data plane replicas, one dashboard replica, the fixed services listed in the installation overview, and a `GatewayClass` named `nantian-gw`.
+
+Preview the rendered manifests before installing:
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw > rendered.yaml
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --dry-run
+```
+
+## Key Default Values
+
+These snippets match the current chart defaults.
+
+### Global And GatewayClass
+
+```yaml
+global:
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+  commonLabels: {}
+
+gatewayClass:
+  enabled: true
+  controllerName: "gateway.networking.k8s.io/nantian-gw"
+```
+
+The chart derives the default `GatewayClass` name from the controller name, so `gateway.networking.k8s.io/nantian-gw` becomes `nantian-gw`.
+
+### Control Plane
+
+```yaml
+controlplane:
+  enabled: true
+  replicas: 2
+  image:
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "latest"
+    pullPolicy: Always
+  config:
+    grpcAddr: ":18080"
+    adminAddr: ":18081"
+    metricsAddr: ":18082"
+    healthProbeAddr: ":18083"
+    features:
+      enableExperimentalGateway: false
+      enableAiGateway: false
+```
+
+The control plane service split is:
+
+| Service | Port |
+| --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` |
+| `nantian-gw-controlplane-admin` | `18081` |
+| `nantian-gw-controlplane-metrics` | `18082` |
+
+### Data Plane
+
+```yaml
+dataplane:
+  enabled: true
+  replicas: 2
+  image:
+    repository: "nantian-gw/dataplane"
+    tag: "latest"
+    pullPolicy: Always
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "2000m"
+      memory: "1Gi"
+  config:
+    adminAddr: "0.0.0.0:19080"
+    runtime:
+      httpListenAddr: "0.0.0.0:10080"
+    experimental:
+      enableExperimentalGateway: false
+      enableAiGateway: false
+  accessLogVolume:
+    enabled: true
+    name: access-logs
+    mountPath: /var/log/nantian-gw
+    sizeLimit: 256Mi
+```
+
+The data plane services are `nantian-gw-dataplane-admin` and `nantian-gw-dataplane-metrics`; both use service port `19080`. Runtime HTTP traffic is handled by the configured listener `0.0.0.0:10080`.
+
+### Dashboard
+
+```yaml
+dashboard:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "nantian-gw/dashboard"
+    tag: "latest"
+    pullPolicy: Always
+```
+
+Disable the dashboard when you do not need the web UI:
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --set dashboard.enabled=false
+```
+
+### HPA, ServiceMonitor, And NetworkPolicy
+
+```yaml
+hpa:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+networkPolicies:
+  enabled: true
+```
+
+Enable `serviceMonitor.enabled` only when the Prometheus Operator CRDs are installed. HPA is off by default; enable it when your cluster has metrics-server and you have validated data plane resource requests.
+
+## Common Overrides
+
+Use a values file for changes you want to keep:
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f my-values.yaml
+```
+
+Example private registry and replica override:
+
+```yaml
+global:
+  imageRegistry: "registry.example.com"
+  imagePullSecrets:
+    - name: registry-credentials
+
+dataplane:
+  replicas: 4
+```
+
+## Experimental Features
+
+Experimental Gateway policy, AI, token policy, and Wasm behavior is disabled by default. Configure both planes before using the experimental APIs:
+
+* Control plane: `controlplane.config.features.enableExperimentalGateway`
+* Control plane: `controlplane.config.features.enableAiGateway`
+* Data plane: `dataplane.config.experimental.enableExperimentalGateway`
+* Data plane: `dataplane.config.experimental.enableAiGateway`
+
+See [Experimental Features](/en/1.5/configuration/experimental-features/) for the complete startup, CRD, and verification flow.
+
+## Verify The Release
+
+```bash
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+helm status nantian-gw -n nantian-gw
+```
+
+If the data plane does not become ready, check whether it can connect to `nantian-gw-controlplane-grpc:18080` and read the control plane and data plane logs.
+
+## Upgrade And Uninstall
+
+Upgrade an existing release:
+
+```bash
+helm upgrade nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f my-values.yaml
+```
+
+Remove the release:
+
+```bash
+helm uninstall nantian-gw -n nantian-gw
+kubectl delete namespace nantian-gw
+```
+
+Helm uninstall removes chart-managed resources. Gateway API CRDs and application resources you created outside the chart are not removed by the chart uninstall.

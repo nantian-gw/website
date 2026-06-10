@@ -1,0 +1,224 @@
+---
+title: Grafana 仪表盘
+slug: zh/1.5/operations/grafana
+---
+
+Nantian Gateway 提供了一个预构建的 Grafana 仪表盘模板，位于 `deploy/observability/grafana/pingora-gateway-observability-dashboard.json`。仪表盘 UID 为 `nantian-gw-obsv`，覆盖控制面和数据面的关键指标。
+
+## 导入仪表盘
+
+在 Grafana 中导入仪表盘：
+
+1. 导航到 **Dashboards > New > Import**
+2. 上传 `pingora-gateway-observability-dashboard.json` 文件
+3. 选择 Prometheus 数据源
+4. 点击 **Import**
+
+或者通过 Grafana Provisioning 自动导入：
+
+```yaml
+apiVersion: 1
+providers:
+  - name: nantian-gw
+    folder: Nantian Gateway
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards
+```
+
+### 通过 ConfigMap（Kubernetes）
+
+如果通过 kube-prometheus-stack 或类似 Operator 部署 Grafana，可以将仪表盘 JSON 挂载为带有 `grafana_dashboard` 标签的 ConfigMap：
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nantian-gateway-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  nantian-gateway.json: |
+    {
+      "uid": "nantian-gw-obsv",
+      ...
+    }
+```
+
+应用配置：
+
+```bash
+kubectl apply -f grafana-dashboard-configmap.yaml
+```
+
+### 通过 Helm
+
+`deploy/helm/nantian-gw` 中的 Helm Chart 包含了仪表盘 ConfigMap。在 values 中启用：
+
+```yaml
+grafana:
+  dashboards:
+    enabled: true
+```
+
+## 仪表盘变量
+
+仪表盘使用以下模板变量，允许按命名空间、Pod 和实例筛选：
+
+| 变量 | 类型 | 说明 |
+|---|---|---|
+| `datasource` | 数据源 | Prometheus 数据源选择 |
+| `namespace` | 查询 | 按命名空间筛选（默认 `nantian-gw`） |
+| `pod_dp` | 查询 | 数据面 Pod 多选（默认全部） |
+| `job_controlplane` | 查询 | 控制面 Job 多选（默认全部） |
+| `instance_cp` | 查询 | 控制面实例多选（默认全部） |
+
+变量值通过 Prometheus 标签查询动态获取，随集群状态变化自动更新。
+
+## 面板组织
+
+仪表盘分为六个行分组，按关注点组织：
+
+### 执行概览
+
+顶部统计卡片，提供集群健康状态的一目了然视图：
+
+| 面板 | 指标 | 说明 |
+|---|---|---|
+| Ready Pods | `sum(count(nantian_gateway_dataplane_ready))` | 就绪的数据面 Pod 数量 |
+| QPS | `sum(rate(nantian_gateway_dataplane_traffic_request_events_total[5m]))` | 每秒请求数 |
+| Success Rate | 成功请求占比 | 无错误标志的请求比例 |
+| P99 Latency | P99 延迟 | 99 分位请求延迟 |
+| 5xx Rate | 5xx 错误率 | 服务端错误占比 |
+| xDS ACK p95 | xDS 确认延迟 P95 | 快照分发的确认延迟 |
+| CPU Throttle | CPU 限流比例 | 数据面容器 CPU 限流 |
+| Memory Working Set | 内存工作集 | 数据面内存使用 |
+
+### 流量 SLO
+
+展示流量服务等级目标的详细时序图：
+
+* **Request Rate & 5xx**：请求速率与 5xx 错误率叠加图
+* **Status Code Distribution**：按状态码分解的请求分布
+* **Latency Percentiles**：P50、P90、P99 延迟百分位
+* **Bytes Throughput**：入站和出站字节吞吐量
+* **Response Flags**：按响应标志分类（none、timeout、reset 等）
+* **Upstream Pool**：上游连接池状态
+* **Retry Events**：重试事件趋势
+* **Upstream Failures**：上游连接失败趋势
+
+### 数据面运行时
+
+运行时内部状态面板：
+
+* **Pool Hit Ratio**：连接池命中率
+* **Upstream Connect Avg**：上游连接平均耗时
+* **Failover Success Rate**：故障转移成功率
+* **Endpoints Tracked**：追踪的后端端点数量
+* **Runtime States**：运行状态（HTTP、Stream 等）时间线
+* **Listener Reloads**：监听器重载频率
+* **Circuit Breaker**：熔断器触发状态
+* **Overload Rejections**：过载保护拒绝次数
+* **Rate Limiting Rejections**：限流拒绝次数
+* **Rate Limiting Tokens**：限流令牌消耗
+* **Listener Attention**：需要关注的监听器状态
+* **Endpoint Health**：端点健康状态变化
+
+### 资源压力
+
+容器资源使用情况，依赖 cAdvisor 和 kube-state-metrics：
+
+* **CPU Usage**：CPU 使用率时序图
+* **CPU Throttle Ratio**：CPU 限流比例
+* **Memory**：内存使用 vs 限制
+* **Connection Overview**：连接数概览
+* **UDP Sessions**：UDP 会话数
+
+### 控制面
+
+控制面运行状态：
+
+* **Snapshot Builds**：快照构建频率
+* **Build Duration**：构建耗时分布
+* **xDS Stream Health**：xDS 流健康状态
+* **xDS ACK/NACK Lag**：确认/拒绝延迟
+* **xDS Send & Status**：快照推送和状态报告
+* **Node Status Persist**：节点状态持久化活动
+* **Reconciler Runner**：Reconciler 运行状态
+* **Reconciler Queue**：Reconciler 队列深度
+* **Admin API Rate**：Admin API 请求速率
+* **Admin API Latency p99**：Admin API P99 延迟
+* **Dataplane Admin API Health**：数据面 Admin API 健康状态
+* **Process Health**：控制面进程健康
+* **Gateway Convergence**：Gateway 配置收敛状态
+
+### 库存与调试
+
+调试和诊断面板：
+
+* **Resource Inventory**：各类资源库存计数
+* **xDS Connection State**：xDS 连接状态分布
+* **Session Persistence**：会话保持状态
+* **HTTP/3 Available**：HTTP/3 可用性（stat 卡片）
+* **HTTP/3 Enabled**：HTTP/3 启用状态（stat 卡片）
+
+## 自定义仪表盘
+
+你可以基于这个模板创建自定义仪表盘。关键 PromQL 查询模式：
+
+```promql
+# 就绪 Pod 数
+sum(count(nantian_gateway_dataplane_ready{namespace="$namespace"}))
+
+# QPS（按 Pod 分解）
+sum by (pod) (rate(nantian_gateway_dataplane_traffic_request_events_total{namespace="$namespace"}[5m]))
+
+# P99 延迟
+histogram_quantile(0.99, sum(rate(nantian_gateway_dataplane_traffic_response_duration_seconds_bucket{namespace="$namespace"}[5m])) by (le))
+
+# 5xx 错误率
+sum(rate(nantian_gateway_dataplane_traffic_response_flags_total{namespace="$namespace",flag!="none"}[5m])) / sum(rate(nantian_gateway_dataplane_traffic_request_events_total{namespace="$namespace"}[5m]))
+
+# 控制面快照构建成功率
+nantian_gateway_controlplane_builds_total - nantian_gateway_controlplane_build_failures
+```
+
+:::tip
+仪表盘默认刷新间隔为 30 秒，时间范围为最近 6 小时。在 Kubernetes 集群中部署时，确保 Prometheus 数据源的访问权限正确配置，特别是数据面指标需要 Bearer Token 认证（如果启用了 Admin API 认证）。
+:::
+
+## 仪表盘故障排查
+
+### 所有面板显示 "No data"
+
+检查 Prometheus 是否正在抓取控制面和数据面的指标端点：
+
+```bash
+# 检查 Prometheus 目标
+curl -s http://prometheus:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job | startswith("nantian"))'
+
+# 直接测试控制面指标
+curl -s http://<control-plane-ip>:18082/metrics | head -20
+
+# 直接测试数据面指标
+curl -s http://<data-plane-ip>:<admin-port>/metrics | head -20
+```
+
+### 容器资源面板无数据
+
+资源面板依赖 cAdvisor 和 kube-state-metrics。确认这些组件正在运行：
+
+```bash
+kubectl get pods -n monitoring | grep -E "cadvisor|kube-state-metrics"
+```
+
+### 筛选器中命名空间不正确
+
+仪表盘默认使用 `nantian-gw` 命名空间。如果在不同命名空间中部署了网关，请在仪表盘设置中更新 `namespace` 变量或修改 JSON 中的默认值。
+
+## 下一步
+
+* [告警规则](/zh/1.5/operations/alerting) —— 为你正在监控的指标配置告警
+* [指标参考](/zh/1.5/operations/metrics) —— 仪表盘中使用的所有指标的完整目录
+* [故障排查](/zh/1.5/operations/troubleshooting) —— 仪表盘显示问题时的处理方法

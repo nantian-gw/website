@@ -1,0 +1,58 @@
+---
+title: 核心概念
+slug: zh/1.5/concepts
+---
+
+本章节介绍 Nantian Gateway 和 Kubernetes Gateway API 的基本概念。如果您是 API 网关、Kubernetes Ingress 或 Gateway API 规范的新用户，请从这里开始。
+
+这些页面解释的是「是什么」和「为什么」，而非「怎么做」。具体实现细节请参阅[快速开始](/zh/1.5/getting-started/quick-start)和[配置](/zh/1.5/configuration/)章节。
+
+## 什么是 API 网关？
+
+API 网关是一个反向代理，位于客户端和后端服务之间，管理进入系统的流量。它负责处理各个服务不应单独承担的职责：
+
+* **流量路由** — 根据路径、请求头或其他属性将请求定向到正确的后端
+* **TLS 终止** — 在边缘节点解密 HTTPS 流量，再转发到内部服务
+* **速率限制** — 保护后端服务免受过量流量冲击
+* **身份认证** — 在请求到达后端服务之前验证凭据
+* **可观测性** — 为流经系统的所有流量生成指标、日志和链路追踪数据
+
+在 Kubernetes 中，API 网关通常替代或增强内置的 Ingress 资源，提供更丰富的路由模型和更高级的流量管理能力。
+
+## 为什么选择 Nantian Gateway？
+
+Nantian Gateway 实现了 [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) 规范，这是一个社区驱动的标准，用于在 Kubernetes 中配置网关和路由规则。选择 Gateway API 实现意味着采用可在多种网关实现之间通用的标准化配置模型，减少供应商锁定。
+
+除了 Gateway API 合规性之外，Nantian Gateway 还提供：
+
+* **分离式平面架构** — Go 控制面通过 gRPC 双向 xDS 流与 Rust 数据面通信，允许管理和数据路径组件独立扩缩容
+* **内置 AI 网关** — 原生支持 AI 模型提供商路由、基于 Token 的速率限制和提示词安全，无需额外部署代理
+* **自定义资源扩展** — 用于 AI 提供商管理、Token 策略、Wasm 插件和后端负载均衡的 Kubernetes CRD
+
+## 关键术语
+
+### Gateway（网关）
+
+Gateway 资源定义了集群的入口点 — 一个在特定端口和协议上接受连接的监听器。每个 Gateway 引用一个 GatewayClass，后者决定由哪个控制器（实现）管理它。
+
+### Route（路由）
+
+Route 资源（HTTPRoute、GRPCRoute、TCPRoute、TLSRoute、UDPRoute）定义了匹配特定条件的流量如何转发到后端服务。Route 附加到 Gateway 上，指定其适用的监听器。
+
+### Control Plane（控制面）
+
+控制面是管理组件，负责监听 Kubernetes 资源，将其转换为内部配置，并将配置快照推送到数据面实例。在 Nantian Gateway 中，控制面使用 Go 语言编写。
+
+### Data Plane（数据面）
+
+数据面是处理实际客户端流量的代理组件 — TLS 终止、路由、速率限制和请求转发。在 Nantian Gateway 中，每个数据面实例是一个 Rust 二进制文件，通过 gRPC 从控制面接收配置。
+
+### xDS
+
+xDS（发现服务）是 Envoy 项目定义的协议规范，用于描述如何将配置传递给代理。Nantian Gateway 使用基于 gRPC 双向流的 xDS 协议，将路由表、后端配置和策略更新实时推送到数据面实例。
+
+## 下一步
+
+* [理解 Gateway API](/zh/1.5/concepts/gateway-api) — 学习资源模型
+* [分离式平面架构](/zh/1.5/concepts/split-plane) — 理解控制面和数据面设计
+* [快速开始](/zh/1.5/getting-started/quick-start) — 五分钟部署 Nantian Gateway

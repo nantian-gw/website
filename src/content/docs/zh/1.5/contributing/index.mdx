@@ -1,0 +1,167 @@
+---
+title: 贡献概述
+slug: zh/1.5/contributing
+---
+
+Nantian Gateway 是一个开源项目，欢迎任何形式的贡献。无论你是修 Bug、加功能、写文档还是提建议，这篇指南帮你搞清楚从哪里开始、怎么参与。
+
+## 贡献方式
+
+贡献不局限于写代码。以下是一些你可以参与的方式：
+
+| 方式 | 适合人群 | 难度 |
+|------|---------|------|
+| 报告 Bug | 所有用户 | 低 |
+| 改进文档 | 熟悉项目功能的用户 | 低 |
+| 提交功能请求 | 有使用场景的用户 | 低 |
+| 修复 Bug | Go 或 Rust 开发者 | 中 |
+| 实现新功能 | 有经验的项目贡献者 | 中-高 |
+| 代码评审 | 有经验的贡献者 | 中 |
+| 编写测试 | 熟悉测试框架的开发者 | 中 |
+| 社区支持 | 有经验的用户 | 低 |
+
+## 开始之前
+
+### 行为准则
+
+参与 Nantian Gateway 项目意味着你同意遵守项目的[行为准则](https://github.com/nantian-gw/gateway/blob/main/CODE_OF_CONDUCT.md)。简单来说：尊重他人，建设性沟通，拒绝任何形式的骚扰和歧视。
+
+### 贡献者许可协议
+
+在提交第一个 Pull Request 之前，你需要签署贡献者许可协议（CLA）。CLA 确保项目可以在 Apache 2.0 许可证下继续分发你的贡献。首次提交 PR 时，CLA 助手会自动引导你完成签署流程。
+
+### 沟通渠道
+
+| 渠道 | 用途 |
+|------|------|
+| [GitHub Issues](https://github.com/nantian-gw/gateway/issues) | Bug 报告、功能请求 |
+| [GitHub Discussions](https://github.com/nantian-gw/gateway/discussions) | 技术讨论、使用问题、设计提案 |
+| [Slack](https://nantian-gw.slack.com) | 实时交流、社区支持 |
+
+## 贡献流程
+
+Nantian Gateway 采用标准的 GitHub 工作流：
+
+1. **Fork** 主仓库到你的 GitHub 账号
+2. **Clone** 你的 Fork 到本地
+3. 创建一个**功能分支**：`git checkout -b feature/your-feature-name`
+4. 在分支上**开发和测试**你的改动
+5. **提交**改动：`git commit -m "feat: add your feature description"`
+6. **推送**分支：`git push origin feature/your-feature-name`
+7. 在 GitHub 上创建 **Pull Request** 到主仓库的 `main` 分支
+8. 等待 CI 检查通过和代码评审
+
+### 提交信息规范
+
+Nantian Gateway 使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范。提交信息格式：
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+常用的 `type` 值：
+
+| 类型 | 说明 |
+|------|------|
+| `feat` | 新功能 |
+| `fix` | Bug 修复 |
+| `docs` | 文档变更 |
+| `test` | 添加或修改测试 |
+| `refactor` | 代码重构（不改变功能） |
+| `perf` | 性能优化 |
+| `chore` | 构建、工具、依赖变更 |
+| `ci` | CI 配置变更 |
+| `style` | 代码格式变更（不影响逻辑） |
+
+常用 `scope` 值：
+
+| 范围 | 说明 |
+|------|------|
+| `controlplane` | 控制面代码 |
+| `dataplane` | 数据面代码 |
+| `proto` | 协议定义 |
+| `crd` | 自定义资源定义 |
+| `helm` | Helm Chart |
+| `docs` | 文档 |
+| `website` | 网站和文档站 |
+
+示例：
+
+```
+feat(controlplane): add health check for backend endpoints
+
+Add periodic health checking for backend endpoints in the control plane.
+When an endpoint is unhealthy for 3 consecutive checks, it is marked as
+down and removed from the IR snapshot.
+
+Closes #123
+```
+
+### Pull Request 要求
+
+每个 PR 必须满足以下条件才能合并：
+
+* \[ ] 所有测试通过（`go test` 和 `cargo test`）
+* \[ ] 代码格式检查通过（`gofmt`、`rustfmt`、`clippy`）
+* \[ ] 无 Lint 警告
+* \[ ] 新功能包含对应的测试用例
+* \[ ] API 变更包含对应的文档更新
+* \[ ] 至少一位维护者批准
+
+## 项目结构
+
+了解项目结构有助于快速定位需要修改的代码：
+
+```
+nantian-gw/
+├── gateway/                 # Go 控制面
+│   ├── cmd/manager/         # 控制面入口
+│   ├── internal/
+│   │   ├── controller/      # Kubernetes 控制器
+│   │   ├── translator/      # 资源翻译器（Kubernetes → IR）
+│   │   ├── ir/              # 内部表示（IR）定义
+│   │   ├── xds/             # xDS gRPC 服务器
+│   │   ├── admin/           # Admin API 服务器
+│   │   └── reconciler/      # 调和循环
+│   └── deploy/helm/         # Helm Chart
+├── dataplane/               # Rust 数据面
+│   ├── src/
+│   │   ├── proxy/           # 代理核心
+│   │   ├── xds/             # xDS 客户端
+│   │   ├── http/            # HTTP 路由处理
+│   │   ├── grpc/            # gRPC 路由处理
+│   │   ├── stream/          # TCP/UDP 流处理
+│   │   ├── ai/              # AI 网关模块
+│   │   ├── wasm/            # Wasm 运行时
+│   │   ├── tls/             # TLS 处理
+│   │   └── admin/           # Admin API 服务器
+│   └── Cargo.toml
+├── proto/                   # Protobuf 定义
+│   └── gateway/control/v1/  # xDS 协议定义
+├── dashboard/               # Next.js 管理界面
+├── website/                 # 文档站（Starlight）
+└── docs/                    # 设计文档和 RFC
+```
+
+## 寻找任务
+
+如果你不确定从哪里开始，以下是一些寻找贡献任务的途径：
+
+* **Good First Issue**：GitHub Issues 中标记了 `good first issue` 标签的 Issue，适合新贡献者
+* **Help Wanted**：标记了 `help wanted` 的 Issue，表示维护者希望社区帮助但暂时没有精力处理
+* **文档改进**：文档站和代码注释中标记了 `TODO` 或 `FIXME` 的地方
+* **测试覆盖**：任何缺少测试的代码路径都是贡献的好目标
+
+:::tip[新贡献者建议]
+建议从 `good first issue` 开始。这些 Issue 通常范围明确、难度适中，而且有维护者提供指导。在开始之前，可以在 Issue 下留言表示你打算处理，避免重复劳动。
+:::
+
+## 下一步
+
+* 查看 [开发环境](/zh/1.5/contributing/development) 了解如何搭建本地开发环境
+* 查看 [测试指南](/zh/1.5/contributing/testing) 了解测试框架和流程
+* 查看 [发布流程](/zh/1.5/contributing/release) 了解版本发布规则

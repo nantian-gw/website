@@ -1,0 +1,121 @@
+---
+title: 环境要求
+slug: zh/1.5/getting-started/prerequisites
+---
+
+安装 Nantian Gateway 之前，请确认环境满足以下要求。
+
+## Kubernetes 集群
+
+需要运行 **1.28 或更高版本**的 Kubernetes 集群。任何符合标准的 Kubernetes 发行版均受支持，从本地开发环境到托管云服务均可。
+
+本地开发推荐使用 **[Kind](https://kind.sigs.k8s.io/)**（Kubernetes IN Docker）。Kind 是一个单二进制文件、快速创建集群的工具，与项目预配置的 Kind 配置文件配合良好。
+
+### 创建 Kind 集群
+
+从 [Kind 官方发布页面](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) 安装 Kind。使用提供的配置文件创建集群：
+
+```bash
+kind create cluster --config gateway/deploy/kubernetes/overlays/kind/kind-config.yaml
+```
+
+此配置创建一个单节点集群，并设置宿主机端口映射以访问网关：
+
+| 服务 | 集群端口 | 宿主机端口 |
+|---------|-------------|-----------|
+| HTTP | 30080 | 18080 |
+| HTTPS | 30443 | 18443 |
+| UDP 主 | 30000 | 5300 |
+| UDP 备 | 30001 | 5301 |
+| Admin API | 30000 | 19000 |
+| Admin API (gRPC) | 30001 | 19001 |
+
+部署完成后，网关可通过 `http://localhost:18080` 访问。
+
+:::tip[Host 网络模式]
+如需直接绑定端口（无需额外端口映射），请使用 `kind-hostnetwork` 配置：
+
+```bash
+kind create cluster --config gateway/deploy/kubernetes/overlays/kind-hostnetwork/kind-config.yaml
+```
+
+此配置创建多节点集群（一个控制面、两个工作节点）。数据面直接绑定到宿主机端口，适用于需要低端口号的场景。
+:::
+
+验证集群运行正常：
+
+```bash
+kubectl cluster-info
+```
+
+预期输出：
+
+```
+Kubernetes control plane is running at https://127.0.0.1:XXXX
+CoreDNS is running at https://127.0.0.1:XXXX/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
+```
+
+## CLI 工具
+
+以下命令行工具必须已安装并可在 `PATH` 中访问：
+
+| 工具 | 最低版本 | 用途 |
+|------|----------------|---------|
+| `kubectl` | 1.28 | 集群交互和资源清单应用 |
+| `helm` | 3.12 | 通过 Helm Chart 安装 Nantian Gateway |
+
+### kubectl
+
+按照 [Kubernetes 官方文档](https://kubernetes.io/docs/tasks/tools/) 安装 `kubectl`。验证安装：
+
+```bash
+kubectl version --client
+```
+
+预期输出（版本号因安装而异）：
+
+```
+Client Version: v1.31.0
+Kustomize Version: v5.4.2
+```
+
+### Helm
+
+按照 [Helm 官方文档](https://helm.sh/docs/intro/install/) 安装 Helm。验证安装：
+
+```bash
+helm version --short
+```
+
+预期输出：
+
+```
+v3.14.0+ge36b354
+```
+
+## Gateway API CRD
+
+Nantian Gateway 要求集群中已安装 Kubernetes Gateway API CRD。这些 CRD 定义了 Gateway、GatewayClass、HTTPRoute 等网关用于配置的资源类型。
+
+安装标准上游通道的 Gateway API CRD：
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+```
+
+验证 CRD 已安装：
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+```
+
+预期输出：
+
+```
+NAME                                    CREATED AT
+gateways.gateway.networking.k8s.io      2024-01-01T00:00:00Z
+```
+
+## 下一步
+
+完成所有环境要求验证后，继续前往[快速开始](/zh/1.5/getting-started/quick-start)部署 Nantian Gateway。

@@ -1,0 +1,58 @@
+---
+title: 什么是 Nantian Gateway
+slug: zh/1.5/overview
+---
+
+Nantian Gateway 是一个基于 Kubernetes Gateway API 的分离式网关栈。Go 控制面监听 Kubernetes 资源，把 Gateway API 和 Nantian 扩展资源转换为内部路由状态，写入状态，并通过 gRPC/xDS 发布运行时快照。Rust 数据面接收这些快照并处理真实流量。
+
+当你需要以 Kubernetes 原生方式管理入口流量和 API 路由，并希望同时具备标准 Gateway API 资源、运维 API、可观测性资产，以及面向 AI 和 Wasm 工作负载的实验性扩展点时，可以使用 Nantian Gateway。
+
+## 这组仓库包含什么
+
+Nantian Gateway 拆分为多个组件仓库，每个组件可以用自己的构建、测试和发布流程演进。
+
+* `gateway/` 包含 Go 控制面、Kubernetes reconciler、translator、CRD 清单、Admin API 和一致性工具。
+* `dataplane/` 包含 Rust 数据面 workspace，负责接收运行时快照并处理流量。
+* `helm-charts/` 打包可安装的 Helm chart，发布地址是 `https://charts.nantian.dev`。
+* `dashboard/` 包含面向运维人员的 Web 管理界面。
+* `website/` 包含当前 Astro/Starlight 文档站。
+* `proto/` 维护组件之间共享的 protobuf 契约。
+
+## 它如何工作
+
+Gateway API 资源是系统的事实来源。用户创建 `Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute`、`TLSRoute`、`ReferenceGrant` 和 Gateway API policy 等资源。启用实验功能后，Nantian 扩展资源也可以参与同一套工作流。
+
+```text
+Gateway API resources -> Go control plane -> internal snapshot -> gRPC/xDS -> Rust data plane -> backends
+```
+
+控制面监听 Kubernetes 资源，把可接受的对象转换为运行时快照格式，更新状态条件，并暴露 Admin API 与 metrics 端点供排查。数据面连接控制面，通过 gRPC/xDS 接收快照，并在运行时监听端口处理流量。Dashboard 和 Admin API 为运维人员提供运行中系统的可见性。
+
+## 稳定能力与实验能力
+
+Gateway API 路由是主要能力。请通过 Gateway API support 页面和 gateway 仓库中生成的支持声明来理解支持范围，不要依赖宽泛的营销式表述。
+
+Nantian 还包含实验性 API：
+
+* `AIService` 使用 `gateway.nantian.dev/v1alpha1`，描述一个 AI provider/model 目标。
+* `TokenPolicy` 使用 `gateway.nantian.dev/v1alpha1`，把 token 或请求限额附加到本地 Gateway API 目标资源。
+* `WasmPlugin` 使用 `gateway.nantian.dev/v1alpha1`，把 Wasm 模块绑定到目标资源。
+* `BackendLBPolicy` 使用 Gateway API 实验版本 `gateway.networking.k8s.io/v1alpha2`，配置后端负载均衡行为。
+
+实验功能默认关闭。创建这些资源前，需要先开启对应的控制面和数据面 feature flag；在 API 仍处于实验阶段时，也要预期 schema 或运行时行为可能变化。
+
+## 运维入口
+
+Helm 是推荐给用户和运维人员的安装路径。Chart 会安装控制面、数据面、dashboard、Service、RBAC、NetworkPolicy，以及一个默认名为 `nantian-gw` 的 `GatewayClass`。仓库内也提供 Kustomize overlays，用于开发和自定义部署。
+
+控制面在 `18080` 暴露 gRPC，在 `18081` 暴露 Admin API，在 `18082` 暴露 metrics，在 `18083` 暴露健康检查。数据面的运行时 HTTP 监听地址是 `0.0.0.0:10080`，Admin API 与 metrics Service 端口是 `19080`。Dashboard Service 在 Helm chart 中使用端口 `3000`。
+
+日常运维可以先查看 Kubernetes Pod 状态、`GatewayClass` 状态、Route 绑定状态、控制面和数据面日志、Prometheus metrics、Grafana dashboard，以及 Admin API。
+
+## 下一步
+
+* [快速开始](/zh/1.5/getting-started/quick-start/)
+* [Helm 安装](/zh/1.5/installation/helm/)
+* [实验功能](/zh/1.5/configuration/experimental-features/)
+* [运维](/zh/1.5/operations/)
+* [API 参考](/zh/1.5/api-reference/)

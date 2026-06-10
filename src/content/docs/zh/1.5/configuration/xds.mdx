@@ -1,0 +1,185 @@
+---
+title: gRPC xDS 配置
+slug: zh/1.5/configuration/xds
+---
+
+控制面和数据面通过双向 gRPC 流通信，协议是 xDS。这一页覆盖了 gRPC 运行时的配置项，包括连接生命周期、keepalive 行为和快照交付。
+
+下面所有参数都在控制面配置的 `grpcRuntime` 段下面。
+
+## xDS 在 Nantian Gateway 中的工作方式
+
+xDS 配置交付走的是数据面和控制面之间的双向 gRPC 流，生命周期如下：
+
+1. **拨号**：数据面向控制面的 xDS 端点发起 gRPC 连接，同时发送自己的节点标识和当前持有的配置版本号。
+
+2. **接受和认证**：控制面接受连接，完成 TLS 握手（如果配置了 mTLS 还会做双向认证），然后启动双向 xDS 流。
+
+3. **初始快照**：控制面推送一份完整的 state-of-the-world（SotW）快照，包含所有已知配置：listener、cluster、route、endpoint。这是完整的路由全景图。
+
+4. **确认和应用**：数据面收到快照后解析并应用到本地的 Envoy/NGINX 运行时，然后向控制面发回 ACK。此时数据面已用最新配置开始路由流量。
+
+5. **增量更新**：当 Kubernetes 资源变更时（Gateway、HTTPRoute、Service、EndpointSlice 任一发生变化），控制面只重建受影响的部分，然后推送只包含变更资源的增量快照。数据面应用增量后再次发 ACK。
+
+6. **重连**：如果 gRPC 流因网络问题或控制面重启而断开，数据面以指数退避重新连接。重连后控制面计算出数据面上次已知版本与当前状态之间的差值，只推送变化部分。
+
+## Keepalive
+
+gRPC keepalive ping 不用等 TCP 超时就能检测到死连接。控制面在入站的数据面连接上强制执行 keepalive 策略：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `grpcRuntime.keepaliveTime` | string | `30s` | 服务端发送 keepalive ping 的间隔 |
+| `grpcRuntime.keepaliveTimeout` | string | `10s` | 等 ping 回复多久没回应就关连接 |
+| `grpcRuntime.minPingInterval` | string | `15s` | 服务端接受客户端 ping 的最小间隔 |
+
+服务端每隔 `keepaliveTime` 发一次 ping。如果在 `keepaliveTimeout` 内没收到回复，连接就被认为是死的，服务端会关掉它。数据面检测到连接关闭后自动重连。
+
+`minPingInterval` 防止行为异常的客户端疯狂 ping 服务端。如果客户端发 ping 的频率超过这个间隔，服务端回复 GOAWAY 帧然后关闭连接。
+
+:::note[数据面 keepalive]
+数据面也会发自己的 keepalive ping。这些 ping 走的是 gRPC 客户端默认值，不受控制面配置控制。控制面的 `minPingInterval` 决定了数据面的 ping 频率是否可接受。
+:::
+
+## 连接生命周期
+
+这些参数控制 gRPC 连接能活多久：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `grpcRuntime.maxConnectionIdle` | string | `2m` | 空闲超过这个时长的连接被关闭 |
+| `grpcRuntime.maxConnectionAge` | string | `30m` | 连接存活超过这个时长强制关闭，不管有没有活动 |
+| `grpcRuntime.maxConnectionAgeGrace` | string | `30s` | maxConnectionAge 触发后的优雅关闭宽限期 |
+
+`maxConnectionIdle` 清理那些已经断开但没有正确关闭流的数据面连接。两分钟没活动，服务端就终止连接。
+
+`maxConnectionAge` 强制连接轮换。每 30 分钟，服务端发起一次优雅关闭。数据面在新连接上重连，这样能分散控制面副本之间的负载，也避免长期连接积累状态。
+
+`maxConnectionAgeGrace` 给数据面时间完成正在进行的 RPC 调用，然后才强制关闭。30 秒的宽限期对大多数场景都够用。
+
+## 连接交互流程
+
+下面是数据面（DP）与控制面（CP）从启动到增量更新的完整序列：
+
+```
+DP                        CP
+ |                         |
+ |--- 拨号 xDS 端点 ------->|
+ |                         |
+ |<-- 接受, TLS 握手 ------|
+ |                         |
+ |--- 节点 ID + 版本 ----->|   (DP 标识自己)
+ |                         |
+ |<-- SotW 全量快照 --------|   (推送全部配置)
+ |                         |
+ |--- ACK (nonce: n1) ---->|   (DP 确认收到)
+ |                         |
+ |        ...运行中...      |
+ |                         |
+ |                    [K8s Gateway 资源变更]
+ |                         |
+ |<-- 增量快照 -------------|   (仅变更的资源)
+ |                         |
+ |--- ACK (nonce: n2) ---->|
+ |                         |
+ |        ...运行中...      |
+ |                         |
+ |--- GOAWAY (超龄) ------>|   (或网络中断)
+ |                         |
+ |--- 等待 + 重连 --------->|
+ |                         |
+ |<-- v1 到 vN 的增量 -----|   (重连后追赶差异)
+ |                         |
+ |--- ACK (nonce: n3) ---->|
+```
+
+## 快照交付
+
+这些参数控制配置快照怎么推送给数据面：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `grpcRuntime.snapshotSendTimeout` | string | `5s` | 发送快照到数据面的超时 |
+| `grpcRuntime.snapshotAckTimeout` | string | `30s` | 等数据面确认快照的超时 |
+| `grpcRuntime.permitWithoutStream` | bool | `false` | 是否允许没有活跃 xDS 流的数据面节点 |
+
+`snapshotSendTimeout` 控制控制面发送快照给单个数据面的最大时长。如果网络慢或者快照特别大（几百个路由、几千个后端），可以调大这个值。
+
+`snapshotAckTimeout` 控制控制面等数据面确认收到快照的时长。数据面收到快照后需要时间解析和应用配置。如果数据面负载很重，应用配置可能超过默认的 30 秒。这种情况下调大超时值，避免控制面误判数据面超时。
+
+`permitWithoutStream` 默认关闭。这意味着数据面必须先建立 xDS 流，控制面才会给它推送配置。开启后，即使数据面没有活跃的流，控制面也会保留它的节点记录。这在调试场景下有用，生产环境不建议开。
+
+### 快照交付模型
+
+Nantian Gateway 使用 delta xDS 协议实现增量配置交付：
+
+**初始同步。** 数据面首次连接时，控制面构建并推送一份完整的 SotW 快照，覆盖所有资源类型：listener、cluster、route、endpoint。快照带有一个 nonce（唯一标识符），数据面必须在 ACK 中原样回传。
+
+**增量推送。** 初始同步之后，控制面为每个已连接的数据面按资源类型分别跟踪版本号。当 Kubernetes 资源变化时，控制面的快照构建器只重建受影响的资源类型。生成的增量快照只包含自上次确认版本以来新增、更新或删除的资源。
+
+**触发条件。** 以下资源的变更会触发快照重建：Gateway（新增或修改入口点）、HTTPRoute（路由规则变更）、Service（后端端口或选择器变更）、EndpointSlice（后端 IP 新增或移除）。
+
+**ACK/NACK 协议。** 每份快照（无论全量还是增量）都带有 nonce。数据面必须回复 ACK（回传 nonce）或 NACK（回传 nonce 加错误描述）。ACK 表示快照已解析并应用。NACK 表示某部分被拒绝，上一份版本仍在使用。
+
+**NACK 处理。** 收到 NACK 后，控制面重试同一份快照一次。如果数据面再次 NACK，控制面记录错误、关闭连接，等待数据面重连。重连后数据面回退到全新 SotW 同步。持续 NACK 通常说明数据面版本不匹配或者某个配置资源格式有问题。
+
+## 数据面侧的 xDS 连接
+
+数据面也有自己的连接相关配置。这些参数在数据面配置文件里：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `controlPlaneAddr` | string | `http://127.0.0.1:18080` | 控制面 gRPC 地址 |
+| `xdsTransport.tlsEnabled` | bool | `false` | 是否给 xDS 传输加 TLS |
+| `xdsTransport.caCertPath` | string | 空 | 验证控制面证书的 CA 证书路径 |
+| `xdsTransport.clientCertPath` | string | 空 | 客户端证书路径（mTLS） |
+| `xdsTransport.clientKeyPath` | string | 空 | 客户端私钥路径（mTLS） |
+
+数据面启动后立即尝试连接控制面。如果连接失败，数据面以指数退避重试，直到连接成功。连接建立后，数据面发送节点标识和当前配置版本，控制面根据版本差异决定是推送全量快照还是增量更新。
+
+## 连接中断处理
+
+当数据面和控制面之间的 gRPC 连接中断时，数据面用当前已有的配置快照继续路由流量。它不会因为连不上控制面就停止处理请求。同时，数据面开始重连，重试间隔从 1 秒开始指数增长，上限 30 秒。
+
+控制面检测到连接中断后，通过 keepalive 超时机制在 10 秒内确认连接已死。然后清理该数据面的内部状态，等待它重新连接。
+
+如果数据面在 `nodeStatus.persistTimeout`（默认 2 秒）内没有更新状态，控制面标记该节点为离线。离线节点不会收到新的配置推送，但也不会影响其他在线节点的正常工作。
+
+## gRPC 健康检查
+
+xDS 流使用标准的 [gRPC 健康检查协议](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)。每个数据面连接在控制面侧都有一个服务状态：
+
+* **SERVING**：xDS 流活跃，数据面正在处理快照。
+* **NOT\_SERVING**：流已关闭或数据面尚未就绪。控制面不会向 NOT\_SERVING 状态的端点推送快照。
+
+数据面在启动时和运行期间定期查询控制面的健康检查服务。如果控制面返回 NOT\_SERVING（例如多副本部署中正在进行 leader 选举），数据面退避重试。这避免了数据面向尚未就绪的控制面疯狂重连。
+
+健康检查应答很轻量（每次检查仅一个 RPC），和快照流相比带宽消耗可以忽略。默认的 gRPC 健康检查间隔是 5 秒。
+
+## 常见问题排查
+
+### 连接被拒绝
+
+数据面启动时如果日志里有 `connection refused`，先检查控制面的 gRPC 服务端是否在预期的端口监听。确认数据面配置中的 `controlPlaneAddr` 与控制面的 `--grpc-port` 参数一致。同时确认数据面到控制面之间的防火墙或 NetworkPolicy 没有阻断该端口。
+
+### TLS 握手失败
+
+TLS 握手失败通常是证书不匹配。检查 `xdsTransport.caCertPath` 是否指向了签发控制面证书的 CA。对于 mTLS 场景，确认 `xdsTransport.clientCertPath` 和 `xdsTransport.clientKeyPath` 都已设置，且控制面信任客户端的 CA。可以用 `openssl s_client -connect <cp-host>:<grpc-port>` 手动测试 TLS 握手。
+
+### NACK 循环
+
+如果数据面对同一份快照反复 NACK，先检查数据面版本是否与控制面版本匹配。版本不匹配是最常见的原因：新版控制面可能下发旧版数据面不认识的 xDS 资源。其他原因包括 Gateway API 资源格式错误（用 `kubectl describe` 查看校验错误）或资源类型冲突（两条 HTTPRoute 声明了同样的 hostname 但配置不兼容）。
+
+连续两次 NACK 后，控制面会关闭连接。数据面重连后重新从 SotW 全量快照开始同步。如果重连后 NACK 依然存在，必须修复导致拒绝的那个资源。
+
+### 配置不更新
+
+如果路由一直不更新但 kubectl 显示资源是正确的，快照交付链路可能卡住了。检查控制面日志里有没有快照发送失败或 ACK 超时的记录。确认数据面有活跃的 xDS 流（控制面的 metrics 端点能查到已连接的数据面数量）。如果流是活的但快照发不过去，检查 `snapshotSendTimeout` 和 `snapshotAckTimeout`：对当前快照规模来说，这两个值设得太小会导致发送和确认的循环永远完不成。
+
+## 调优建议
+
+**高频变更场景**：如果你的 Gateway API 资源变更非常频繁（比如 CI/CD 管道每次部署都更新路由），可以调小 `syncSettleDelay` 到 `50ms`，让配置更快生效。代价是控制面 CPU 使用会上升。
+
+**大规模集群**：如果你有几十个数据面实例，把 `snapshotSendTimeout` 调到 `10s` 或更高，给控制面足够时间把所有快照发完。同时调大 `maxConnectionAge` 到 `1h`，减少连接轮换带来的重连风暴。
+
+**不稳定网络**：如果控制面和数据面之间的网络不稳定（比如跨区域部署），调大 `keepaliveTimeout` 到 `20s`，减少误判导致的连接关闭。同时调小 `keepaliveTime` 到 `15s`，更快检测真正的断连。

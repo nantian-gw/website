@@ -1,0 +1,267 @@
+---
+title: 常见问题
+slug: zh/1.5/faq
+---
+
+本页汇总了 Nantian Gateway 用户最常问的问题，按主题分类。如果你在这里找不到答案，欢迎到 [GitHub Discussions](https://github.com/nantian-gw/gateway/discussions) 提问。
+
+## 架构与设计
+
+### 为什么控制面和数据面用不同的语言？
+
+控制面用 Go 是因为 Kubernetes 生态在 Go 上的库最完善，controller-runtime、client-go 等工具链成熟高效。数据面用 Rust 是因为代理层需要极致的性能和内存安全——Rust 在零成本抽象和所有权模型上提供了 C++ 级别的性能，同时消除了内存安全漏洞这一大类风险。
+
+这种控制面与数据面分离的架构还有一个好处：两个平面可以独立演进。Go 团队和 Rust 团队各自用自己的最佳实践，接口只通过 gRPC/xDS 协议耦合。
+
+### Nantian Gateway 和 Envoy Gateway 有什么区别？
+
+最核心的区别有两个：一是数据面语言（Rust vs C++），二是 AI 网关能力。Nantian Gateway 把 AI 提供方路由、Token 计数、限流和 PII 脱敏直接做在数据面里，不需要额外部署 AI 代理。如果你不需要 AI 网关能力，两者在 Gateway API 实现上的差异主要在特性覆盖面上——Nantian Gateway 声明支持 v1.5.1 的 55 个特性，Envoy Gateway 目标是 v1.2.x 约 40 个特性。
+
+详细的对比分析见 [项目对比](/zh/1.5/comparison) 页面。
+
+### 为什么需要 xDS 协议？直接用 Kubernetes API 不行吗？
+
+xDS 是一个推送模型：控制面主动推配置变更，数据面即时应用。如果用 Kubernetes API 轮询，数据面需要定期查询 API Server 检查是否有新配置，这会带来延迟和额外的 API Server 负载。xDS 的双向流还支持配置版本追踪和 ACK/NACK 确认机制，确保数据面不会因为配置不完整或解析失败而进入不一致状态。
+
+### Nantian Gateway 能做服务网格吗？
+
+Nantian Gateway 通过 Gateway API Mesh 模型支持无 Sidecar 的网格能力，包括基于集群 IP 的消费者路由和 Mesh 级别的 HTTP 路由操作。但它不是一个全功能的服务网格——如果你需要 mTLS、细粒度的授权策略、分布式追踪这些能力，Istio 或 Linkerd 是更合适的选择。
+
+Nantian Gateway 的定位是"网关优先，网格作为扩展"，而不是"网格优先，网关作为组件"。
+
+## 部署与运维
+
+### 如何实现高可用部署？
+
+Nantian Gateway 支持多副本部署，通过 Helm Chart 配置：
+
+* **控制面高可用**：部署多个副本，通过主从选举确保只有一个实例驱动翻译。其他副本处于待命状态，在 Leader 故障时自动接管。
+* **数据面高可用**：部署多个副本，通过 Kubernetes Service 做负载均衡。xDS 流会连接到控制面的 Service 地址，自动被路由到活跃的 Leader 实例。
+* **Pod 反亲和性**：Chart 默认配置了 Pod 反亲和性规则，确保控制面和数据面的副本分布在不同节点上。
+
+详细的 HA 配置见 [高可用](/zh/1.5/installation/ha) 页面。
+
+### 控制面和数据面断开连接怎么办？
+
+数据面设计了本地配置缓存机制。当与控制面的 gRPC 连接断开时，数据面继续使用最后收到的有效配置服务流量，不会中断已有连接。数据面会持续尝试重连，重连成功后自动同步最新配置。
+
+连接断开期间，数据面的 Admin API 中 `/api/v1/xds/status` 会显示 `connected: false`，`stream_reconnects` 计数器会递增。如果 `stream_reconnects` 持续增长，说明网络不稳定，需要检查控制面和数据面之间的网络连通性。
+
+### 如何升级 Nantian Gateway？
+
+升级流程取决于你的部署方式：
+
+* **Helm**：`helm upgrade nantian-gw nantian-gw/nantian-gw --version <new-version>`。Helm 会自动处理滚动更新。
+* **Kustomize**：更新 Kustomization 中的镜像标签，然后 `kubectl apply -k .`。
+
+升级过程中的注意事项：
+
+1. 先升级控制面，再升级数据面。控制面升级期间可能有短暂的配置推送延迟，但不影响已有流量。
+2. 阅读发布说明中的升级指南，确认是否有破坏性变更。
+3. 在非生产环境先验证升级流程。
+
+详细的升级指南见 [升级指南](/zh/1.5/installation/upgrade) 页面。
+
+### 如何监控 Nantian Gateway 的运行状态？
+
+Nantian Gateway 提供三层监控：
+
+1. **Prometheus 指标**：控制面和数据面都暴露 `/metrics` 端点，提供请求量、延迟、错误率、连接数等指标。
+2. **Grafana 仪表盘**：项目提供了预配置的 Grafana 仪表盘模板，导入后即可获得集群级的可视化视图。
+3. **Admin API**：提供运行时的配置快照、xDS 客户端状态、后端健康检查等诊断信息。
+
+详细的监控配置见 [指标参考](/zh/1.5/operations/metrics) 和 [Grafana 仪表盘](/zh/1.5/operations/grafana) 页面。
+
+## AI 网关
+
+### AI 网关支持哪些 AI 提供方？
+
+目前支持三种提供方协议：
+
+* **OpenAI**：兼容 OpenAI API 格式（包括大多数兼容 OpenAI 的第三方服务）
+* **Anthropic**：Anthropic Claude API 格式
+* **Ollama**：本地 Ollama 服务格式
+
+网关做协议归一化，你的应用使用 OpenAI 兼容格式发请求，网关自动转换为后端提供方所需的格式。添加新的提供方协议支持是社区贡献的一个好方向。
+
+### Token 限流是怎么工作的？
+
+Nantian Gateway 的 `TokenPolicy` 按实际 Token 使用量做限流，不是按请求数。每次 AI API 请求和响应时，网关从响应中读取 `usage` 字段获取实际的 Token 用量，然后累加到对应来源的计数器上。当某个来源的 Token 用量超过配置的上限时，网关返回 HTTP 429 状态码，拒绝请求到达 AI 提供方。
+
+对于不支持返回 Token 用量的提供方，网关使用内置的 tokenizer 估算。精度接近实际值但可能略有偏差。
+
+### 如何保证 AI API 密钥的安全？
+
+AI API 密钥存储在 Kubernetes Secret 中，不在 `AIService` CRD 中明文暴露。`AIService` 通过 `auth.secretRef` 字段引用 Secret 名称。控制面在翻译配置时从 Secret 中读取密钥，通过 xDS 协议推送到数据面。数据面在内存中存储密钥，不写入磁盘或日志。
+
+建议配合 RBAC 策略限制对 `AIService` 和对应 Secret 的访问权限。
+
+## Wasm 插件
+
+### Wasm 插件能做什么？
+
+Wasm 插件可以在请求处理的关键生命周期节点注入自定义逻辑：
+
+* **请求头处理**：在路由匹配前修改请求头，实现自定义路由逻辑
+* **请求体处理**：在请求到达后端前修改请求体，实现 PII 脱敏、数据验证等
+* **响应头处理**：在响应返回客户端前修改响应头
+* **响应体处理**：在响应体发送给客户端前修改内容，实现数据转换
+
+插件运行在沙箱环境中，默认不能访问网络和文件系统，内存和执行时间有上限。这保证了即使插件代码有 Bug，也不会影响网关的整体稳定性。
+
+### 如何开发和分发 Wasm 插件？
+
+Wasm 插件可以用任何能编译到 `wasm32-wasi` 目标的语言编写，目前最常用的是 Rust。项目提供了插件开发 SDK 和示例。
+
+开发流程：
+
+1. 使用 Rust 编写插件逻辑，实现指定的 trait 接口
+2. 编译为 `wasm32-wasi` 目标：`cargo build --target wasm32-wasi --release`
+3. 将 `.wasm` 文件推送为 OCI 镜像或放到可访问的 URL
+4. 通过 `WasmPlugin` CRD 引用插件并绑定到网关
+
+详细的插件开发指南见 [Wasm 插件开发](https://github.com/nantian-gw/gateway)。
+
+## 故障排查
+
+### 修改了路由配置但不生效，怎么排查？
+
+这是一个常见的排查场景，按以下步骤逐层检查：
+
+1. **确认路由资源状态**：`kubectl describe httproute <name> -n <namespace>`
+2. **确认控制面配置快照**：`curl http://<controlplane>:8081/api/v1/config/snapshot/version`
+3. **确认数据面配置版本**：`curl http://<dataplane>:8082/api/v1/config/version`
+4. **确认 xDS 连接状态**：`curl http://<controlplane>:8081/api/v1/clients`
+
+如果控制面快照版本已更新但数据面版本未更新，检查 xDS 客户端是否处于 `NACK` 状态。如果处于 `NACK` 状态，`error_detail` 字段会包含配置解析失败的具体原因。
+
+### 数据面频繁重启怎么办？
+
+先检查数据面的日志，常见原因：
+
+1. **OOM（内存不足）**：检查数据面 Pod 的内存限制是否足够。如果 Wasm 插件或大流量导致内存飙升，可以调高 `resources.limits.memory`。
+2. **配置解析失败**：如果数据面收到坏配置后崩溃，说明数据面的错误处理有缺陷。请提交 Bug Report 并附上崩溃日志。
+3. **健康检查失败**：`/readyz` 返回非 200 状态码。检查数据面是否能连通控制面。
+4. **xDS 连接问题**：持续重连失败。检查控制面 Service 的 DNS 解析和网络连通性。
+
+详细的排查步骤见 [故障排查](/zh/1.5/operations/troubleshooting) 页面。
+
+### Nantian Gateway 的性能如何？有基准测试吗？
+
+Nantian Gateway 的 Rust 数据面在代理性能上追求 C++（Envoy）同等水平。在典型场景下（HTTP/1.1 请求转发，无过滤处理），单个数据面实例可以处理数万 QPS 的吞吐量，p99 延迟在毫秒级别。
+
+具体的性能数据取决于硬件配置、后端服务延迟和路由规则复杂度。建议在目标环境中做基准测试。项目仓库的 `benchmarks/` 目录包含了基准测试脚本和工具。
+
+## 性能与调优
+
+### 如何为大规模集群调优控制面？
+
+对于有数百个 Gateway 资源的集群，调整以下设置：
+
+* **`translatorLimits.maxInputObjects`**：设置合理上限（如 5000），防止翻译失控消耗过多内存。
+* **`syncPeriod`**：从默认的 30s 增加到 60s 或 120s，降低翻译频率。
+* **`reconcilerRunner.settleDelay`**：从 300ms 增加到 500ms，批量处理快速资源变更。
+* **`nodeDrift.warningThreshold`**：从 15s 增加到 30s，减少大型集群中的误报。
+
+详见 [性能调优](/zh/1.5/configuration/tuning)。
+
+### 如何配置访问日志？
+
+数据面默认启用访问日志，每个请求以可配置的格式记录：
+
+* **`access.enabled`**：开关（默认：`true`）
+* **`access.path`**：日志文件路径（默认：`/var/log/nantian-gw/access.log`）
+* **`access.format`**：自定义格式字符串，支持 `%CLIENT_IP%`、`%STATUS%`、`%LATENCY_MS%`、`%UPSTREAM_ADDR%` 等变量
+* **`access.mode`**：`json` 或 `text`（默认：`json`）
+* **`access.sampleRate`**：记录比例（默认：`0.5`，即 50%）
+
+如需按路由级别控制访问日志，使用前缀为 `gateway.nantian.dev/access-log-` 的路由注解。
+
+### 数据面需要多少内存？
+
+典型数据面实例空闲时约 50-100MB。内存随以下因素增长：
+
+* 活跃连接数（每个连接约 5-10KB）
+* Wasm 插件内存分配
+* 配置快照大小（取决于路由/后端数量）
+
+Helm Chart 默认 128Mi requests / 256Mi limits。高连接数的生产环境建议 256Mi-512Mi limits。在 Prometheus 中监控 `container_memory_working_set_bytes`。
+
+## 安全
+
+### 如何在控制面和数据面之间启用 TLS？
+
+在控制面配置中设置 `grpcTLS`：
+
+```yaml
+grpcTLS:
+  enabled: true
+  certPath: /etc/nantian/tls/tls.crt
+  keyPath: /etc/nantian/tls/tls.key
+  clientCAPath: /etc/nantian/tls/ca.crt
+  requireClientCert: true
+```
+
+在数据面配置中设置 `xdsTls`：
+
+```yaml
+xdsTls:
+  enabled: true
+  caPath: /etc/nantian/tls/ca.crt
+  certPath: /etc/nantian/tls/tls.crt
+  keyPath: /etc/nantian/tls/tls.key
+  domainName: nantian-controlplane.nantian-gw.svc
+```
+
+详见 [TLS / mTLS](/zh/1.5/configuration/tls)。
+
+### 如何保护 Admin API？
+
+Admin API 提供网关配置的完整读取权限。保护措施：
+
+1. **绑定 localhost**：设置 `adminAddr: "127.0.0.1:18081"` 防止外部访问。
+2. **启用 TLS**：配置 `adminTLS` 提供证书和密钥。
+3. **启用认证**：设置 `adminAuth.bearerToken` 或 `adminAuth.bearerTokenFile` 要求 bearer token。
+4. **使用 RBAC**：限制对控制面 Pod 和 Service 的访问权限。
+
+## 迁移
+
+### 可以从其他 Gateway API 实现迁移过来吗？
+
+可以。Nantian Gateway 实现了标准的 Gateway API v1.5.1，你现有的 `GatewayClass`、`Gateway`、`HTTPRoute` 等资源是兼容的。迁移流程：
+
+1. 在现有网关旁边安装 Nantian Gateway
+2. 创建新的 `GatewayClass`，指向 `gateway.networking.k8s.io/nantian-gw`
+3. 创建引用新 GatewayClass 的新 `Gateway`
+4. 逐步迁移路由，将 `parentRefs` 指向新 Gateway
+5. 验证流量正确后再移除旧网关
+
+自定义 CRD（`AIService`、`TokenPolicy`、`WasmPlugin`、`BackendLBPolicy`）是 Nantian Gateway 独有的，需要重新创建。
+
+## 贡献与社区
+
+### 如何参与项目贡献？
+
+见 [贡献概述](/zh/1.5/contributing/) 页面。简单来说：
+
+1. Fork 仓库，在功能分支上开发
+2. 确保测试通过（`go test` + `cargo test`）
+3. 代码格式正确（`gofmt` + `cargo fmt` + `clippy`）
+4. 提交 PR 到 `main` 分支
+5. 等待 CI 通过和代码评审
+
+**Good First Issue** 是了解项目的最佳起点，这些 Issue 范围明确、难度适中，有维护者提供指导。
+
+### 如何报告安全漏洞？
+
+请勿在公开的 GitHub Issue 中报告安全漏洞。将漏洞详情发送到项目维护者的安全邮箱。安全漏洞修复遵循以下流程：
+
+1. 收到报告后 48 小时内确认
+2. 7 天内发布修复版本
+3. 发布安全公告，分配 CVE 编号
+
+## 下一步
+
+* 查看 [快速开始](/zh/1.5/getting-started/quick-start) 部署你的第一个 Nantian Gateway
+* 查看 [适用场景](/zh/1.5/use-cases) 了解典型部署模式
+* 查看 [项目对比](/zh/1.5/comparison) 了解与其他网关的差异

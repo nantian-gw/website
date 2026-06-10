@@ -1,0 +1,264 @@
+---
+title: Frequently Asked Questions
+slug: en/1.5/faq
+---
+
+This page collects the most commonly asked questions about Nantian Gateway, organized by topic. If you can't find an answer here, ask on [GitHub Discussions](https://github.com/nantian-gw/gateway/discussions).
+
+## Architecture & Design
+
+### Why does the control plane and data plane use different languages?
+
+The control plane uses Go because the Kubernetes ecosystem has the richest library support in Go — controller-runtime, client-go, and related tooling are mature and efficient. The data plane uses Rust because a proxy needs extreme performance and memory safety — Rust delivers C++-level performance through zero-cost abstractions and its ownership model, while eliminating entire classes of memory safety vulnerabilities.
+
+The split-plane architecture has another benefit: the two planes can evolve independently. Go and Rust teams each follow their own best practices, coupled only through the gRPC/xDS protocol.
+
+### How does Nantian Gateway differ from Envoy Gateway?
+
+The two core differences are: (1) the data plane language (Rust vs C++), and (2) AI Gateway capabilities. Nantian Gateway embeds AI provider routing, token counting, rate limiting, and PII redaction directly in the data plane — no separate AI proxy needed. If you don't need AI Gateway capabilities, the difference in Gateway API implementation is primarily in feature coverage — Nantian Gateway declares support for 55 features in v1.5.1, while Envoy Gateway targets approximately 40 features in v1.2.x.
+
+See the [Comparison](/en/1.5/comparison) page for a detailed analysis.
+
+### Why use xDS instead of the Kubernetes API directly?
+
+xDS is a push model: the control plane proactively pushes configuration changes, and the data plane applies them immediately. If data planes polled the Kubernetes API, they would need to periodically query the API Server for new configuration, introducing latency and additional API Server load. xDS bidirectional streams also support configuration version tracking and ACK/NACK acknowledgment, ensuring data planes never enter an inconsistent state due to incomplete or invalid configuration.
+
+### Can Nantian Gateway serve as a service mesh?
+
+Nantian Gateway supports mesh capabilities through the Gateway API Mesh model, including cluster-IP-based consumer routing and mesh-level HTTP route operations. However, it is not a full-featured service mesh — if you need mTLS, fine-grained authorization policies, or distributed tracing, Istio or Linkerd are more appropriate choices.
+
+Nantian Gateway's philosophy is "gateway first, mesh as an extension" — not "mesh first, gateway as a component."
+
+## Deployment & Operations
+
+### How do I deploy for high availability?
+
+Nantian Gateway supports multi-replica deployment, configured through the Helm chart:
+
+* **Control plane HA**: Deploy multiple replicas with leader election ensuring only one instance drives translation. Standby replicas automatically take over on leader failure.
+* **Data plane HA**: Deploy multiple replicas behind a Kubernetes Service for load balancing. xDS streams connect to the control plane's Service address, automatically routed to the active leader.
+* **Pod anti-affinity**: The chart defaults to Pod anti-affinity rules, ensuring control plane and data plane replicas are distributed across different nodes.
+
+See the [High Availability](/en/1.5/installation/ha) page for detailed configuration.
+
+### What happens when the control plane and data plane disconnect?
+
+The data plane has a local configuration cache. When the gRPC connection to the control plane drops, the data plane continues serving traffic using the last valid configuration — existing connections are not interrupted. The data plane continuously retries reconnection, automatically syncing the latest configuration upon reconnection.
+
+During disconnection, the data plane's Admin API `/api/v1/xds/status` shows `connected: false` and the `stream_reconnects` counter increments. If `stream_reconnects` keeps growing, the network is unstable — check connectivity between the control plane and data plane.
+
+### How do I upgrade Nantian Gateway?
+
+The upgrade process depends on your deployment method:
+
+* **Helm**: `helm upgrade nantian-gw nantian/nantian-gw --version <new-version>`. Helm handles rolling updates automatically.
+* **Kustomize**: Update image tags in your Kustomization, then `kubectl apply -k .`.
+
+Upgrade considerations:
+
+1. Upgrade the control plane first, then the data plane. There may be brief configuration push delays during control plane upgrade, but existing traffic is unaffected.
+2. Read the release notes for upgrade guidance and breaking changes.
+3. Validate the upgrade process in a non-production environment first.
+
+See the [Upgrade Guide](/en/1.5/installation/upgrade) for detailed instructions.
+
+### How do I monitor Nantian Gateway?
+
+Nantian Gateway provides three layers of monitoring:
+
+1. **Prometheus metrics**: Both control plane and data plane expose `/metrics` endpoints, providing request volume, latency, error rate, connection count, and more.
+2. **Grafana dashboard**: The project provides pre-configured Grafana dashboard templates for cluster-level visualization.
+3. **Admin API**: Provides runtime configuration snapshots, xDS client status, backend health checks, and other diagnostic information.
+
+See the [Metrics Reference](/en/1.5/operations/metrics) and [Grafana Dashboard](/en/1.5/operations/grafana) pages for detailed configuration.
+
+## AI Gateway
+
+### Which AI providers are supported?
+
+Three provider protocols are currently supported:
+
+* **OpenAI**: OpenAI-compatible API format (including most OpenAI-compatible third-party services)
+* **Anthropic**: Anthropic Claude API format
+* **Ollama**: Local Ollama service format
+
+The gateway performs protocol normalization — your application sends requests in OpenAI-compatible format, and the gateway automatically converts them to the backend provider's format. Adding new provider protocol support is a great direction for community contributions.
+
+### How does token-based rate limiting work?
+
+Nantian Gateway's `TokenPolicy` limits based on actual token usage, not request count. On each AI API request and response, the gateway reads the `usage` field from the response to get the actual token count, then accumulates it on the corresponding source's counter. When a source's token usage exceeds the configured limit, the gateway returns HTTP 429, preventing the request from reaching the AI provider.
+
+For providers that don't return token usage, the gateway uses a built-in tokenizer for estimation. Accuracy is close to actual values but may have slight deviations.
+
+### How are AI API keys secured?
+
+AI API keys are stored in Kubernetes Secrets, never exposed in plaintext in the `AIService` CRD. `AIService` references the Secret name through `auth.secretRef`. The control plane reads the key from the Secret during configuration translation and pushes it to the data plane via xDS. The data plane stores keys in memory only — they are never written to disk or logs.
+
+We recommend using RBAC policies to restrict access to `AIService` resources and their corresponding Secrets.
+
+## Wasm Plugins
+
+### What can Wasm plugins do?
+
+Wasm plugins can inject custom logic at key lifecycle points in request processing:
+
+* **Request header processing**: Modify request headers before route matching, enabling custom routing logic
+* **Request body processing**: Modify request bodies before they reach backends, enabling PII redaction, data validation, etc.
+* **Response header processing**: Modify response headers before returning to clients
+* **Response body processing**: Modify response content before sending to clients, enabling data transformation
+
+Plugins run in a sandboxed environment with no network or filesystem access by default, and have memory and execution time limits. This ensures that even buggy plugin code cannot compromise the gateway's overall stability.
+
+### How do I develop and distribute Wasm plugins?
+
+Wasm plugins can be written in any language that compiles to the `wasm32-wasi` target, with Rust being the most commonly used. The project provides a plugin development SDK and examples.
+
+Development workflow:
+
+1. Write plugin logic in Rust, implementing the specified trait interface
+2. Compile to `wasm32-wasi` target: `cargo build --target wasm32-wasi --release`
+3. Push the `.wasm` file as an OCI image or to an accessible URL
+4. Reference the plugin through the `WasmPlugin` CRD and bind it to the gateway
+
+See the [Wasm Plugin Development](https://github.com/nantian-gw/gateway) guide for details.
+
+## Troubleshooting
+
+### I changed a route configuration but it's not taking effect. How do I troubleshoot?
+
+This is a common troubleshooting scenario. Check layer by layer:
+
+1. **Check route resource status**: `kubectl describe httproute <name> -n <namespace>`
+2. **Check control plane config snapshot**: `curl http://<controlplane>:8081/api/v1/config/snapshot/version`
+3. **Check data plane config version**: `curl http://<dataplane>:8082/api/v1/config/version`
+4. **Check xDS connection status**: `curl http://<controlplane>:8081/api/v1/clients`
+
+If the control plane snapshot version has updated but the data plane version hasn't, check if the xDS client is in `NACK` state. If in `NACK`, the `error_detail` field contains the specific reason for configuration parsing failure.
+
+### Why does the data plane keep restarting?
+
+Check the data plane logs first. Common causes:
+
+1. **OOM (Out of Memory)**: Check if the data plane Pod's memory limit is sufficient. If Wasm plugins or high traffic cause memory spikes, increase `resources.limits.memory`.
+2. **Configuration parsing failure**: If the data plane crashes on invalid configuration, this indicates a bug in the data plane's error handling. File a Bug Report with the crash logs.
+3. **Health check failure**: `/readyz` returns a non-200 status code. Check if the data plane can reach the control plane.
+4. **xDS connection issues**: Persistent reconnection failures. Check DNS resolution and network connectivity to the control plane Service.
+
+See the [Troubleshooting](/en/1.5/operations/troubleshooting) page for detailed steps.
+
+### How does Nantian Gateway perform? Are there benchmarks?
+
+Nantian Gateway's Rust data plane targets C++ (Envoy) level proxy performance. In typical scenarios (HTTP/1.1 request forwarding, no filter processing), a single data plane instance can handle tens of thousands of QPS with p99 latency in the millisecond range.
+
+Specific performance data depends on hardware configuration, backend service latency, and routing rule complexity. We recommend benchmarking in your target environment. The `benchmarks/` directory in the project repository contains benchmarking scripts and tools.
+
+## Performance & Tuning
+
+### How do I tune the control plane for large clusters?
+
+For clusters with hundreds of Gateway resources, adjust these settings:
+
+* **`translatorLimits.maxInputObjects`**: Set to a reasonable cap (e.g., 5000) to prevent runaway translation from consuming excessive memory.
+* **`syncPeriod`**: Increase from the default 30s to 60s or 120s to reduce translation frequency.
+* **`reconcilerRunner.settleDelay`**: Increase from 300ms to 500ms to batch rapid resource changes.
+* **`nodeDrift.warningThreshold`**: Increase from 15s to 30s to reduce false alarms in large clusters.
+
+See [Performance Tuning](/en/1.5/configuration/tuning) for all available knobs.
+
+### How do I configure access logging?
+
+Access logging is enabled by default on the data plane. Each request is logged in a configurable format:
+
+* **`access.enabled`**: Toggle access logging (default: `true`)
+* **`access.path`**: Log file path (default: `/var/log/nantian-gw/access.log`)
+* **`access.format`**: Custom log format string with variables like `%CLIENT_IP%`, `%STATUS%`, `%LATENCY_MS%`, `%UPSTREAM_ADDR%`, etc.
+* **`access.mode`**: `json` or `text` (default: `json`)
+* **`access.sampleRate`**: Fraction of requests to log (default: `0.5` — 50%)
+
+For per-route access log control, use route annotations with the prefix `gateway.nantian.dev/access-log-`.
+
+### How much memory does the data plane need?
+
+A typical data plane instance uses approximately 50-100MB at idle. Memory scales with:
+
+* Number of active connections (roughly 5-10KB per connection)
+* Wasm plugin memory allocation
+* Configuration snapshot size (depends on route/backend count)
+
+The Helm chart defaults to 128Mi requests and 256Mi limits. For production with high connection counts, consider 256Mi-512Mi limits. Monitor `container_memory_working_set_bytes` in Prometheus.
+
+## Security
+
+### How do I enable TLS between the control plane and data plane?
+
+Configure `grpcTLS` in the control plane config:
+
+```yaml
+grpcTLS:
+  enabled: true
+  certPath: /etc/nantian/tls/tls.crt
+  keyPath: /etc/nantian/tls/tls.key
+  clientCAPath: /etc/nantian/tls/ca.crt
+  requireClientCert: true
+```
+
+And `xdsTls` in the data plane config:
+
+```yaml
+xdsTls:
+  enabled: true
+  caPath: /etc/nantian/tls/ca.crt
+  certPath: /etc/nantian/tls/tls.crt
+  keyPath: /etc/nantian/tls/tls.key
+  domainName: nantian-controlplane.nantian-gw.svc
+```
+
+See [TLS / mTLS](/en/1.5/configuration/tls) for complete configuration.
+
+### How do I secure the Admin API?
+
+The Admin API provides full read access to gateway configuration. Secure it by:
+
+1. **Bind to localhost**: Set `adminAddr: "127.0.0.1:18081"` to prevent external access.
+2. **Enable TLS**: Configure `adminTLS` with a certificate and key.
+3. **Enable authentication**: Set `adminAuth.bearerToken` or `adminAuth.bearerTokenFile` to require a bearer token.
+4. **Use RBAC**: Restrict access to the control plane Pod and Service.
+
+## Migration
+
+### Can I migrate from another Gateway API implementation?
+
+Yes. Since Nantian Gateway implements the standard Gateway API v1.5.1, your existing `GatewayClass`, `Gateway`, `HTTPRoute`, and other Gateway API resources are compatible. The migration process is:
+
+1. Install Nantian Gateway alongside your existing gateway
+2. Create a new `GatewayClass` pointing to `gateway.networking.k8s.io/nantian-gw`
+3. Create a new `Gateway` referencing the new GatewayClass
+4. Gradually migrate routes by updating `parentRefs` to point to the new Gateway
+5. Validate traffic flows correctly before removing the old gateway
+
+Custom CRDs (`AIService`, `TokenPolicy`, `WasmPlugin`, `BackendLBPolicy`) are Nantian Gateway-specific and need to be created fresh.
+
+## Contributing & Community
+
+### How do I contribute to the project?
+
+See the [Contributing Overview](/en/1.5/contributing/) page. In short:
+
+1. Fork the repository, develop on a feature branch
+2. Ensure tests pass (`go test` + `cargo test`)
+3. Code formatting is correct (`gofmt` + `cargo fmt` + `clippy`)
+4. Submit a PR to the `main` branch
+5. Wait for CI to pass and code review
+
+For new contributors, look for issues labeled `good first issue` — these are entry-level tasks suitable for getting familiar with the project.
+
+### What is the project's governance model?
+
+Nantian Gateway is an open-source project under the Apache 2.0 license. The project is maintained by a core team with maintainer privileges. Key decisions are made through public RFCs and GitHub Discussions. Anyone can participate in discussions, submit proposals, and contribute code.
+
+### Where can I get help?
+
+* **Documentation**: This website covers installation, configuration, operations, and API reference
+* **GitHub Discussions**: [github.com/nantian-gw/gateway/discussions](https://github.com/nantian-gw/gateway/discussions)
+* **GitHub Issues**: [github.com/nantian-gw/gateway/issues](https://github.com/nantian-gw/gateway/issues) — for bug reports and feature requests
+* **Community**: Join the discussion to share your use cases, ask questions, and help others

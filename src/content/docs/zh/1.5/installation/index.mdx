@@ -1,0 +1,81 @@
+---
+title: 安装概述
+slug: zh/1.5/installation
+---
+
+Nantian Gateway 在 Kubernetes 中以三个 workload 运行：Go 控制面、Rust 数据面和可选 dashboard。Helm 是大多数用户和运维人员的推荐安装路径。需要基于 patch 管理清单或接入 GitOps 时，也可以使用 Kustomize overlays。
+
+## 安装方式
+
+| 方式 | 适合场景 | 说明 |
+| --- | --- | --- |
+| [Helm](/zh/1.5/installation/helm/) | 大多数安装、升级和 values 覆盖。 | 使用 chart 仓库 `https://charts.nantian.dev`。 |
+| [Kustomize](/zh/1.5/installation/kustomize/) | GitOps 或仓库内清单自定义。 | 使用组件仓库中的 overlays。 |
+
+安装网关前需要先安装 Gateway API CRD。快速开始使用 Gateway API v1.5.1 standard CRD bundle。
+
+## Helm 会安装什么
+
+默认 Helm 安装使用 `nantian-gw` 命名空间，并创建以下主要资源：
+
+| 资源 | 默认名称 | 默认数量或端口 | 作用 |
+| --- | --- | --- | --- |
+| Namespace | `nantian-gw` | 1 | 当 `namespace.create: true` 时创建组件命名空间。 |
+| 控制面 Deployment | `nantian-gw-controlplane` | 2 replicas | 监听 Kubernetes 资源、翻译资源、写入状态并发布快照。 |
+| 数据面 Deployment | `nantian-gw-dataplane` | 2 replicas | 接收快照并处理运行时流量。 |
+| Dashboard Deployment | `nantian-gw-dashboard` | 1 replica | 面向用户和运维人员的 Web UI。 |
+| GatewayClass | `nantian-gw` | 1 | 使用 controller `gateway.networking.k8s.io/nantian-gw`。 |
+
+Helm chart 会创建 `GatewayClass`，但不会创建你的应用 `Gateway` 或 `HTTPRoute`。这些资源需要在安装后由用户在应用命名空间中创建。
+
+## Service 与端口
+
+当前 Helm 模板会为控制面、数据面 admin/metrics 和 dashboard 创建固定的 ClusterIP Service：
+
+| Service | 端口 | 作用 |
+| --- | --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` | 数据面 xDS/gRPC 连接。 |
+| `nantian-gw-controlplane-admin` | `18081` | 控制面 Admin API。 |
+| `nantian-gw-controlplane-metrics` | `18082` | 控制面 Prometheus metrics。 |
+| `nantian-gw-dataplane-admin` | `19080` | 数据面 Admin API。 |
+| `nantian-gw-dataplane-metrics` | `19080` | 数据面 metrics 抓取入口。 |
+| `nantian-gw-dashboard` | `3000` | Dashboard Web UI。 |
+
+数据面运行时 HTTP 监听地址配置为 `0.0.0.0:10080`。请根据环境暴露该监听器，例如本地测试使用 port-forward，集群入口使用 Kubernetes Service overlay。不要把控制面 gRPC、admin 或 metrics Service 暴露到集群外。
+
+## 默认 Chart 行为
+
+Chart 默认值偏保守：
+
+* 镜像使用 `global.imageRegistry: "ghcr.io"`，仓库分别是 `nantian-gw/nantian-controlplane`、`nantian-gw/dataplane` 和 `nantian-gw/dashboard`。
+* 控制面和数据面默认各运行 2 个副本；dashboard 默认 1 个副本。
+* HPA 默认关闭，配置为 `hpa.enabled: false`。
+* Prometheus Operator ServiceMonitor 默认关闭，配置为 `serviceMonitor.enabled: false`。
+* NetworkPolicy 默认开启，配置为 `networkPolicies.enabled: true`。
+* 数据面默认开启 `accessLogVolume.enabled: true`，挂载到 `/var/log/nantian-gw`，`sizeLimit: 256Mi`。
+* 实验性 Gateway 和 AI 功能在两个平面里都默认关闭。
+
+## 安装后检查
+
+安装后先检查 workload 和 GatewayClass：
+
+```bash
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+```
+
+如果 Pod 没有就绪，请查看最近日志：
+
+```bash
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
+```
+
+随后按照[快速开始](/zh/1.5/getting-started/quick-start/)创建 demo `Gateway` 和 `HTTPRoute`。
+
+## 下一步读哪一页
+
+* 阅读 [Helm 安装](/zh/1.5/installation/helm/)了解仓库配置、默认值、常见覆盖和卸载命令。
+* 创建 `AIService`、`TokenPolicy`、`WasmPlugin` 或实验性 `BackendLBPolicy` 前，先阅读[实验功能](/zh/1.5/configuration/experimental-features/)。
+* 阅读[运维](/zh/1.5/operations/)查看安装后的首次检查、Service 名称、日志、metrics 和 admin 访问方式。

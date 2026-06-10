@@ -1,0 +1,119 @@
+---
+title: 可观测性
+slug: zh/1.5/configuration/observability
+---
+
+Nantian Gateway 从控制面和数据面输出结构化日志、Prometheus 指标和可选的 OpenTelemetry 追踪数据。本页介绍每种可观测性信号的配置方式。
+
+## 日志
+
+两个组件均使用结构化日志，默认格式为 JSON。结构化日志可直接与 Loki、Elasticsearch 和 Datadog 等日志聚合系统集成。
+
+### 控制面日志（Go）
+
+控制面使用 Go 的 `log/slog` 包：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `log.level` | string | `info` | 最低日志级别：`debug`、`info`、`warn` 或 `error` |
+| `log.format` | string | `json` | 输出格式：`json` 或 `text` |
+| `log.addSource` | bool | `false` | 在日志条目中包含源文件和行号 |
+
+`debug` 级别包含协调（reconciliation）详情、配置快照差异和 gRPC 流事件。此级别的输出量远大于 `info`，不应在生产环境中长期启用。
+
+启用 `log.addSource` 后，每条日志条目包含 Go 源文件和行号。这会为每次日志调用增加少量开销，但显著有助于调试。
+
+每条 JSON 日志条目包含 `time`、`level`、`msg` 和上下文特定字段。在本地开发中直接阅读日志时，使用 `text` 格式。
+
+### 数据面日志（Rust）
+
+数据面使用 Rust 的 `tracing` 框架，支持细粒度的逐模块控制：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `log.level` | string | `info,nantian_core::connectors=off` | Tracing 过滤指令 |
+| `log.format` | string | `json` | 输出格式：`json` 或 `text` |
+| `log.addSource` | bool | `false` | 包含源位置 |
+| `log.includeTarget` | bool | `false` | 包含 tracing 目标（Rust 模块路径） |
+| `log.includeThreadIds` | bool | `false` | 包含线程 ID |
+| `log.includeThreadNames` | bool | `false` | 包含线程名称 |
+| `log.nonBlocking` | bool | `true` | 使用非阻塞日志输出 |
+| `log.nonBlockingBufferedLines` | int | `65536` | 环形缓冲区容量 |
+| `log.dropWhenFull` | bool | `true` | 缓冲区满时丢弃日志 |
+
+`level` 字段接受 tracing 过滤语法，支持逐模块粒度控制。例如 `info,hyper=warn,tower=debug` 将全局级别设为 `info`，将 `hyper` 降至 `warn`，将 `tower` 提升至 `debug`。默认配置抑制了 `nantian_core::connectors` 的详细输出。
+
+非阻塞日志对于高吞吐量代理至关重要。使用阻塞输出时，缓慢的日志接收端（磁盘或网络拥塞）可能导致代理线程停滞。环形缓冲区可吸收突发流量，`dropWhenFull` 确保缓冲区溢出时代理继续运行。
+
+## 指标
+
+两个平面均在可配置的端点上暴露 Prometheus 指标。
+
+### 控制面指标
+
+控制面在配置的路径（默认：`/metrics`）上暴露 HTTP 指标端点。指标包括：
+
+* **协调计数器** — 已处理的 Kubernetes 资源事件数、遇到的错误数以及生成的配置快照数
+* **gRPC 流指标** — 活跃连接数、发送和接收的消息数以及连接持续时间
+* **Go 运行时指标** — goroutine 数量、内存分配和 GC 统计信息
+
+### 数据面指标
+
+数据面在专用 HTTP 监听器上暴露指标：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `metrics.enabled` | bool | `true` | 启用指标端点 |
+| `metrics.port` | int | `9100` | 指标 HTTP 服务器端口 |
+| `metrics.path` | string | `"/metrics"` | 指标端点 HTTP 路径 |
+
+关键数据面指标：
+
+* **请求计数器** — 总请求数，按 HTTP 方法、状态码和路由分组
+* **延迟直方图** — 请求持续时间百分位数（p50、p95、p99）
+* **连接指标** — 活跃连接数、连接速率和连接持续时间
+* **上游指标** — 后端连接池命中/未命中、后端延迟和后端错误
+* **AI 网关指标** — Token 计数、提供商延迟和速率限制执行情况
+
+完整指标参考请参阅[指标参考](/zh/1.5/operations/metrics)。
+
+## 链路追踪
+
+OpenTelemetry 链路追踪为可选功能，可在数据面配置中启用：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `tracing.enabled` | bool | `false` | 启用 OpenTelemetry 链路追踪 |
+| `tracing.endpoint` | string | `""` | OTLP 收集器端点 |
+| `tracing.sampleRate` | float | `0.1` | 采样率（0.0 至 1.0） |
+| `tracing.serviceName` | string | `"nantian-gw"` | 追踪数据中的服务名称 |
+
+启用后，数据面传播追踪上下文头并将 span 导出到配置的 OTLP 收集器。追踪覆盖完整的请求生命周期：TLS 握手、路由匹配、请求头转换、上游请求和响应。
+
+`sampleRate` 控制生成追踪的请求比例。`0.1` 表示追踪 10% 的请求。生产环境建议从较低的采样率开始，根据可观测性需求和存储容量逐步调整。
+
+## Prometheus 采集
+
+配置 Prometheus 采集数据面指标：
+
+```yaml
+scrape_configs:
+  - job_name: nantian-gw-dataplane
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: [nantian-gw]
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: nantian-gw-dataplane
+      - source_labels: [__meta_kubernetes_pod_container_port_number]
+        action: keep
+        regex: "9100"
+```
+
+## 下一步
+
+* [指标参考](/zh/1.5/operations/metrics) — 所有可用指标的完整参考
+* [Grafana 仪表盘](/zh/1.5/operations/grafana) — 预构建的可视化仪表盘
+* [告警规则](/zh/1.5/operations/alerting) — 推荐的告警配置

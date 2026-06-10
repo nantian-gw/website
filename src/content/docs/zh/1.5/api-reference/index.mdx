@@ -1,0 +1,151 @@
+---
+title: API 参考概述
+slug: zh/1.5/api-reference
+---
+
+Nantian Gateway 提供四套 API 界面，分别面向不同的使用场景和角色。本页帮你理清每套 API 的定位，找到你需要的参考文档。
+
+## API 界面概览
+
+Nantian Gateway 的 API 架构分为三个层次，各司其职：
+
+**Kubernetes CRD** 构成声明式配置层。你用 YAML 描述期望的网关拓扑，控制面负责将其调和为运行时配置。这一层既包含标准的 Gateway API 资源，也包含 Nantian Gateway 自有资源集。
+
+**Admin REST API** 是运维操作层。它暴露控制面和各数据面代理的运行时状态，让运维人员可以直接查看配置快照、连接客户端、健康状态和监控指标。
+
+**gRPC xDS 协议** 是配置分发层。控制面通过持久的双向 gRPC 连接，将配置快照流式推送到每一个数据面实例，采用的是 Envoy 经过大规模验证的 xDS 模型。
+
+### 四套 API 一览
+
+| API 界面 | 使用者 | 描述 | 协议 |
+|----------|--------|------|------|
+| **Gateway API 资源** | 平台运维、应用开发者 | 用 Kubernetes 原生资源定义路由规则 | REST (Kubernetes API) |
+| **自定义 CRD** | 平台运维、AI 平台团队 | 扩展 Gateway API，管理 AI 服务、Token 策略、Wasm 插件和负载均衡 | REST (Kubernetes API) |
+| **Admin API** | 运维、SRE | 运行时诊断、配置检查、健康探查 | HTTP REST |
+| **xDS 协议** | 平台开发者、贡献者 | 控制面和数据面之间的配置分发协议 | gRPC 双向流 |
+
+## Gateway API 资源（扩展）
+
+Nantian Gateway 完整实现了 Kubernetes Gateway API 规范，支持以下资源类型：
+
+| 资源 | 作用 |
+|------|------|
+| `GatewayClass` | 集群级网关实现类型定义。控制面会认领 `controllerName: gateway.networking.k8s.io/nantian-gw` 的 GatewayClass。 |
+| `Gateway` | 定义一组监听器（端口、协议、TLS），用于接收流量。路由资源通过 `parentRefs` 绑定到特定的 Gateway 和监听器。 |
+| `HTTPRoute` | HTTP 和 HTTPS 流量路由，支持按路径、请求头和查询参数匹配。是最常用的路由类型。 |
+| `GRPCRoute` | gRPC 流量路由，支持方法级和服务级的匹配规则。可配合 gRPC 反射和健康检查等特性。 |
+| `TCPRoute` | 四层 TCP 流量路由。适用于不需要 HTTP 解析、只需端口转发的协议。 |
+| `UDPRoute` | 四层 UDP 流量路由。用于 DNS、流媒体等基于 UDP 的负载。 |
+| `TLSRoute` | TLS 透传路由。将 TLS 加密连接转发到后端，网关不终止 TLS。 |
+| `BackendTLSPolicy` | 配置网关与后端服务之间的 TLS 验证策略，包括 CA 证书和主机名校验。 |
+| `ReferenceGrant` | 授权跨命名空间引用，允许一个命名空间中的路由引用另一个命名空间的后端。 |
+
+每种路由类型可以绑定到一个或多个 Gateway，同一监听器上也可以并存多条路由。各资源字段的完整说明详见 [Gateway API 资源](/zh/1.5/api-reference/gateway-api) 参考文档。
+
+## 自定义 CRD
+
+:::caution[实验性功能]
+这些 CRD 属于 **实验性功能**（`v1alpha1`），API 可能在后续版本中发生不兼容变更。
+:::
+
+Nantian Gateway 扩展了标准 Gateway API，引入了自定义与实验资源：
+
+| CRD | 描述 |
+|-----|------|
+| `AIService` | `gateway.nantian.dev/v1alpha1` 资源，用于配置一个 AI provider/model 目标。 |
+| `TokenPolicy` | `gateway.nantian.dev/v1alpha1` 资源，用于把 token 和请求限制附加到本地 Gateway API 目标。 |
+| `WasmPlugin` | `gateway.nantian.dev/v1alpha1` 资源，用于加载 Wasm 模块并绑定到目标资源。 |
+| `BackendLBPolicy` | `gateway.networking.k8s.io/v1alpha2` Gateway API experimental 资源，用于后端负载均衡行为。 |
+
+创建这些资源前，需要开启相关实验功能。当前字段和 YAML 示例见[自定义与实验资源](/zh/1.5/api-reference/crds)。
+
+## Admin API 端点
+
+Admin API 由控制面（端口 `8081`）和各数据面代理分别提供，包含以下几类端点：
+
+| 类别 | 用途 | 示例端点 |
+|------|------|----------|
+| **健康检查** | Kubernetes 存活性和就绪性探针 | `/healthz`、`/readyz` |
+| **配置检查** | 查看当前配置状态和快照版本 | `/api/v1/config/snapshot`、`/api/v1/config/snapshot/version` |
+| **资源枚举** | 列举网关、路由和后端集群 | `/api/v1/gateways`、`/api/v1/routes`、`/api/v1/backends` |
+| **客户端管理** | 查看已连接的 xDS 客户端及其状态 | `/api/v1/clients`、`/api/v1/clients/{node_id}` |
+| **监控指标** | Prometheus 格式的监控指标 | `/api/v1/metrics` |
+
+控制面 Admin API 提供集群级别视图，涵盖所有网关、路由和已连接数据面。数据面 Admin API 提供单实例运行时状态，包括活跃监听器、连接池和各后端健康状态。完整端点参考见 [Admin API](/zh/1.5/api-reference/admin-api)。
+
+## gRPC xDS 协议
+
+xDS 协议是 Nantian Gateway 配置分发的骨干。控制面通过持久的 gRPC 双向流向每个数据面实例推送配置，基于 Envoy xDS 模型构建。
+
+**传输的配置类型：** 协议承载四类配置资源：
+
+* **监听器（Listeners）** — 端口绑定、协议配置和 TLS 证书
+* **路由（Routes）** — HTTP/gRPC/TCP/UDP 路由规则，包含匹配条件和后端引用
+* **集群（Clusters）** — 上游后端组，含连接设置、超时和熔断策略
+* **端点（Endpoints）** — 通过服务发现获取的各后端 IP 地址和端口
+
+**数据面消费方式：** 每个数据面实例向控制面发起 `StreamConfiguration` RPC，声明订阅的资源类型，然后接收完整的配置快照。配置变更时，控制面主动推送增量更新。数据面对每次更新发回 ACK 或 NACK 确认，控制面追踪各数据面当前运行的配置版本。
+
+这种推送模型意味着配置变更能在数秒内传播到所有数据面，无需轮询开销。协议规范、消息格式和字段定义详见 [xDS 协议](/zh/1.5/api-reference/xds-proto)。
+
+## 从哪开始
+
+如果你只是配置网关路由，从 [Gateway API 资源](/zh/1.5/api-reference/gateway-api) 开始就够了。这套 API 遵循 Kubernetes Gateway API 规范，你的 `HTTPRoute`、`Gateway` 等配置和其他兼容实现写法完全一样。
+
+如果你需要管理 AI 模型路由、Token 配额、Wasm 插件或自定义负载均衡策略，接着看 [自定义 CRD](/zh/1.5/api-reference/crds) 章节。Nantian Gateway 的四个 CRD（`AIService`、`TokenPolicy`、`WasmPlugin`、`BackendLBPolicy`）扩展了标准 Gateway API 的能力，让你用同样的 Kubernetes 原生工作流管理这些高级功能。
+
+运维人员排查问题时，[Admin API](/zh/1.5/api-reference/admin-api) 是你最常用的入口。它暴露了控制面和数据面的内部状态，包括配置快照版本、xDS 客户端连接状态、后端健康检查结果等。
+
+如果你在开发 Nantian Gateway 本身，或者需要理解控制面和数据面之间的通信协议，[xDS 协议](/zh/1.5/api-reference/xds-proto) 章节详细描述了 gRPC 双向流中传递的消息格式和字段定义。
+
+## 资源模型关系
+
+Nantian Gateway 的 API 资源之间存在清晰的层级关系。理解这些关系有助于你规划配置结构：
+
+```
+GatewayClass
+  └── Gateway
+       ├── HTTPRoute
+       ├── GRPCRoute
+       ├── TCPRoute
+       ├── UDPRoute
+       ├── TLSRoute
+       └── MeshRoute (服务网格)
+              ├── AIService (AI 后端配置)
+              ├── TokenPolicy (Token 配额)
+              ├── WasmPlugin (自定义扩展)
+              └── BackendLBPolicy (负载均衡策略)
+```
+
+`GatewayClass` 定义网关实现类型，Nantian Gateway 的控制面监听并认领它。`Gateway` 定义监听器（端口、协议、TLS 配置），路由资源（`HTTPRoute` 等）将流量规则绑定到具体的 `Gateway` 和监听器上。
+
+四个自定义 CRD 可以在路由级别或后端级别引用，灵活控制 AI 服务连接、Token 限制、Wasm 插件注入和负载均衡行为。
+
+## 兼容性与版本策略
+
+Nantian Gateway 基于 [Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) 规范，声明支持 **55 个特性**，涵盖 Core、Extended 和 Implementation-specific 三个一致性级别。各特性门控的具体支持情况详见 [Gateway API 资源](/zh/1.5/api-reference/gateway-api) 参考文档。
+
+**升级策略：** Nantian Gateway 遵循 Kubernetes Gateway API 的版本策略。稳定版资源（`GatewayClass`、`Gateway`、`HTTPRoute`、`GRPCRoute`）使用 `v1` API，保证向后兼容。Alpha 版资源（`TCPRoute`、`UDPRoute`、`TLSRoute`、`BackendTLSPolicy`）可能在版本间发生变化。自定义 CRD 使用 `v1alpha1` API 组，随 AI 网关功能集的发展可能演进。
+
+**废弃策略：** 当某个资源版本被标记为废弃时，它至少会在两个小版本内继续可用，之后才会移除。废弃通知会出现在变更日志和资源的状态条件中。控制面会通过 Kubernetes Event 生成告警，提醒你当前使用了已废弃的字段。
+
+## 协议说明
+
+### Kubernetes API (REST)
+
+Gateway API 资源和自定义 CRD 都通过 Kubernetes API Server 操作。你使用 `kubectl`、`helm` 或任何 Kubernetes 客户端工具提交 YAML 配置，控制面通过 Watch 机制接收变更并翻译为内部配置。
+
+### Admin API (HTTP REST)
+
+控制面和数据面各自暴露一个 HTTP REST 接口。控制面的 Admin API 提供集群级别的配置视图，数据面的 Admin API 提供单个代理实例的运行时状态。两个 API 都返回 JSON 格式的响应。
+
+### xDS 协议 (gRPC 双向流)
+
+控制面和数据面之间的通信不使用 REST，而是通过 gRPC 双向流实现。控制面主动推送配置快照，数据面确认接收并上报状态。这个协议基于 Envoy 的 xDS 模型，经过了大规模生产环境的验证。
+
+## 下一步
+
+* 查看 [Gateway API 资源](/zh/1.5/api-reference/gateway-api) 了解标准路由配置
+* 查看 [自定义 CRD](/zh/1.5/api-reference/crds) 了解 Nantian Gateway 的扩展能力
+* 查看 [Admin API](/zh/1.5/api-reference/admin-api) 了解运行时诊断接口
+* 查看 [xDS 协议](/zh/1.5/api-reference/xds-proto) 了解控制面和数据面的通信协议

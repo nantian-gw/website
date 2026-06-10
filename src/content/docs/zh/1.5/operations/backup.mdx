@@ -1,0 +1,220 @@
+---
+title: 备份与恢复
+slug: zh/1.5/operations/backup
+---
+
+Nantian Gateway 的配置完全来源于 Kubernetes 资源。网关本身不维护需要独立备份的内部状态，所有关键配置都存储在 Kubernetes API Server 的 etcd 中。
+
+## 备份策略
+
+### 需要备份的内容
+
+| 备份对象 | 说明 | 优先级 |
+|---|---|---|
+| Gateway API 资源 | Gateway、HTTPRoute、GRPCRoute 等 | 高 |
+| 自定义 CRD 资源 | AIService、TokenPolicy、WasmPlugin、BackendLBPolicy | 高 |
+| TLS Secret | 监听器和后端 TLS 证书 | 高 |
+| Wasm 插件文件 | `.wasm` 二进制文件（如果使用外部存储） | 中 |
+| 控制面配置文件 | `config.yaml` | 中 |
+| 数据面配置文件 | 数据面 YAML 配置 | 中 |
+| Helm values / Kustomize overlays | 部署配置 | 中 |
+
+### 推荐方案：GitOps + etcd 备份
+
+推荐使用双层备份策略：
+
+**第一层：GitOps 管理 Gateway 配置**
+
+将所有 Gateway API 资源和自定义 CRD 以 YAML 文件形式存储在 Git 仓库中，通过 CI/CD 或 GitOps 工具（如 Argo CD、Flux）同步到集群。Git 仓库本身就是配置的版本化备份。
+
+```
+git-repo/
+├── gateways/
+│   ├── production/
+│   │   ├── gateway.yaml
+│   │   ├── http-routes.yaml
+│   │   └── grpc-routes.yaml
+│   └── staging/
+├── ai-services/
+│   └── ai-services.yaml
+├── wasm-plugins/
+│   └── wasm-plugins.yaml
+└── tls/
+    └── kustomization.yaml  # 引用外部 Secret 管理工具
+```
+
+**第二层：etcd 备份**
+
+Kubernetes etcd 是集群状态的最终来源。定期备份 etcd 可以恢复整个集群状态，包括所有 Gateway 资源。
+
+```bash
+# 使用 etcdctl 备份
+ETCDCTL_API=3 etcdctl snapshot save /backup/etcd-snapshot-$(date +%Y%m%d-%H%M%S).db \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key
+```
+
+### TLS 证书备份
+
+TLS 证书（特别是 CA 证书和私钥）需要特别关注。如果证书丢失且无法重新签发，可能需要重新配置所有依赖该证书的监听器和后端。
+
+```bash
+# 导出所有 TLS Secret
+kubectl get secrets -A -l type=kubernetes.io/tls -o yaml > tls-secrets-backup.yaml
+
+# 或者使用 velero 进行集群级备份
+velero backup create nantian-gw-tls --include-resources secrets \
+  --selector type=kubernetes.io/tls
+```
+
+### Wasm 插件备份
+
+如果 Wasm 插件存储在外部（如对象存储、容器镜像仓库），确保这些存储也有备份策略。如果插件以 ConfigMap 或 Secret 形式存储在 Kubernetes 中，etcd 备份会覆盖它们。
+
+## 恢复步骤
+
+### 从 GitOps 恢复
+
+如果使用 GitOps 管理配置，恢复过程很简单：
+
+1. 部署 Nantian Gateway（控制面 + 数据面）
+2. 配置 GitOps 工具指向配置仓库
+3. GitOps 工具自动同步所有 Gateway 资源
+4. 控制面检测到新资源，翻译并推送到数据面
+5. 验证路由和流量是否正常
+
+### 从 etcd 快照恢复
+
+如果从 etcd 快照恢复整个集群：
+
+```bash
+# 1. 停止 kube-apiserver
+# 2. 恢复 etcd 快照
+ETCDCTL_API=3 etcdctl snapshot restore /backup/etcd-snapshot-20250101.db \
+  --data-dir=/var/lib/etcd-restore
+
+# 3. 更新 etcd 配置指向新的数据目录
+# 4. 重启 etcd 和 kube-apiserver
+# 5. 验证 Nantian Gateway 资源是否恢复
+kubectl get gateway,httproute -A
+```
+
+### 从 YAML 备份恢复
+
+如果手动备份了 YAML 文件：
+
+```bash
+# 恢复 Gateway API 资源
+kubectl apply -f gateways/
+kubectl apply -f routes/
+kubectl apply -f ai-services/
+kubectl apply -f wasm-plugins/
+
+# 恢复 TLS Secret
+kubectl apply -f tls-secrets-backup.yaml
+
+# 验证恢复状态
+kubectl get gateway -A
+curl http://<controlplane>:19080/v1/summary
+```
+
+### 恢复后的验证
+
+恢复完成后，执行以下验证步骤：
+
+1. **检查控制面状态**：
+   ```bash
+   curl http://<controlplane>:19080/v1/summary
+   ```
+   确认 `listenerCount`、`routeCount` 和 `backendCount` 与预期一致。
+
+2. **检查数据面同步**：
+   ```bash
+   curl http://<controlplane>:19080/v1/snapshot-sync
+   ```
+   确认 `driftedNodeCount` 为 0。
+
+3. **检查数据面就绪**：
+   ```bash
+   curl http://<controlplane>:19080/v1/nodes
+   ```
+   确认所有节点的 `ready` 字段为 `true`。
+
+4. **发送测试请求**：
+   ```bash
+   curl -H "Host: <expected-hostname>" http://<gateway-ip>/<test-path>
+   ```
+   确认返回预期的响应。
+
+## 灾难恢复场景
+
+### 场景 1：控制面完全丢失
+
+如果控制面 Pod 全部丢失（如节点故障、误删除）：
+
+1. 重新部署控制面（Helm 或 Kustomize）
+2. 控制面启动后会自动从 Kubernetes API 读取所有 Gateway 资源
+3. 翻译并推送配置到数据面
+4. 数据面继续使用最后一次收到的配置处理流量（在此期间流量不受影响）
+
+### 场景 2：数据面完全丢失
+
+如果数据面 Pod 全部丢失：
+
+1. 重新部署数据面
+2. 数据面启动后连接控制面 gRPC xDS 服务器
+3. 接收最新配置快照
+4. 开始处理流量
+
+在此期间，所有南北向流量会中断。建议部署至少 2 个数据面副本，分布在不同节点上。
+
+### 场景 3：etcd 数据损坏
+
+如果 etcd 数据损坏且没有备份：
+
+1. 从 GitOps 仓库重新部署所有 Gateway 配置
+2. 从外部备份恢复 TLS 证书
+3. 重新创建必要的 Secret 和 ConfigMap
+4. 验证控制面翻译和数据面同步
+
+:::caution
+如果 TLS 证书的私钥丢失且无法恢复，你需要重新签发证书并更新所有引用该证书的 Gateway 监听器配置。在生产环境中，建议使用 cert-manager 等工具自动管理证书生命周期。
+:::
+
+## 备份自动化
+
+推荐使用 CronJob 或 Velero 实现备份自动化：
+
+```yaml
+# 使用 Velero 定时备份
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: nantian-gw-daily
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"  # 每天凌晨 2 点
+  template:
+    includedNamespaces:
+      - nantian-gw
+    includedResources:
+      - gateways.gateway.networking.k8s.io
+      - httproutes.gateway.networking.k8s.io
+      - grpcroutes.gateway.networking.k8s.io
+      - tcproutes.gateway.networking.k8s.io
+      - udproutes.gateway.networking.k8s.io
+      - tlsroutes.gateway.networking.k8s.io
+      - backendtlspolicies.gateway.networking.k8s.io
+      - aiservices.nantian.dev
+      - tokenpolicies.nantian.dev
+      - wasmplugins.nantian.dev
+      - backendlbpolicies.nantian.dev
+      - secrets
+    ttl: 720h  # 保留 30 天
+```
+
+:::tip
+定期测试恢复流程。备份只有在能成功恢复时才有价值。建议每季度执行一次恢复演练，验证备份完整性和恢复步骤的正确性。
+:::

@@ -1,0 +1,181 @@
+---
+title: 自定义与实验资源
+slug: zh/1.5/api-reference/crds
+---
+
+Nantian Gateway 使用标准 Gateway API 资源进行路由。安装相关 CRD 并开启对应 feature flag 后，它也能理解实验性扩展资源。
+
+:::caution[实验性 API]
+本页资源均为实验性资源。它们的 schema 和运行时行为可能变化。使用前请开启所需 feature flag。
+:::
+
+## 概览
+
+| Resource | API version | Scope | Purpose |
+| --- | --- | --- | --- |
+| `AIService` | `gateway.nantian.dev/v1alpha1` | Namespaced | 为 AI gateway 路由配置一个 AI provider/model 目标。 |
+| `TokenPolicy` | `gateway.nantian.dev/v1alpha1` | Namespaced | 将 token 和请求限制附加到本地 Gateway API 目标资源。 |
+| `WasmPlugin` | `gateway.nantian.dev/v1alpha1` | Namespaced | 加载 Wasm 模块并绑定到目标资源。 |
+| `BackendLBPolicy` | `gateway.networking.k8s.io/v1alpha2` | Namespaced | 配置后端负载均衡策略和会话保持。 |
+
+创建这些资源前，请先阅读[实验功能](/zh/1.5/configuration/experimental-features/)。
+
+## AIService
+
+`AIService` 配置一个 AI provider/model 目标。
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `spec.provider` | Yes | Provider 名称，例如 `openai`、`anthropic` 或 `ollama`。 |
+| `spec.format` | No | 请求/响应格式提示。 |
+| `spec.model` | Yes | provider 使用的模型名称。 |
+| `spec.auth.type` | No | 运行时理解的认证类型。 |
+| `spec.auth.secret` | No | Kubernetes Secret 名称。 |
+| `spec.auth.key` | No | Secret 中的 key。 |
+| `spec.auth.header` | No | 凭证使用的请求头。 |
+| `spec.timeout` | No | 超时时间字符串。 |
+| `spec.retry.maxRetries` | No | 重试次数。 |
+| `spec.retry.backoff` | No | 重试 backoff 时间字符串。 |
+| `spec.observability.langfuse.*` | No | Langfuse 集成字段。 |
+| `spec.observability.otel.*` | No | OpenTelemetry 集成字段。 |
+
+示例：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-gpt4o
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  auth:
+    type: bearer
+    secret: openai-api-key
+    key: token
+    header: Authorization
+  timeout: 60s
+  retry:
+    maxRetries: 2
+    backoff: 500ms
+```
+
+## TokenPolicy
+
+`TokenPolicy` 将 token 和请求限制附加到本地 Gateway API 目标资源。
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `spec.targetRefs` | Yes | `LocalPolicyTargetReference` 列表；`group`、`kind` 和 `name` 必填。 |
+| `spec.tokensPerMinute` | No | 每分钟 token 限制。 |
+| `spec.tokensPerHour` | No | 每小时 token 限制。 |
+| `spec.requestsPerMinute` | No | 每分钟请求限制。 |
+| `spec.scope` | No | 运行时策略解释的 scope 字符串。 |
+| `spec.burst` | No | burst 倍数。 |
+| `spec.onLimit` | No | 超限行为，例如 `reject`。 |
+
+示例：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: ai-route-quota
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ai-route
+  tokensPerMinute: 100000
+  tokensPerHour: 5000000
+  requestsPerMinute: 1000
+  scope: route
+  burst: 1.5
+  onLimit: reject
+```
+
+## WasmPlugin
+
+`WasmPlugin` 声明 Wasm 来源和可选目标绑定。
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `spec.wasm` | Yes | Wasm source object。 |
+| `spec.wasm.url` | No | Wasm module 的 URL 来源。 |
+| `spec.wasm.configMap.name` | No | ConfigMap 来源名称。 |
+| `spec.wasm.configMap.key` | No | ConfigMap data key；默认行为取决于 translator。 |
+| `spec.wasm.inline` | No | Inline base64 module content。 |
+| `spec.wasm.sha256` | No | SHA-256 checksum。 |
+| `spec.targetRefs` | No | 包含 `group`、`kind` 和 `name` 的 target refs。 |
+| `spec.hooks` | No | `onRequest`、`onResponse`、`onStreamChunk`。 |
+| `spec.config` | No | Plugin config string。 |
+| `spec.sandbox.*` | No | Runtime sandbox limits。 |
+
+示例：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: request-audit
+  namespace: nantian-demo
+spec:
+  wasm:
+    url: https://example.com/plugins/request-audit.wasm
+    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo
+  hooks:
+    - onRequest
+    - onResponse
+  config: |
+    {"mode":"audit"}
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+## BackendLBPolicy
+
+`BackendLBPolicy` 是 Gateway API experimental policy，不是 Nantian API group 资源。
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `spec.targetRefs` | Yes | Local policy target refs。 |
+| `spec.loadBalancing.type` | No | `RoundRobin`、`ConsistentHash`、`LeastRequest` 或 `Random`。 |
+| `spec.loadBalancing.consistentHash.keyType` | No | `SourceIP`、`Header` 或 `Hostname`。 |
+| `spec.loadBalancing.consistentHash.headerName` | No | key type 为 `Header` 时必填。 |
+| `spec.sessionPersistence` | No | Gateway API v1alpha2 session persistence object。 |
+
+示例：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: echo-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: echo
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+```
+
+## 下一步
+
+* [实验功能](/zh/1.5/configuration/experimental-features/)
+* [Gateway API 资源](/zh/1.5/api-reference/gateway-api/)
+* [运维](/zh/1.5/operations/)

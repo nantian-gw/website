@@ -1,0 +1,138 @@
+---
+title: 运维概述
+slug: zh/1.5/operations
+---
+
+本章覆盖 Nantian Gateway 的第一轮运维检查，并链接到更深入的 metrics、Grafana、告警、故障排查和备份页面。
+
+Nantian Gateway 基本无状态。Kubernetes 资源是事实来源，控制面从 Kubernetes API 重建路由状态，数据面通过 gRPC/xDS 接收运行时快照。运维排查应先检查 Kubernetes 状态、route attachment、控制面日志、数据面日志、metrics 和 admin endpoint。
+
+## 安装后的首次检查
+
+调试具体 route 前，先运行这些检查：
+
+```bash
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
+```
+
+按以下顺序解读结果：
+
+| 检查 | 关注点 | 含义 |
+| --- | --- | --- |
+| Pods | 控制面和数据面 Pod 是 `Running` 且 ready。 | workload 已调度，probe 通过，数据面完成启动。 |
+| GatewayClass | `nantian-gw` 存在，并使用 controller `gateway.networking.k8s.io/nantian-gw`。 | Chart 已安装应用 `Gateway` 应引用的 class。 |
+| Services | 固定 Service 名称和端口与下表一致。 | 其他组件和运维人员可以使用稳定的集群内地址。 |
+| 控制面日志 | reconciliation、status、snapshot 或 xDS 消息。 | 控制面正在监听资源并发布状态。 |
+| 数据面日志 | xDS connection 和 configuration-apply 消息。 | 数据面已连接并收到运行时配置。 |
+
+## Helm Service 参考
+
+Helm chart 创建的固定 Service 如下：
+
+| Service | 端口 | 作用 |
+| --- | --- | --- |
+| `nantian-gw-controlplane-grpc` | `18080` | 数据面 xDS/gRPC 连接。 |
+| `nantian-gw-controlplane-admin` | `18081` | 控制面 Admin API。 |
+| `nantian-gw-controlplane-metrics` | `18082` | 控制面 Prometheus metrics。 |
+| `nantian-gw-dataplane-admin` | `19080` | 数据面 Admin API。 |
+| `nantian-gw-dataplane-metrics` | `19080` | 数据面 metrics 抓取入口。 |
+| `nantian-gw-dashboard` | `3000` | Dashboard Web UI。 |
+
+数据面运行时 HTTP 监听地址配置为 `0.0.0.0:10080`。本地 route 测试可转发 deployment：
+
+```bash
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 10080:10080
+```
+
+## 日志
+
+快速查看可直接使用 Deployment 目标：
+
+```bash
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
+```
+
+查看特定 Pod：
+
+```bash
+kubectl get pods -n nantian-gw
+kubectl logs -n nantian-gw pod/<pod-name> --tail=200
+```
+
+debug 日志只适合短时间排查。Debug 输出量很大，不应长期留在生产环境。
+
+## Metrics 与 Admin 访问
+
+本地排查时可转发控制面 admin 和 metrics Service：
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-controlplane-admin 18081:18081
+kubectl port-forward -n nantian-gw svc/nantian-gw-controlplane-metrics 18082:18082
+```
+
+然后查询：
+
+```bash
+curl -s http://localhost:18081/livez
+curl -s http://localhost:18081/readyz
+curl -s http://localhost:18082/metrics | head
+```
+
+需要数据面运行时细节时，转发数据面 admin Service：
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane-admin 19080:19080
+curl -s http://localhost:19080/livez
+curl -s http://localhost:19080/readyz
+```
+
+Helm chart 默认关闭 Prometheus Operator `ServiceMonitor` 资源。只有在集群安装了 Prometheus Operator CRD，并且 NetworkPolicy 允许 Prometheus 命名空间抓取 metrics Service 时，才开启它。
+
+## Route 级检查
+
+Route 不工作时，先查看状态，再测试流量：
+
+```bash
+kubectl get gateway,httproute -A
+kubectl describe gateway <gateway-name> -n <namespace>
+kubectl describe httproute <route-name> -n <namespace>
+```
+
+重点看 parent 是否 accepted、listener 是否匹配、backend reference 是否解析成功，以及 status conditions。没有 attached 的 route 即使数据面健康也不会接收流量。
+
+## 常见运维操作
+
+使用 rolling update 重启无状态组件：
+
+```bash
+kubectl rollout restart deployment/nantian-gw-controlplane -n nantian-gw
+kubectl rollout restart deployment/nantian-gw-dataplane -n nantian-gw
+```
+
+当流量或资源压力需要时扩容数据面：
+
+```bash
+kubectl scale deployment/nantian-gw-dataplane -n nantian-gw --replicas=4
+```
+
+查看 rollout 状态：
+
+```bash
+kubectl rollout status deployment/nantian-gw-controlplane -n nantian-gw
+kubectl rollout status deployment/nantian-gw-dataplane -n nantian-gw
+```
+
+## 章节结构
+
+| Page | Covers |
+| --- | --- |
+| [指标参考](/zh/1.5/operations/metrics/) | 控制面和数据面暴露的 Prometheus metrics。 |
+| [Grafana Dashboard](/zh/1.5/operations/grafana/) | 如何导入和使用内置 dashboard 资产。 |
+| [告警规则](/zh/1.5/operations/alerting/) | 推荐的 Prometheus alert rules。 |
+| [故障排查](/zh/1.5/operations/troubleshooting/) | 常见症状和诊断流程。 |
+| [备份与恢复](/zh/1.5/operations/backup/) | 应备份什么，以及如何恢复网关配置。 |

@@ -1,0 +1,107 @@
+---
+title: 项目对比
+slug: zh/1.5/comparison
+---
+
+选一个 Kubernetes 网关，总要掂量架构、性能、功能覆盖和运维复杂度之间的取舍。本页把 Nantian Gateway 和四个大家比较熟悉的网关放在一起看一看，帮你搞清楚各自的定位。
+
+:::caution[实验性功能]
+标注 🧪 的功能（AI 网关、Wasm 插件）处于实验阶段，API 和行为可能在后续版本中变更。
+:::
+
+## 功能对比表
+
+| 特性 | Nantian Gateway | Envoy Gateway | Istio | Contour | NGINX Gateway |
+|------|----------------|---------------|-------|---------|---------------|
+| **Gateway API 版本** | v1.5.1 | v1.2.x | v1.2.x（通过 Gateway API） | v1.1.x | v1.2.x |
+| **声明特性数** | 55 | ~40 | ~30（Gateway API） | ~30 | ~35 |
+| **控制面语言** | Go | Go | Go | Go | Go |
+| **数据面语言** | Rust | C++（Envoy） | C++（Envoy） | C++（Envoy） | C（NGINX） |
+| **配置协议** | gRPC/xDS | gRPC/xDS | gRPC/xDS | gRPC/xDS | 自定义 |
+| **AI 网关** 🧪 | 内置 | 无 | 无 | 无 | 无 |
+| **Wasm 运行时** 🧪 | wasmtime | wasmtime（proxy-wasm） | wasmtime（proxy-wasm） | wasmtime（proxy-wasm） | 无 |
+| **服务网格** | 支持（Gateway API Mesh） | 无 | 支持（核心功能） | 无 | 无 |
+| **TCP/UDP/TLS** | 支持 | 支持 | 支持 | 支持 | 支持 |
+| **gRPC 路由** | 支持（命名规则） | 支持 | 支持 | 有限 | 支持 |
+| **管理界面** | Next.js 控制台 | 无内置 | Kiali | 无内置 | 无内置 |
+| **高可用配置** | PDB、反亲和 | HPA、PDB | HPA、PDB | HPA、PDB | 手动 |
+| **许可证** | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 |
+| **托管方** | 独立项目 | CNCF | CNCF | CNCF | NGINX/F5 |
+
+## Nantian Gateway vs Envoy Gateway
+
+**Envoy Gateway** 是 CNCF 旗下的 Kubernetes 原生网关项目，用 Envoy 做数据面。它成熟度高，文档齐全，社区支持也足够大。
+
+**Nantian Gateway 的差异点：**
+
+最直观的区别是数据面的语言。Envoy 是 C++ 写的，性能经过多年验证不假，但贡献门槛高，攻击面也更宽。Nantian Gateway 的 Rust 数据面追求同等性能水平，同时提供更强的内存安全保障。这对于需要审计或自己动手改代理逻辑的团队来说，分量不轻。
+
+另一个重要区别是 AI 网关能力。Nantian Gateway 把 AI 提供方路由、token 计数、限流和 PII 脱敏直接做在数据面里。用 Envoy Gateway 的话，你得额外部署 [LiteLLM](https://github.com/BerriAI/litellm) 或 [AI Gateway](https://github.com/Portkey-AI/gateway) 之类的独立 AI 代理，多了运维负担不说，还多一次网络跳转。
+
+Gateway API 覆盖面上，Nantian Gateway 声明支持 v1.5.1 规范的 55 个特性，Envoy Gateway 目标是 v1.2.x，大约 40 个特性左右。Nantian Gateway 还支持 Gateway API Mesh 资源，这是 Envoy Gateway 目前没有的。
+
+两个项目都用 gRPC/xDS 做配置分发，控制面架构相似。都通过 wasmtime 支持 Wasm 插件。
+
+## Nantian Gateway vs Istio
+
+**Istio** 是 Kubernetes 生态里部署最广的服务网格。它是一个全功能的网格平台，覆盖流量管理、安全和可观测性，底层依赖 Envoy Sidecar。
+
+**Nantian Gateway 的差异点：**
+
+Istio 是"网格优先，网关其次"。它的网关功能是更大网格架构的一部分，需要注入 Sidecar。Nantian Gateway 是"网关优先，网格作为扩展"的思路。如果你需要完整的网格能力（mTLS、细粒度授权策略、分布式追踪），Istio 是正确选择。如果你要的是一个高性能入口网关，网格特性只是可选项，那 Nantian Gateway 更轻量。
+
+Nantian Gateway 通过 Gateway API Mesh 模型实现网格能力，不需要 Sidecar。这省去了 Sidecar 注入、Pod 生命周期顺序问题以及每个 Pod 都要跑一个代理带来的额外资源消耗。
+
+AI 网关和管理界面是 Nantian Gateway 独有的，Istio 没有对应能力。Istio 的可观测性更全面（Jaeger 链路追踪、Kiali 可视化），但 Nantian Gateway 的 Prometheus 和 Grafana 集成已经覆盖了大多数团队需要的网关级指标。
+
+## Nantian Gateway vs Contour
+
+**Contour** 是 CNCF 的入口控制器，在 Envoy 之上提供 Gateway API 实现。它以简洁著称，和 [Contour 自己的路由模型](https://projectcontour.io/docs/main/config/fundamentals/) 集成紧密。
+
+**Nantian Gateway 的差异点：**
+
+Contour 同样用 Envoy，数据面的取舍和上面相同。Nantian Gateway 的 Rust 代理是另一条技术路线。
+
+功能覆盖面差距明显。Nantian Gateway 支持 gRPC 命名路由规则、TLS 混合模式（同监听器同时支持透传和拆解），以及更丰富的重定向状态码和 HTTP 匹配能力。Contour 的 Gateway API 支持偏保守。
+
+Contour 不包含 AI 网关、Wasm 插件系统和网格模型。如果你的需求是简单的 HTTP 路由加 TLS 拆解，Contour 工作得很好。Nantian Gateway 瞄准的是需要多协议路由、AI 流量管理和扩展性在同一个代理里完成的团队。
+
+## Nantian Gateway vs NGINX Gateway Fabric
+
+**NGINX Gateway Fabric** 是 NGINX（F5）团队的 Kubernetes Gateway API 实现，用 NGINX 做数据面。NGINX 是全球部署最广的 Web 服务器和反向代理。
+
+**Nantian Gateway 的差异点：**
+
+NGINX Gateway Fabric 受益于 NGINX 庞大的安装基础和生态。它的数据面是用 C 写的，久经战场。Nantian Gateway 的 Rust 数据面更新，生产验证没那么长，但提供了内存安全和现代并发模型。
+
+功能差距是最大的区别。NGINX Gateway Fabric 只支持 Gateway API 的一个子集，聚焦在最常见的 HTTP 路由场景上。Nantian Gateway 覆盖了更广的规范面，包括 gRPC 路由、UDP 路由、TLS 混合模式、网格资源和更细粒度的匹配与重定向选项。
+
+Nantian Gateway 的 AI 网关、Wasm 插件系统和管理界面，在 NGINX Gateway Fabric 这边都没有对应物。如果你需要 AI 流量管理或代理层的自定义插件逻辑，基于 NGINX 的方案得额外拼装其他组件。
+
+## 什么时候选 Nantian Gateway
+
+以下场景下 Nantian Gateway 是个好选择：
+
+* 你需要**全面的 Gateway API 覆盖**（v1.5.1，55 个特性），希望紧跟上游规范演进
+* 你在跑 **AI 负载**，想要一个代理同时搞定 API 流量和 AI 提供方路由/限流
+* 你希望用 **Wasm 插件**做自定义代理逻辑，并通过 Kubernetes CRD 管理
+* 你偏爱 **Rust 数据面**，看重内存安全和并发模型
+* 你需要一个**内置管理界面**来运维网关
+* 你想用**无 Sidecar 的网格**，走 Gateway API Mesh 模型路线
+
+:::tip
+Nantian Gateway 可以和现有基础设施配合使用。你可以把它部署成入口网关，保持现有的网格方案不变；也可以把它放在模型推理服务前面，专门做 AI 流量管理。
+:::
+
+## 什么时候考虑其他选择
+
+以下场景下其他网关可能更合适：
+
+* 你需要**完整的服务网格**，包括 mTLS、SPIFFE 身份和深度链路追踪（选 Istio）
+* 你需要**久经考验的代理**，要求最大的运维知识库和社区经验（选 Envoy Gateway、NGINX Gateway）
+* 你需要 **CNCF 孵化或毕业状态**以满足合规要求（选 Envoy Gateway、Istio、Contour）
+* 你的部署很简单，路由需求不多，追求最小的运维开销（选 NGINX Gateway Fabric）
+
+:::note
+Nantian Gateway 是一个比较新的项目，目前还不是官方认可的 Gateway API 实现。它适合用于评估、受控试用和贡献者评审。当前成熟度可以参考[项目状态页面](https://github.com/nantian-gw/gateway)。
+:::

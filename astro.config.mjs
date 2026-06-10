@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
+import starlightVersions from 'starlight-versions';
 
 const sidebar = [
   {
@@ -118,6 +119,11 @@ export default defineConfig({
     starlight({
       title: 'Nantian Gateway',
       logo: { src: './src/assets/logo.svg' },
+      plugins: [
+        starlightVersions({
+          versions: [{ slug: '1.5' }],
+        }),
+      ],
       defaultLocale: 'en',
       locales: {
         en: { label: 'English', lang: 'en' },

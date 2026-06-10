@@ -1,0 +1,189 @@
+---
+title: Quick Start
+slug: en/1.5/getting-started/quick-start
+---
+
+This guide installs Nantian Gateway with Helm, creates a demo backend, attaches an `HTTPRoute`, and sends one request through the data plane. It does not depend on local example files.
+
+## Before You Begin
+
+You need:
+
+* A running Kubernetes cluster.
+* `kubectl` configured for that cluster.
+* `helm`.
+* Optional `curl` for the final request test.
+
+The commands below use the Helm chart defaults. Helm creates a `GatewayClass` named `nantian-gw`; the demo manifest creates its own `Gateway` and `HTTPRoute`.
+
+## Install Gateway API CRDs
+
+Install the standard Gateway API v1.5.1 CRDs before installing Nantian Gateway:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+```
+
+This gives Kubernetes the standard resources such as `Gateway`, `HTTPRoute`, `GRPCRoute`, and `ReferenceGrant`.
+
+## Install Nantian Gateway
+
+Add the chart repository and install the chart into the default namespace:
+
+```bash
+helm repo add nantian-gw https://charts.nantian.dev
+helm repo update
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace
+```
+
+The install creates the control plane, data plane, dashboard, services, RBAC, network policies, and a default `GatewayClass`.
+
+## Wait For Gateway Pods
+
+Wait until all Nantian Gateway pods are ready:
+
+```bash
+kubectl wait --for=condition=ready pod --all -n nantian-gw --timeout=180s
+kubectl get pods -n nantian-gw
+```
+
+This proves the workloads are scheduled and their readiness probes are passing. If pods do not become ready, inspect the logs:
+
+```bash
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
+kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
+```
+
+## Verify GatewayClass
+
+Check the `GatewayClass` created by the Helm chart:
+
+```bash
+kubectl get gatewayclass nantian-gw
+```
+
+The controller name should be `gateway.networking.k8s.io/nantian-gw`. If the class is not present, confirm that the Helm release installed successfully and that `gatewayClass.enabled` was not set to `false`.
+
+## Create A Demo Route
+
+Create a namespace, an echo backend, a `Gateway`, and an `HTTPRoute` with one inline manifest:
+
+```bash
+kubectl create namespace nantian-demo --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n nantian-demo -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo
+  template:
+    metadata:
+      labels:
+        app: echo
+    spec:
+      containers:
+        - name: echo
+          image: docker.io/ealen/echo-server:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: PORT
+              value: "80"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo
+spec:
+  selector:
+    app: echo
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: nantian-demo
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo
+spec:
+  parentRefs:
+    - name: nantian-demo
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /echo
+      backendRefs:
+        - name: echo
+          port: 80
+YAML
+```
+
+This step proves that Kubernetes accepts the standard Gateway API objects and that the route can reference a local Service backend.
+
+## Inspect Route Status
+
+Wait for the backend pod and inspect the Gateway API resources:
+
+```bash
+kubectl wait --for=condition=ready pod -l app=echo -n nantian-demo --timeout=180s
+kubectl get gateway,httproute -n nantian-demo
+kubectl describe httproute echo -n nantian-demo
+```
+
+If the route is not attached, check the `Parents` section in `kubectl describe httproute`. Common causes are a missing `GatewayClass`, a listener mismatch, or a backend Service name or port mismatch.
+
+## Send A Request Through The Data Plane
+
+Open a terminal and forward the data plane runtime HTTP port:
+
+```bash
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 10080:10080
+```
+
+In another terminal, send a request through the gateway:
+
+```bash
+curl -i http://localhost:10080/echo
+```
+
+A successful response proves that the data plane received a runtime snapshot and routed the request to the echo Service.
+
+## Clean Up
+
+Remove the demo namespace and Helm release:
+
+```bash
+kubectl delete namespace nantian-demo
+helm uninstall nantian-gw -n nantian-gw
+kubectl delete namespace nantian-gw
+```
+
+The Gateway API CRDs are cluster-level dependencies and are not removed by these commands.
+
+## Troubleshooting
+
+If pods are not ready, read the control plane and data plane logs and check whether images can be pulled from `ghcr.io`. If the `GatewayClass` is missing or not accepted, verify the Helm release values and the controller name `gateway.networking.k8s.io/nantian-gw`. If the route is not attached, inspect `kubectl describe httproute echo -n nantian-demo` and confirm that the `Gateway` is named `nantian-demo`, the listener protocol is `HTTP`, and the backend Service is named `echo` on port `80`.
+
+## Next Steps
+
+* [Helm Installation](/en/1.5/installation/helm/)
+* [Experimental Features](/en/1.5/configuration/experimental-features/)
+* [Operations](/en/1.5/operations/)
