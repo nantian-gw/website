@@ -81,9 +81,9 @@ kubectl get referencegrants.gateway.networking.k8s.io --all-namespaces -o yaml >
 kubectl get backendtlspolicies.gateway.networking.k8s.io --all-namespaces -o yaml > backendtlspolicies.yaml
 
 # Export custom CRDs
-kubectl get aiservices.gateway.nantian.dev --all-namespaces -o yaml > aiservices.yaml
-kubectl get tokenpolicies.gateway.nantian.dev --all-namespaces -o yaml > tokenpolicies.yaml
-kubectl get wasmplugins.gateway.nantian.dev --all-namespaces -o yaml > wasmplugins.yaml
+kubectl get aiservices.nantian.dev --all-namespaces -o yaml > aiservices.yaml
+kubectl get tokenpolicies.nantian.dev --all-namespaces -o yaml > tokenpolicies.yaml
+kubectl get wasmplugins.nantian.dev --all-namespaces -o yaml > wasmplugins.yaml
 kubectl get backendlbpolicies.nantian.dev --all-namespaces -o yaml > backendlbpolicies.yaml
 
 # Export TLS secrets (handle with care - these contain sensitive data)
