@@ -16,10 +16,10 @@
       ]
     },
     {
-      "anchor": "https://charts.nantian.dev/",
+      "anchor": "https://chart.nantian.dev/",
       "service-desc": [
         {
-          "href": "https://charts.nantian.dev/index.yaml",
+          "href": "https://chart.nantian.dev/index.yaml",
           "type": "application/yaml"
         }
       ],
