@@ -30,7 +30,7 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 添加 chart 仓库，并安装到默认命名空间：
 
 ```bash
-helm repo add nantian-gw https://charts.nantian.dev
+helm repo add nantian-gw https://chart.nantian.dev
 helm repo update
 helm install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
