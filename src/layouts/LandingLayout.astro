@@ -22,13 +22,14 @@ const {
 } = Astro.props;
 const altLang = lang === 'en' ? 'zh-CN' : 'en';
 const altUrl = lang === 'en' ? 'https://nantian.dev/zh/' : 'https://nantian.dev/';
+const ogLocale = lang === 'en' ? 'en_US' : 'zh_CN';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   'name': 'Nantian Gateway',
   'url': 'https://nantian.dev/',
   'description': description,
-  'inLanguage': lang === 'zh-CN' ? 'zh' : 'en',
+  'inLanguage': lang === 'zh' ? 'zh' : 'en',
   'potentialAction': {
     '@type': 'SearchAction',
     'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
@@ -64,7 +65,7 @@ const orgJsonLd = {
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
-    <meta property="og:locale" content={lang} />
+    <meta property="og:locale" content={ogLocale} />
     <meta property="og:site_name" content="Nantian Gateway" />
     <meta property="og:image" content="https://nantian.dev/og-image.png" />
     <meta property="og:image:width" content="1200" />
