@@ -79,15 +79,6 @@ const orgJsonLd = {
     <slot name="head" />
   </head>
   <body class="bg-[var(--color-bg-base)] text-[var(--color-text-primary)] antialiased">
-    <div class="bg-amber-500/10 border-b border-amber-500/20 text-amber-700 dark:text-amber-400 px-4 py-2.5 text-center text-xs sm:text-sm font-medium z-50 relative">
-      <div class="max-w-7xl mx-auto flex items-center justify-center gap-2">
-        {lang === 'zh' ? (
-          <span>⚠️ <strong>警告：</strong>Nantian Gateway 目前仍处于开发阶段，<strong>不适用于生产环境</strong>。</span>
-        ) : (
-          <span>⚠️ <strong>WARNING:</strong> Nantian Gateway is currently in active development and <strong>NOT suitable for production use yet</strong>.</span>
-        )}
-      </div>
-    </div>
     <slot />
   </body>
 </html>
