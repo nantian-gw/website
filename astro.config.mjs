@@ -130,20 +130,15 @@ export default defineConfig({
         en: {
           label: 'English',
           lang: 'en',
-          banner: {
-            content: '⚠️ <strong>WARNING:</strong> Nantian Gateway is currently in active development and <strong>NOT suitable for production use yet</strong>.',
-          },
         },
         zh: {
           label: '中文',
           lang: 'zh-CN',
-          banner: {
-            content: '⚠️ <strong>警告：</strong>Nantian Gateway 目前处于活跃开发阶段，<strong>尚不适用于生产环境</strong>。',
-          },
         },
       },
       sidebar,
       components: {
+        Banner: './src/components/docs/Banner.astro',
         Footer: './src/components/docs/Footer.astro',
         Head: './src/components/docs/Head.astro',
       },
