@@ -95,7 +95,7 @@ images:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nantian-controlplane-config
+  name: nantian-gw-controlplane-config
 data:
   config.yaml: |
     grpcAddr: ":18080"
@@ -159,7 +159,7 @@ commonLabels:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nantian-controlplane
+  name: nantian-gw-controlplane
 spec:
   replicas: 2
   template:
@@ -177,7 +177,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: nantian-controlplane-config
+  name: nantian-gw-controlplane-config
 data:
   config.yaml: |
     log:
@@ -197,7 +197,7 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nantian-dataplane
+  name: nantian-gw-dataplane
 spec:
   replicas: 3
   template:

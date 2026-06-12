@@ -103,7 +103,7 @@ controlplane:
 dataplane:
   xdsTLS:
     enabled: true
-    domainName: "nantian-controlplane-grpc.nantian-gw.svc.cluster.local"
+    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
 ```
 
 The secret must contain `tls.crt`, `tls.key`, and optionally `ca.crt`. For mTLS, the data plane also needs a client certificate configured via its xDS client settings.
@@ -174,10 +174,9 @@ dataplane:
 For metrics, enable the ServiceMonitor resource if you're using the Prometheus operator:
 
 ```yaml
-monitoring:
-  serviceMonitor:
-    enabled: true
-    interval: "30s"
+serviceMonitor:
+  enabled: true
+  interval: "30s"
 ```
 
 ### 7. PodDisruptionBudget
@@ -231,14 +230,22 @@ controlplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
+    tag: "sha-b3b9649"
 
 dataplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dataplane"
-    tag: "latest"
+    tag: "0.1.0"
+
+dashboard:
+  image:
+    registry: "registry.example.com"
+    repository: "nantian-gw/dashboard"
+    tag: "0.1.0"
 ```
+
+Use immutable release tags or image digests in production. Avoid `latest`, because it makes rollbacks and audits ambiguous.
 
 ## Deploying
 

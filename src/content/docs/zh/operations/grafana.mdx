@@ -51,14 +51,13 @@ data:
 kubectl apply -f grafana-dashboard-configmap.yaml
 ```
 
-### 通过 Helm
+### 通过 Helm 开启 metrics 抓取
 
-`deploy/helm/nantian-gw` 中的 Helm Chart 包含了仪表盘 ConfigMap。在 values 中启用：
+当前 Helm chart 不渲染 Grafana dashboard ConfigMap。请手动导入 dashboard，或由你的可观测性栈管理 ConfigMap。若要让 Prometheus Operator 抓取 Nantian Gateway metrics，请启用 ServiceMonitor 资源：
 
 ```yaml
-grafana:
-  dashboards:
-    enabled: true
+serviceMonitor:
+  enabled: true
 ```
 
 ## 仪表盘变量

@@ -62,7 +62,7 @@ See the [Upgrade Guide](/en/installation/upgrade) for detailed instructions.
 
 ### How do I monitor Nantian Gateway?
 
-Nantian Gateway provides three layers of monitoring:
+Nantian Gateway provides three monitoring layers:
 
 1. **Prometheus metrics**: Both control plane and data plane expose `/metrics` endpoints, providing request volume, latency, error rate, connection count, and more.
 2. **Grafana dashboard**: The project provides pre-configured Grafana dashboard templates for cluster-level visualization.
@@ -206,7 +206,7 @@ xdsTls:
   caPath: /etc/nantian/tls/ca.crt
   certPath: /etc/nantian/tls/tls.crt
   keyPath: /etc/nantian/tls/tls.key
-  domainName: nantian-controlplane.nantian-gw.svc
+  domainName: nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local
 ```
 
 See [TLS / mTLS](/en/configuration/tls) for complete configuration.

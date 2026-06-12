@@ -92,7 +92,7 @@ The admin API can aggregate responses from connected data plane instances:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `adminRuntime.dataplaneAggregation.serviceName` | string | `nantian-dataplane-admin` | Kubernetes Service name for data plane admin endpoints |
+| `adminRuntime.dataplaneAggregation.serviceName` | string | `nantian-gw-dataplane-admin` | Kubernetes Service name for data plane admin endpoints |
 | `adminRuntime.dataplaneAggregation.namespace` | string | `nantian-gw` | Namespace of the data plane admin Service |
 | `adminRuntime.dataplaneAggregation.portName` | string | `admin` | Port name on the data plane admin Service |
 | `adminRuntime.dataplaneAggregation.timeout` | duration | `2s` | Timeout for data plane aggregation requests |
@@ -152,7 +152,7 @@ The control plane includes a built-in dashboard API for the web admin interface:
 |-----------|------|---------|-------------|
 | `dashboardApi.enabled` | bool | `true` | Enable the dashboard API endpoints |
 | `dashboardApi.basePath` | string | `/api/dashboard` | URL path prefix for dashboard API endpoints |
-| `dashboardApi.dataplaneAdminUrl` | string | `http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080` | URL template for data plane admin API access |
+| `dashboardApi.dataplaneAdminUrl` | string | `http://nantian-gw-dataplane-admin.nantian-gw.svc.cluster.local:19080` | URL template for data plane admin API access |
 | `dashboardApi.requestTimeout` | duration | `5s` | Timeout for dashboard API requests |
 | `dashboardApi.resourceMutationsEnabled` | bool | `true` | Allow resource mutations through the dashboard API |
 
@@ -256,7 +256,7 @@ adminRuntime:
   writeTimeout: "30s"
   idleTimeout: "2m"
   dataplaneAggregation:
-    serviceName: "nantian-dataplane-admin"
+    serviceName: "nantian-gw-dataplane-admin"
     namespace: "nantian-gw"
     portName: "admin"
     timeout: "2s"
@@ -275,7 +275,7 @@ adminAuth:
 dashboardApi:
   enabled: true
   basePath: "/api/dashboard"
-  dataplaneAdminUrl: "http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080"
+  dataplaneAdminUrl: "http://nantian-gw-dataplane-admin.nantian-gw.svc.cluster.local:19080"
   requestTimeout: "5s"
   resourceMutationsEnabled: true
 

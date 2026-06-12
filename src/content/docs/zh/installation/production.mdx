@@ -133,7 +133,7 @@ controlplane:
 dataplane:
   xdsTLS:
     enabled: true
-    domainName: "nantian-controlplane-grpc.nantian-gw.svc.cluster.local"
+    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
 ```
 
 Secret 必须包含 `tls.crt`、`tls.key`，还可以包含 `ca.crt`。如果开启了 mTLS，数据面还需要通过 xDS 客户端配置客户端证书。
@@ -206,10 +206,9 @@ dataplane:
 如果你在用 Prometheus operator，开启 ServiceMonitor 资源：
 
 ```yaml
-monitoring:
-  serviceMonitor:
-    enabled: true
-    interval: "30s"
+serviceMonitor:
+  enabled: true
+  interval: "30s"
 ```
 
 ### 9. 就绪探针和存活探针
@@ -273,14 +272,22 @@ controlplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
+    tag: "sha-b3b9649"
 
 dataplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dataplane"
-    tag: "latest"
+    tag: "0.1.0"
+
+dashboard:
+  image:
+    registry: "registry.example.com"
+    repository: "nantian-gw/dashboard"
+    tag: "0.1.0"
 ```
+
+生产环境使用不可变 release tag 或镜像 digest。不要使用 `latest`，否则回滚和审计都会变得不明确。
 
 ## 部署
 

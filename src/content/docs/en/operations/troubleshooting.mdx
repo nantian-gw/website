@@ -13,10 +13,10 @@ Before diving into specific issues, run these commands to gather a baseline of y
 kubectl get pods -n nantian-gw -o wide
 
 # Get control plane logs (last 100 lines)
-kubectl logs -n nantian-gw -l app=nantian-controlplane --tail=100
+kubectl logs -n nantian-gw -l app=nantian-gw-controlplane --tail=100
 
 # Get data plane logs (last 100 lines)
-kubectl logs -n nantian-gw -l app=nantian-dataplane --tail=100
+kubectl logs -n nantian-gw -l app=nantian-gw-dataplane --tail=100
 
 # Check gateway summary via Admin API
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -39,8 +39,8 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 
 **Diagnostic commands**:
 ```bash
-kubectl describe pod -n nantian-gw -l app=nantian-controlplane
-kubectl logs -n nantian-gw -l app=nantian-controlplane --tail=50
+kubectl describe pod -n nantian-gw -l app=nantian-gw-controlplane
+kubectl logs -n nantian-gw -l app=nantian-gw-controlplane --tail=50
 ```
 
 **Common causes**:
@@ -67,7 +67,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
   curl -s http://localhost:18082/metrics | grep nantian_gateway_snapshot_build_failures_total
 
 # Check control plane logs for translation errors
-kubectl logs -n nantian-gw -l app=nantian-controlplane | grep -i "error\|fail\|translator"
+kubectl logs -n nantian-gw -l app=nantian-gw-controlplane | grep -i "error\|fail\|translator"
 ```
 
 **Common causes**:
@@ -89,7 +89,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
   curl -s http://localhost:18081/v1/nodes | jq '.[] | {name, connected, ready}'
 
 # Check data plane logs for connection errors
-kubectl logs -n nantian-gw -l app=nantian-dataplane | grep -i "connect\|grpc\|xds\|error"
+kubectl logs -n nantian-gw -l app=nantian-gw-dataplane | grep -i "connect\|grpc\|xds\|error"
 
 # Check xDS stream terminations
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -115,7 +115,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 kubectl get leases -n nantian-gw
 
 # Check control plane logs for leader election events
-kubectl logs -n nantian-gw -l app=nantian-controlplane | grep -i "leader\|election"
+kubectl logs -n nantian-gw -l app=nantian-gw-controlplane | grep -i "leader\|election"
 ```
 
 **Common causes**:
@@ -135,10 +135,10 @@ kubectl logs -n nantian-gw -l app=nantian-controlplane | grep -i "leader\|electi
 **Diagnostic commands**:
 ```bash
 # Check data plane readiness
-kubectl get pods -n nantian-gw -l app=nantian-dataplane
+kubectl get pods -n nantian-gw -l app=nantian-gw-dataplane
 
 # Check data plane logs
-kubectl logs -n nantian-gw -l app=nantian-dataplane --tail=50
+kubectl logs -n nantian-gw -l app=nantian-gw-dataplane --tail=50
 
 # Check data plane metrics
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -169,7 +169,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
   curl -s http://localhost:18082/metrics | grep backend_connection_errors_total
 
 # Check data plane resource usage
-kubectl top pods -n nantian-gw -l app=nantian-dataplane
+kubectl top pods -n nantian-gw -l app=nantian-gw-dataplane
 ```
 
 **Common causes**:

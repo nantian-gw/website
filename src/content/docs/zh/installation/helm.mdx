@@ -26,6 +26,12 @@ helm repo update
 
 不要使用旧的复数形式 chart host。
 
+默认搜索只显示稳定 chart 版本。每个 commit 生成的 snapshot chart 会以 `0.2.3-<git-sha>` 这类 prerelease 版本发布；需要查看或安装这些版本时加上 `--devel`：
+
+```bash
+helm search repo nantian-gw/nantian-gw --versions --devel
+```
+
 ## 使用默认值安装
 
 ```bash
@@ -51,6 +57,17 @@ helm install nantian-gw nantian-gw/nantian-gw \
 
 以下片段与当前 chart 默认值一致。
 
+### 功能模式与 Gateway API CRD
+
+```yaml
+featureMode: standard
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+```
+
+`featureMode` 控制 Nantian Gateway 自身的运行时功能开关。`gatewayAPI.installCRDs` 控制本 Chart 是否渲染官方 Gateway API CRD。生产默认值保持 standard 运行时模式，并要求安装网关前已由平台层准备 Gateway API CRD。
+
 ### 全局与 GatewayClass
 
 ```yaml
@@ -74,7 +91,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
+    tag: "sha-b3b9649"
     pullPolicy: Always
   config:
     grpcAddr: ":18080"
@@ -85,6 +102,8 @@ controlplane:
       enableExperimentalGateway: false
       enableAiGateway: false
 ```
+
+控制面默认 tag 固定为经过验证的不可变 `sha-b3b9649` 构建。
 
 控制面 Service 拆分如下：
 
@@ -102,7 +121,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: "latest"
+    tag: ""
     pullPolicy: Always
   resources:
     requests:
@@ -115,9 +134,6 @@ dataplane:
     adminAddr: "0.0.0.0:19080"
     runtime:
       httpListenAddr: "0.0.0.0:10080"
-    experimental:
-      enableExperimentalGateway: false
-      enableAiGateway: false
   accessLogVolume:
     enabled: true
     name: access-logs
@@ -135,9 +151,11 @@ dashboard:
   replicas: 1
   image:
     repository: "nantian-gw/dashboard"
-    tag: "latest"
+    tag: ""
     pullPolicy: Always
 ```
+
+数据面和 dashboard 的 image tag 在 `values.yaml` 中为空；Helm 会把它们回退到 `.Chart.AppVersion`，当前为 `0.1.0`。
 
 不需要 Web UI 时可以关闭 dashboard：
 
@@ -188,12 +206,20 @@ dataplane:
 
 ## 实验功能
 
-实验性 Gateway policy、AI、token policy 和 Wasm 行为默认关闭。使用实验 API 前，需要同时配置两个平面：
+实验性 Gateway runtime 行为由 `featureMode` 控制。AI Gateway 仍是显式的控制面功能，并且需要 experimental 模式：
 
-- 控制面：`controlplane.config.features.enableExperimentalGateway`
-- 控制面：`controlplane.config.features.enableAiGateway`
-- 数据面：`dataplane.config.experimental.enableExperimentalGateway`
-- 数据面：`dataplane.config.experimental.enableAiGateway`
+```yaml
+featureMode: experimental
+gatewayAPI:
+  installCRDs: true
+  channel: experimental
+controlplane:
+  config:
+    features:
+      enableAiGateway: true
+```
+
+`gatewayAPI.installCRDs` 和 `gatewayAPI.channel` 只控制 CRD 渲染。当需要由 Chart 渲染官方 experimental Gateway API CRD bundle 时，使用 `gatewayAPI.channel: experimental`。
 
 完整的启动、CRD 和验证流程见[实验功能](/zh/configuration/experimental-features/)。
 

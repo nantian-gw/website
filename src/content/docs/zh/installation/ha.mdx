@@ -180,7 +180,7 @@ leaderElection:
 kubectl get lease -n nantian-gw nantian-controlplane-leader
 
 # 查所有控制面 Pod 的选举状态
-kubectl port-forward -n nantian-gw svc/nantian-controlplane 18082:18082
+kubectl port-forward -n nantian-gw svc/nantian-gw-controlplane-metrics 18082:18082
 curl http://localhost:18082/metrics | grep leader_election
 ```
 

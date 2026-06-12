@@ -5,35 +5,32 @@ title: 实验功能
 Nantian Gateway 提供一些默认关闭的实验功能。这些 API 可用于测试 AI 路由、token policy、Wasm 扩展和实验性 Gateway API policy，但它们的 schema 和运行时行为可能变化。
 
 :::caution[实验性 API]
-请有意识地开启这些功能。安装所需 CRD，开启对应的控制面和数据面 flag，并在依赖实验行为前测试完整路由路径。
+请有意识地开启这些功能。安装所需 CRD，选择匹配的 Chart 功能模式，开启需要的控制面功能开关，并在依赖实验行为前测试完整路由路径。
 :::
 
 ## Feature Flags
 
-| Plane | Helm value | Default | Controls |
+| 范围 | Helm value | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| Control plane | `controlplane.config.features.enableExperimentalGateway` | `false` | 在控制面 scheme 中注册实验性 Gateway policy 相关类型，包括 `BackendLBPolicy`、`TokenPolicy` 和 `WasmPlugin` 支持。 |
-| Control plane | `controlplane.config.features.enableAiGateway` | `false` | 在控制面 scheme 中注册 `AIService` 支持。 |
-| Data plane | `dataplane.config.experimental.enableExperimentalGateway` | `false` | 开启数据面中已实现的实验性 gateway 运行时行为。 |
-| Data plane | `dataplane.config.experimental.enableAiGateway` | `false` | 开启数据面 AI gateway 运行时行为。 |
+| Chart 运行时模式 | `featureMode` | `standard` | 渲染 standard 或 experimental 的 Nantian Gateway 运行时集成点。 |
+| Gateway API CRD 渲染 | `gatewayAPI.installCRDs` | `false` | 控制 Chart 是否渲染官方 Gateway API CRD。 |
+| Gateway API CRD 通道 | `gatewayAPI.channel` | `standard` | 启用 CRD 渲染时选择官方 `standard` 或 `experimental` bundle。 |
+| 控制面 AI Gateway | `controlplane.config.features.enableAiGateway` | `false` | 在同时设置 `featureMode: experimental` 时启用 `AIService` 支持。 |
 
-控制面 flag 决定 manager 能注册和 reconcile 哪些资源。数据面 flag 决定快照到达后哪些实验性运行时行为会启用。
+`featureMode: experimental` 会渲染实验性 Gateway runtime 集成点。`gatewayAPI.installCRDs` 和 `gatewayAPI.channel` 只控制 CRD 渲染。AI Gateway 仍需显式开启：同时设置 `featureMode: experimental` 和 `controlplane.config.features.enableAiGateway: true`。
 
 ## 使用 Helm 开启
 
 创建 `experimental-values.yaml`：
 
 ```yaml
+featureMode: experimental
+gatewayAPI:
+  installCRDs: true
+  channel: experimental
 controlplane:
   config:
     features:
-      enableExperimentalGateway: true
-      enableAiGateway: true
-
-dataplane:
-  config:
-    experimental:
-      enableExperimentalGateway: true
       enableAiGateway: true
 ```
 
@@ -46,7 +43,7 @@ helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   -f experimental-values.yaml
 ```
 
-重启后的 Pod 会读取渲染后的 ConfigMap。rollout 后请查看日志，确认两个平面都以预期配置启动。
+重启后的 Pod 会读取渲染后的 ConfigMap。rollout 后请查看日志，确认 release 使用了预期 feature mode 和控制面配置。
 
 ## 使用 Kustomize 开启
 
@@ -55,20 +52,10 @@ Kustomize 用户应编辑或替换 base 清单生成的 ConfigMap。`gateway/dep
 - `gateway/configs/controlplane/config.yaml`
 - `gateway/configs/dataplane/config.yaml`
 
-数据面仓库也维护运行时默认配置：`dataplane/configs/dataplane/config.yaml`；更新数据面示例时需要保持一致。
-
-控制面片段：
+实验性功能开关位于控制面配置中。Kustomize overlay 可以使用这个片段：
 
 ```yaml
 features:
-  enableExperimentalGateway: true
-  enableAiGateway: true
-```
-
-数据面片段：
-
-```yaml
-experimental:
   enableExperimentalGateway: true
   enableAiGateway: true
 ```
@@ -105,7 +92,7 @@ kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --tail=100
 kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
 ```
 
-缺少 CRD 会导致资源创建失败。控制面 feature flag 关闭时，资源可能不会注册到 manager scheme。数据面 flag 关闭时，即使控制面接受对象，也可能不会启用对应实验性运行时行为。
+缺少 CRD 会导致资源创建失败。控制面 feature flag 关闭时，资源可能不会注册到 manager scheme，或者 AI gateway 资源不会被接受。
 
 ## 使用这些 API
 

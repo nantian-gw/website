@@ -13,7 +13,7 @@ Experimental AI, Wasm, token policy, and Gateway policy behavior is disabled by 
 
 ## How configuration works
 
-The control plane reads its configuration from a file you specify with the `--config` flag at startup. The default path depends on your deployment method: Helm charts mount a ConfigMap at `/etc/nantian/config.yaml`, while local development picks up `configs/controlplane/config.yaml` from the repository.
+The control plane reads its configuration from a file you specify with the `--config` flag at startup. The default path depends on your deployment method: Helm charts mount a ConfigMap at `/etc/nantian-gw/config.yaml`, while local development picks up `configs/controlplane/config.yaml` from the repository.
 
 The data plane works the same way. Its configuration lives at `configs/dataplane/config.yaml` in the repo, or at a path you point to with `--config`.
 
@@ -140,11 +140,10 @@ Different environments need different config values. Here's what changes between
 | Timeouts | Short (faster feedback) | Match production | Conservative |
 | Admin auth | None | None or token | Bearer token required |
 
-Manage these differences through Helm values files. Keep a base `values.yaml` with shared defaults and layer environment overrides on top:
+Manage these differences through Helm values files. Keep your environment overrides outside the chart and layer them during install or upgrade:
 
 ```
-deploy/helm/
-  values.yaml              # shared defaults
+helm-values/
   values-dev.yaml          # dev overrides
   values-staging.yaml      # staging overrides
   values-production.yaml   # production overrides
@@ -153,9 +152,10 @@ deploy/helm/
 Deploy with the appropriate values file:
 
 ```bash
-helm upgrade --install nantian-gw ./deploy/helm \
-  -f deploy/helm/values.yaml \
-  -f deploy/helm/values-production.yaml
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f helm-values/values-production.yaml
 ```
 
 ## Config file location and precedence
@@ -163,10 +163,10 @@ helm upgrade --install nantian-gw ./deploy/helm \
 The gateway reads one config file at startup. It does not merge multiple files. The resolution order, from highest to lowest priority:
 
 1. **`--config` flag** — Explicit path. Always wins if set.
-2. **Helm ConfigMap mount** — `/etc/nantian/config.yaml`, provided by the Helm chart.
+2. **Helm ConfigMap mount** — `/etc/nantian-gw/config.yaml`, provided by the Helm chart.
 3. **Repository default** — `configs/controlplane/config.yaml` in the working directory.
 
-When deployed via Helm, the chart templates a ConfigMap from your `values.yaml` and mounts it at `/etc/nantian/config.yaml`. The process starts without `--config`, so it picks up the mount. To change config in a Helm deployment, edit `values.yaml` and upgrade: do not edit the ConfigMap directly, Helm will overwrite it on the next release.
+When deployed via Helm, the chart templates a ConfigMap from your `values.yaml` and mounts it at `/etc/nantian-gw/config.yaml`. The process starts without `--config`, so it picks up the mount. To change config in a Helm deployment, edit `values.yaml` and upgrade: do not edit the ConfigMap directly, Helm will overwrite it on the next release.
 
 During local development, the repo default is used automatically. Override it with `--config`:
 

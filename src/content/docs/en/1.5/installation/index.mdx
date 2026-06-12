@@ -49,6 +49,9 @@ The chart defaults are intentionally conservative:
 
 * Images use `global.imageRegistry: "ghcr.io"` with repositories `nantian-gw/nantian-controlplane`, `nantian-gw/dataplane`, and `nantian-gw/dashboard`.
 * Control plane and data plane each run two replicas by default; dashboard runs one replica.
+* The chart runs in `featureMode: standard` by default.
+* The chart does not render Gateway API CRDs by default: `gatewayAPI.installCRDs: false` and `gatewayAPI.channel: standard`.
+* Data plane and dashboard image tags are empty by default; Helm resolves them to `.Chart.AppVersion`, currently `0.1.0`.
 * HPA is disabled by default with `hpa.enabled: false`.
 * Prometheus Operator ServiceMonitor resources are disabled by default with `serviceMonitor.enabled: false`.
 * NetworkPolicies are enabled by default with `networkPolicies.enabled: true`.

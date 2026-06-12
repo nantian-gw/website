@@ -73,7 +73,7 @@ git checkout -b release/v1.3.0
 echo "1.3.0" > gateway/VERSION
 
 # Update the Helm Chart version
-# Edit gateway/deploy/helm/nantian-gw/Chart.yaml
+# Edit helm-charts/charts/nantian-gw/Chart.yaml
 # Modify the version and appVersion fields
 ```
 
@@ -107,7 +107,7 @@ Add the new version's change record to `CHANGELOG.md`. Use the following format:
 
 ```bash
 # Commit the version changes
-git add gateway/VERSION gateway/deploy/helm/ CHANGELOG.md
+git add gateway/VERSION helm-charts/charts/nantian-gw CHANGELOG.md
 git commit -m "chore(release): prepare v1.3.0"
 
 # Push to GitHub
@@ -138,11 +138,11 @@ After the release is complete, add release notes to the GitHub Release page, inc
 
 ```bash
 # Package the Helm Chart
-cd gateway/deploy/helm
-helm package nantian-gw
+cd helm-charts
+helm package charts/nantian-gw
 
 # Update the Helm repository index
-helm repo index . --url https://nantian-gw.github.io/charts
+helm repo index . --url https://chart.nantian.dev
 
 # Push to the Helm Chart repository
 git add .

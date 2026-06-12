@@ -39,14 +39,13 @@ Apply it:
 kubectl apply -f grafana-dashboard-configmap.yaml
 ```
 
-### Via Helm
+### Metrics scraping with Helm
 
-The Helm chart at `deploy/helm/nantian-gw` includes the dashboard ConfigMap. Enable it in your values:
+The current Helm chart does not render a Grafana dashboard ConfigMap. Import the dashboard manually or manage the ConfigMap with your observability stack. To let Prometheus Operator scrape Nantian Gateway metrics, enable ServiceMonitor resources:
 
 ```yaml
-grafana:
-  dashboards:
-    enabled: true
+serviceMonitor:
+  enabled: true
 ```
 
 ## Dashboard sections
@@ -55,7 +54,7 @@ The dashboard is organized into these rows:
 
 ### Executive Overview
 
-Top-level metrics in a single row for at-a-glance monitoring:
+Top-level metrics in a single row for at-a-glance monitoring.
 
 | Panel | Metric | What it shows |
 |-------|--------|---------------|

@@ -98,3 +98,84 @@ test("landing page supports reduced motion", () => {
   }
   assert.match(customCss, /scroll-behavior:\s*auto\s*!important/);
 });
+
+const chartDocPaths = [
+  "src/content/docs/en/installation/helm.mdx",
+  "src/content/docs/zh/installation/helm.mdx",
+  "src/content/docs/en/1.5/installation/helm.mdx",
+  "src/content/docs/zh/1.5/installation/helm.mdx",
+  "src/content/docs/en/installation/production.mdx",
+  "src/content/docs/zh/installation/production.mdx",
+  "src/content/docs/en/1.5/installation/production.mdx",
+  "src/content/docs/zh/1.5/installation/production.mdx",
+  "src/content/docs/en/configuration/index.mdx",
+  "src/content/docs/zh/configuration/index.mdx",
+  "src/content/docs/en/1.5/configuration/index.mdx",
+  "src/content/docs/zh/1.5/configuration/index.mdx",
+  "src/content/docs/en/configuration/controlplane.mdx",
+  "src/content/docs/zh/configuration/controlplane.mdx",
+  "src/content/docs/en/1.5/configuration/controlplane.mdx",
+  "src/content/docs/zh/1.5/configuration/controlplane.mdx",
+  "src/content/docs/en/configuration/experimental-features.mdx",
+  "src/content/docs/zh/configuration/experimental-features.mdx",
+  "src/content/docs/en/1.5/configuration/experimental-features.mdx",
+  "src/content/docs/zh/1.5/configuration/experimental-features.mdx",
+  "src/content/docs/en/operations/grafana.mdx",
+  "src/content/docs/zh/operations/grafana.mdx",
+  "src/content/docs/en/1.5/operations/grafana.mdx",
+  "src/content/docs/zh/1.5/operations/grafana.mdx",
+  "src/content/docs/en/contributing/index.mdx",
+  "src/content/docs/zh/contributing/index.mdx",
+  "src/content/docs/en/1.5/contributing/index.mdx",
+  "src/content/docs/zh/1.5/contributing/index.mdx",
+  "src/content/docs/en/contributing/release.mdx",
+  "src/content/docs/zh/contributing/release.mdx",
+  "src/content/docs/en/1.5/contributing/release.mdx",
+  "src/content/docs/zh/1.5/contributing/release.mdx",
+  "src/components/landing/QuickStart.astro",
+  "src/components/landing/Features.astro",
+  "public/llms.txt",
+  "public/llms-full.txt",
+];
+
+function readMany(paths) {
+  return paths.map((path) => `\n--- ${path} ---\n${read(path)}`).join("\n");
+}
+
+test("chart-facing docs use the current Helm repository and chart location", () => {
+  const docs = readMany(chartDocPaths);
+
+  assert.match(docs, /https:\/\/chart\.nantian\.dev/);
+  assert.match(docs, /helm-charts\/charts\/nantian-gw/);
+  assert.doesNotMatch(docs, /https:\/\/charts\.nantian\.dev/);
+  assert.doesNotMatch(docs, /gateway\/deploy\/helm\/nantian-gw/);
+  assert.doesNotMatch(docs, /gateway\/deploy\/helm/);
+  assert.doesNotMatch(docs, /deploy\/helm\/nantian-gw/);
+  assert.doesNotMatch(docs, /deploy\/helm/);
+});
+
+test("chart-facing docs describe current default images and app version semantics", () => {
+  const docs = readMany(chartDocPaths);
+
+  assert.match(docs, /tag:\s*"sha-b3b9649"/);
+  assert.match(docs, /Helm resolves them to `\.Chart\.AppVersion`/i);
+  assert.match(docs, /0\.1\.0/);
+  assert.doesNotMatch(docs, /tag:\s*"latest"|tag:\s*latest/);
+});
+
+test("chart-facing docs use current Helm values and rendered service names", () => {
+  const docs = readMany(chartDocPaths);
+
+  assert.match(docs, /featureMode:\s*standard/);
+  assert.match(docs, /installCRDs:\s*false/);
+  assert.match(docs, /channel:\s*standard/);
+  assert.match(docs, /serviceMonitor:\s*\n\s+enabled:\s*false/);
+  assert.match(docs, /\/etc\/nantian-gw\/config\.yaml/);
+  assert.match(docs, /nantian-gw-dataplane-admin/);
+  assert.match(docs, /http:\/\/nantian-gw-dataplane-admin\.nantian-gw\.svc\.cluster\.local:19080/);
+  assert.doesNotMatch(docs, /monitoring:\s*\n\s+serviceMonitor/);
+  assert.doesNotMatch(docs, /monitoring\.serviceMonitor/);
+  assert.doesNotMatch(docs, /\/etc\/nantian\/config\.yaml/);
+  assert.doesNotMatch(docs, /nantian-dataplane-admin/);
+  assert.doesNotMatch(docs, /dataplane\.config\.experimental/);
+});

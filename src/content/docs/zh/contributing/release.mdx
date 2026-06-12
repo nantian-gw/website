@@ -70,7 +70,7 @@ git checkout -b release/v1.3.0
 echo "1.3.0" > gateway/VERSION
 
 # 更新 Helm Chart 版本
-# 编辑 gateway/deploy/helm/nantian-gw/Chart.yaml
+# 编辑 helm-charts/charts/nantian-gw/Chart.yaml
 # 修改 version 和 appVersion 字段
 ```
 
@@ -104,7 +104,7 @@ echo "1.3.0" > gateway/VERSION
 
 ```bash
 # 提交版本变更
-git add gateway/VERSION gateway/deploy/helm/ CHANGELOG.md
+git add gateway/VERSION helm-charts/charts/nantian-gw CHANGELOG.md
 git commit -m "chore(release): prepare v1.3.0"
 
 # 推送到 GitHub
@@ -135,11 +135,11 @@ git push upstream v1.3.0
 
 ```bash
 # 打包 Helm Chart
-cd gateway/deploy/helm
-helm package nantian-gw
+cd helm-charts
+helm package charts/nantian-gw
 
 # 更新 Helm 仓库索引
-helm repo index . --url https://nantian-gw.github.io/charts
+helm repo index . --url https://chart.nantian.dev
 
 # 推送到 Helm Chart 仓库
 git add .

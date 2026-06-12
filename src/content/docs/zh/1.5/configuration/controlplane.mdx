@@ -92,7 +92,7 @@ Admin API 可以聚合来自已连接数据面实例的响应：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `adminRuntime.dataplaneAggregation.serviceName` | string | `nantian-dataplane-admin` | 数据面 Admin 端点的 Kubernetes Service 名称 |
+| `adminRuntime.dataplaneAggregation.serviceName` | string | `nantian-gw-dataplane-admin` | 数据面 Admin 端点的 Kubernetes Service 名称 |
 | `adminRuntime.dataplaneAggregation.namespace` | string | `nantian-gw` | 数据面 Admin Service 的命名空间 |
 | `adminRuntime.dataplaneAggregation.portName` | string | `admin` | 数据面 Admin Service 的端口名称 |
 | `adminRuntime.dataplaneAggregation.timeout` | duration | `2s` | 数据面聚合请求的超时时间 |
@@ -146,7 +146,7 @@ Admin API 可以聚合来自已连接数据面实例的响应：
 |-----------|------|---------|-------------|
 | `dashboardApi.enabled` | bool | `true` | 启用仪表盘 API 端点 |
 | `dashboardApi.basePath` | string | `/api/dashboard` | 仪表盘 API 端点的 URL 路径前缀 |
-| `dashboardApi.dataplaneAdminUrl` | string | `http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080` | 数据面 Admin API 访问的 URL 模板 |
+| `dashboardApi.dataplaneAdminUrl` | string | `http://nantian-gw-dataplane-admin.nantian-gw.svc.cluster.local:19080` | 数据面 Admin API 访问的 URL 模板 |
 | `dashboardApi.requestTimeout` | duration | `5s` | 仪表盘 API 请求的超时时间 |
 | `dashboardApi.resourceMutationsEnabled` | bool | `true` | 允许通过仪表盘 API 进行资源变更 |
 
@@ -248,7 +248,7 @@ adminRuntime:
   writeTimeout: "30s"
   idleTimeout: "2m"
   dataplaneAggregation:
-    serviceName: "nantian-dataplane-admin"
+    serviceName: "nantian-gw-dataplane-admin"
     namespace: "nantian-gw"
     portName: "admin"
     timeout: "2s"
@@ -267,7 +267,7 @@ adminAuth:
 dashboardApi:
   enabled: true
   basePath: "/api/dashboard"
-  dataplaneAdminUrl: "http://nantian-dataplane-admin.nantian-gw.svc.cluster.local:19080"
+  dataplaneAdminUrl: "http://nantian-gw-dataplane-admin.nantian-gw.svc.cluster.local:19080"
   requestTimeout: "5s"
   resourceMutationsEnabled: true
 

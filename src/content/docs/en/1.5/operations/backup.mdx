@@ -131,7 +131,7 @@ helm install nantian-gw nantian-gw/nantian-gw \
 ````
 5. **Wait for the control plane to become ready**:
 ```bash
-kubectl wait --for=condition=ready pod -l app=nantian-controlplane -n nantian-gw --timeout=120s
+kubectl wait --for=condition=ready pod -l app=nantian-gw-controlplane -n nantian-gw --timeout=120s
 ````
 
 6. **Restore Gateway API resources**:
@@ -167,7 +167,7 @@ If only the control plane fails (data planes are still running):
 kubectl rollout restart deployment/nantian-gw-controlplane -n nantian-gw
 
 # Wait for it to become ready
-kubectl wait --for=condition=ready pod -l app=nantian-controlplane -n nantian-gw --timeout=120s
+kubectl wait --for=condition=ready pod -l app=nantian-gw-controlplane -n nantian-gw --timeout=120s
 ```
 
 The control plane rebuilds its state from the Kubernetes API. Data planes continue serving traffic with their last configuration during the restart. Once the control plane is ready, data planes reconnect and receive fresh configuration.
@@ -181,7 +181,7 @@ If data planes fail but the control plane is healthy:
 kubectl rollout restart deployment/nantian-gw-dataplane -n nantian-gw
 
 # Wait for data planes to become ready
-kubectl wait --for=condition=ready pod -l app=nantian-dataplane -n nantian-gw --timeout=120s
+kubectl wait --for=condition=ready pod -l app=nantian-gw-dataplane -n nantian-gw --timeout=120s
 ```
 
 Data planes reconnect to the control plane, receive the current snapshot, and resume serving traffic. If you have multiple data plane replicas, rolling restart ensures no traffic interruption.

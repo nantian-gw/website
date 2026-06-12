@@ -131,7 +131,7 @@ scrape_configs:
             - nantian-gw
     relabel_configs:
       - source_labels: [__meta_kubernetes_pod_label_app]
-        regex: nantian-controlplane
+        regex: nantian-gw-controlplane
         action: keep
       - source_labels: [__meta_kubernetes_pod_container_port_number]
         regex: "18082"
@@ -152,7 +152,7 @@ scrape_configs:
             - nantian-gw
     relabel_configs:
       - source_labels: [__meta_kubernetes_pod_label_app]
-        regex: nantian-dataplane
+        regex: nantian-gw-dataplane
         action: keep
 ```
 

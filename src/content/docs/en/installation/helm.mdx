@@ -26,6 +26,12 @@ helm repo update
 
 Do not use the legacy plural chart host.
 
+Stable chart versions are shown by default. Per-commit snapshot charts are published as prerelease versions such as `0.2.3-<git-sha>`, so include `--devel` when you need to inspect or install those versions:
+
+```bash
+helm search repo nantian-gw/nantian-gw --versions --devel
+```
+
 ## Install With Defaults
 
 ```bash
@@ -51,6 +57,17 @@ helm install nantian-gw nantian-gw/nantian-gw \
 
 These snippets match the current chart defaults.
 
+### Feature Mode And Gateway API CRDs
+
+```yaml
+featureMode: standard
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+```
+
+`featureMode` controls Nantian Gateway runtime feature gates. `gatewayAPI.installCRDs` controls whether this chart renders official Gateway API CRDs. The production default keeps runtime mode standard and expects Gateway API CRDs to be managed before install.
+
 ### Global And GatewayClass
 
 ```yaml
@@ -74,7 +91,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
+    tag: "sha-b3b9649"
     pullPolicy: Always
   config:
     grpcAddr: ":18080"
@@ -85,6 +102,8 @@ controlplane:
       enableExperimentalGateway: false
       enableAiGateway: false
 ```
+
+The control plane default tag is pinned to the tested immutable `sha-b3b9649` build.
 
 The control plane service split is:
 
@@ -102,7 +121,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: "latest"
+    tag: ""
     pullPolicy: Always
   resources:
     requests:
@@ -115,9 +134,6 @@ dataplane:
     adminAddr: "0.0.0.0:19080"
     runtime:
       httpListenAddr: "0.0.0.0:10080"
-    experimental:
-      enableExperimentalGateway: false
-      enableAiGateway: false
   accessLogVolume:
     enabled: true
     name: access-logs
@@ -135,9 +151,11 @@ dashboard:
   replicas: 1
   image:
     repository: "nantian-gw/dashboard"
-    tag: "latest"
+    tag: ""
     pullPolicy: Always
 ```
+
+Data plane and dashboard image tags are empty by default; Helm resolves them to `.Chart.AppVersion`, currently `0.1.0`.
 
 Disable the dashboard when you do not need the web UI:
 
@@ -188,12 +206,20 @@ dataplane:
 
 ## Experimental Features
 
-Experimental Gateway policy, AI, token policy, and Wasm behavior is disabled by default. Configure both planes before using the experimental APIs:
+Experimental Gateway runtime behavior is controlled by `featureMode`. AI Gateway remains an explicit control plane feature and requires experimental mode:
 
-- Control plane: `controlplane.config.features.enableExperimentalGateway`
-- Control plane: `controlplane.config.features.enableAiGateway`
-- Data plane: `dataplane.config.experimental.enableExperimentalGateway`
-- Data plane: `dataplane.config.experimental.enableAiGateway`
+```yaml
+featureMode: experimental
+gatewayAPI:
+  installCRDs: true
+  channel: experimental
+controlplane:
+  config:
+    features:
+      enableAiGateway: true
+```
+
+`gatewayAPI.installCRDs` and `gatewayAPI.channel` control CRD rendering only. Use `gatewayAPI.channel: experimental` when the chart should render the official experimental Gateway API CRD bundle.
 
 See [Experimental Features](/en/configuration/experimental-features/) for the complete startup, CRD, and verification flow.
 
