@@ -1,4 +1,6 @@
 ---
+import quickStartScriptUrl from './quickstart.client.ts?url';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
@@ -47,7 +49,9 @@ const copiedLabel = isZh ? '已复制' : 'Copied';
               class="code-copy-btn"
               type="button"
               data-copy={cmd}
-              aria-label={`${copyLabel}: ${cmd}`}
+              data-copy-label={copyLabel}
+              data-copied-label={copiedLabel}
+              aria-label={[copyLabel, cmd].join(': ')}
             >
               <svg class="code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -62,49 +66,7 @@ const copiedLabel = isZh ? '已复制' : 'Copied';
   </div>
 </section>
 
-<script>
-  function initQuickStartCopy() {
-    const buttons = document.querySelectorAll('.code-copy-btn');
-
-    buttons.forEach(function (btn) {
-      btn.addEventListener('click', async function () {
-        const cmd = btn.getAttribute('data-copy');
-        if (!cmd) return;
-
-        try {
-          await navigator.clipboard.writeText(cmd);
-
-          const label = btn.querySelector('.code-copy-label');
-          const allText = btn.textContent || '';
-
-          btn.classList.add('copied');
-          if (label) {
-            label.textContent = '${copiedLabel}';
-          }
-
-          setTimeout(function () {
-            btn.classList.remove('copied');
-            if (label) {
-              label.textContent = '${copyLabel}';
-            }
-          }, 2000);
-        } catch (e) {
-          // Fallback for older browsers
-          const textarea = document.createElement('textarea');
-          textarea.value = cmd;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textarea);
-        }
-      });
-    });
-  }
-
-  initQuickStartCopy();
-</script>
+<script type="module" src={quickStartScriptUrl}></script>
 
 <style>
   .quickstart {
@@ -252,7 +214,20 @@ const copiedLabel = isZh ? '已复制' : 'Copied';
     opacity: 1;
   }
 
+  .code-line:focus-within .code-copy-btn,
+  .code-copy-btn:focus-visible {
+    opacity: 1;
+  }
+
   .code-copy-btn:hover {
+    color: var(--color-text-primary);
+    background: rgba(6, 182, 212, 0.1);
+    border-color: var(--color-accent);
+  }
+
+  .code-copy-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
     color: var(--color-text-primary);
     background: rgba(6, 182, 212, 0.1);
     border-color: var(--color-accent);
@@ -274,6 +249,12 @@ const copiedLabel = isZh ? '已复制' : 'Copied';
     white-space: nowrap;
   }
 
+  @media (hover: none), (pointer: coarse) {
+    .code-copy-btn {
+      opacity: 1;
+    }
+  }
+
   /* ===== Responsive ===== */
   @media (max-width: 640px) {
     .quickstart {
@@ -290,10 +271,6 @@ const copiedLabel = isZh ? '已复制' : 'Copied';
 
     .code-line {
       padding: 0.25rem 0.75rem;
-    }
-
-    .code-copy-btn {
-      opacity: 1;
     }
   }
 </style>

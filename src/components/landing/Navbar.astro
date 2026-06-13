@@ -1,5 +1,6 @@
 ---
 import { getLandingRouteMeta } from '../../lib/landingRoutes';
+import navbarScriptUrl from './navbar.client.ts?url';
 
 interface Props {
   lang?: 'en' | 'zh';
@@ -227,67 +228,4 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
   }
 </style>
 
-<script>
-  // ── Scroll detection ──
-  const navbar = document.getElementById('landing-navbar')!;
-
-  function updateNavbarScroll() {
-    if (window.scrollY > 10) {
-      navbar.classList.add('scrolled');
-    } else {
-      navbar.classList.remove('scrolled');
-    }
-  }
-
-  // Initial check
-  updateNavbarScroll();
-  window.addEventListener('scroll', updateNavbarScroll, { passive: true });
-
-  // ── Mobile menu toggle ──
-  const menuToggle = document.getElementById('mobile-menu-toggle')!;
-  const mobileMenu = document.getElementById('mobile-menu')!;
-  const menuIconOpen = document.getElementById('menu-icon-open')!;
-  const menuIconClose = document.getElementById('menu-icon-close')!;
-  const mobileNavLinks = mobileMenu.querySelectorAll('.mobile-nav-link');
-
-  let isMenuOpen = false;
-
-  function openMenu() {
-    isMenuOpen = true;
-    mobileMenu.classList.add('open');
-    menuIconOpen.classList.add('hidden');
-    menuIconClose.classList.remove('hidden');
-    menuToggle.setAttribute('aria-expanded', 'true');
-  }
-
-  function closeMenu() {
-    isMenuOpen = false;
-    mobileMenu.classList.remove('open');
-    menuIconOpen.classList.remove('hidden');
-    menuIconClose.classList.add('hidden');
-    menuToggle.setAttribute('aria-expanded', 'false');
-  }
-
-  menuToggle.addEventListener('click', () => {
-    if (isMenuOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  // Close menu when a link is clicked
-  mobileNavLinks.forEach((link) => {
-    link.addEventListener('click', () => {
-      closeMenu();
-    });
-  });
-
-  // Close menu on Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isMenuOpen) {
-      closeMenu();
-      menuToggle.focus();
-    }
-  });
-</script>
+<script type="module" src={navbarScriptUrl}></script>
