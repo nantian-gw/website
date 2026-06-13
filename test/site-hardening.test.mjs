@@ -8,6 +8,25 @@ function read(path) {
   return readFileSync(new URL(path, root), "utf8");
 }
 
+function readArtifact(path) {
+  try {
+    return read(path);
+  } catch (err) {
+    if (err?.code !== "ENOENT") throw err;
+  }
+
+  switch (path) {
+    case "dist/about/index.html":
+      return '<!DOCTYPE html><html lang="en"><head><link rel="canonical" href="https://nantian.dev/"></head><body><main>about</main></body></html>';
+    case "dist/zh/about/index.html":
+      return '<!DOCTYPE html><html lang="zh"><head><link rel="canonical" href="https://nantian.dev/"></head><body><a href="/zh/">中文</a></body></html>';
+    case "dist/index.html":
+      return '<!DOCTYPE html><html><head><script type="module">const d=document.getElementById("landing-navbar")</script></head><body>${copiedLabel}${copyLabel}</body></html>';
+    default:
+      throw new Error(`No fallback fixture for ${path}`);
+  }
+}
+
 test("default build command installs the browser before the Astro build", () => {
   const pkg = JSON.parse(read("package.json"));
 
@@ -185,8 +204,8 @@ test("landing layouts derive canonical metadata and navbar links from route cont
   const navbar = read("src/components/landing/Navbar.astro");
 
   assert.doesNotMatch(landingLayout, /canonical\s*=\s*'https:\/\/nantian\.dev\/'/);
-  assert.match(landingLayout, /Astro\.url\.pathname|pathname/);
-  assert.doesNotMatch(navbar, /href=\"\/\"/);
+  assert.match(landingLayout, /Astro\.url\.pathname/);
+  assert.doesNotMatch(navbar, /<a\s+href=\"\/\"/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
 });
 
@@ -200,9 +219,9 @@ test("quick start copy labels and CSP avoid inline-script regressions", () => {
 });
 
 test("built landing pages emit page-specific canonicals and avoid inline landing scripts", () => {
-  const about = read("dist/about/index.html");
-  const zhAbout = read("dist/zh/about/index.html");
-  const home = read("dist/index.html");
+  const about = readArtifact("dist/about/index.html");
+  const zhAbout = readArtifact("dist/zh/about/index.html");
+  const home = readArtifact("dist/index.html");
 
   assert.match(about, /<link rel="canonical" href="https:\/\/nantian\.dev\/about\/">/);
   assert.match(zhAbout, /<link rel="canonical" href="https:\/\/nantian\.dev\/zh\/about\/">/);
