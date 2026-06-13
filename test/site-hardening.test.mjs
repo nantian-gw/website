@@ -179,3 +179,34 @@ test("chart-facing docs use current Helm values and rendered service names", () 
   assert.doesNotMatch(docs, /nantian-dataplane-admin/);
   assert.doesNotMatch(docs, /dataplane\.config\.experimental/);
 });
+
+test("landing layouts derive canonical metadata and navbar links from route context", () => {
+  const landingLayout = read("src/layouts/LandingLayout.astro");
+  const navbar = read("src/components/landing/Navbar.astro");
+
+  assert.doesNotMatch(landingLayout, /canonical\s*=\s*'https:\/\/nantian\.dev\/'/);
+  assert.match(landingLayout, /Astro\.url\.pathname|pathname/);
+  assert.doesNotMatch(navbar, /href=\"\/\"/);
+  assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
+});
+
+test("quick start copy labels and CSP avoid inline-script regressions", () => {
+  const quickStart = read("src/components/landing/QuickStart.astro");
+  const headers = read("public/_headers");
+
+  assert.doesNotMatch(quickStart, /\$\{copiedLabel\}/);
+  assert.doesNotMatch(quickStart, /\$\{copyLabel\}/);
+  assert.doesNotMatch(headers, /script-src[^\n]*'unsafe-inline'/);
+});
+
+test("built landing pages emit page-specific canonicals and avoid inline landing scripts", () => {
+  const about = read("dist/about/index.html");
+  const zhAbout = read("dist/zh/about/index.html");
+  const home = read("dist/index.html");
+
+  assert.match(about, /<link rel="canonical" href="https:\/\/nantian\.dev\/about\/">/);
+  assert.match(zhAbout, /<link rel="canonical" href="https:\/\/nantian\.dev\/zh\/about\/">/);
+  assert.match(zhAbout, /href="\/zh\/"/);
+  assert.doesNotMatch(home, /<script type="module">const d=document\.getElementById\("landing-navbar"\)/);
+  assert.doesNotMatch(home, /\$\{copiedLabel\}|\$\{copyLabel\}/);
+});
