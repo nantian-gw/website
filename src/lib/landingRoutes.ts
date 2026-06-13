@@ -37,6 +37,12 @@ export function getLandingRouteMeta(pathname: string) {
   const normalizedPath = normalizeLandingPath(pathname);
   const lang = getLandingLang(normalizedPath);
   const alternatePath = getAlternateLandingPath(normalizedPath);
+  const xDefaultPath =
+    lang === "en"
+      ? normalizedPath
+      : alternatePath && getLandingLang(alternatePath) === "en"
+        ? alternatePath
+        : "/";
 
   return {
     lang,
@@ -44,5 +50,6 @@ export function getLandingRouteMeta(pathname: string) {
     homePath: lang === "zh" ? "/zh/" : "/",
     alternatePath,
     alternateUrl: alternatePath ? toAbsoluteSiteUrl(alternatePath) : null,
+    xDefaultUrl: toAbsoluteSiteUrl(xDefaultPath),
   };
 }

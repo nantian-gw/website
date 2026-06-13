@@ -20,20 +20,21 @@ const routeMeta = getLandingRouteMeta(pathname);
 const {
   title = 'Nantian Gateway - Lightweight Kubernetes Gateway API | Go + Rust',
   description = 'Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency.',
-  lang = routeMeta.lang,
 } = Astro.props;
+const routeLang = routeMeta.lang;
 const canonical = routeMeta.canonicalUrl;
-const selfHrefLang = lang === 'zh' ? 'zh-CN' : 'en';
-const altLang = lang === 'en' ? 'zh-CN' : 'en';
+const selfHrefLang = routeLang === 'zh' ? 'zh-CN' : 'en';
+const altLang = routeLang === 'en' ? 'zh-CN' : 'en';
 const altUrl = routeMeta.alternateUrl;
-const ogLocale = lang === 'en' ? 'en_US' : 'zh_CN';
+const xDefaultUrl = routeMeta.xDefaultUrl;
+const ogLocale = routeLang === 'en' ? 'en_US' : 'zh_CN';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   'name': 'Nantian Gateway',
   'url': 'https://nantian.dev/',
   'description': description,
-  'inLanguage': lang === 'zh' ? 'zh' : 'en',
+  'inLanguage': routeLang,
   'potentialAction': {
     '@type': 'SearchAction',
     'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
@@ -53,7 +54,7 @@ const orgJsonLd = {
 ---
 
 <!doctype html>
-<html lang={lang}>
+<html lang={routeLang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -62,7 +63,7 @@ const orgJsonLd = {
     <link rel="canonical" href={canonical} />
     <link rel="alternate" hreflang={selfHrefLang} href={canonical} />
     {altUrl && <link rel="alternate" hreflang={altLang} href={altUrl} />}
-    <link rel="alternate" hreflang="x-default" href="https://nantian.dev/" />
+    <link rel="alternate" hreflang="x-default" href={xDefaultUrl} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta property="og:title" content={title} />
