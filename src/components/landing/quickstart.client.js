@@ -1,4 +1,4 @@
-const copyText = async (value: string) => {
+const copyText = async (value) => {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
     return;
@@ -14,16 +14,16 @@ const copyText = async (value: string) => {
   document.body.removeChild(textarea);
 };
 
-const buttons = document.querySelectorAll<HTMLButtonElement>('.code-copy-btn');
+const buttons = document.querySelectorAll('.code-copy-btn');
 
 buttons.forEach((button) => {
-  let resetTimer: number | undefined;
+  let resetTimer;
 
   button.addEventListener('click', async () => {
     const cmd = button.dataset.copy;
     const copyLabel = button.dataset.copyLabel;
     const copiedLabel = button.dataset.copiedLabel;
-    const label = button.querySelector<HTMLElement>('.code-copy-label');
+    const label = button.querySelector('.code-copy-label');
 
     if (!cmd || !copyLabel || !copiedLabel || !label) {
       return;

@@ -11,7 +11,7 @@ if (
   menuIconOpen instanceof SVGElement &&
   menuIconClose instanceof SVGElement
 ) {
-  const mobileNavLinks = mobileMenu.querySelectorAll<HTMLAnchorElement>('.mobile-nav-link');
+  const mobileNavLinks = mobileMenu.querySelectorAll('.mobile-nav-link');
   let isMenuOpen = false;
 
   const updateNavbarScroll = () => {

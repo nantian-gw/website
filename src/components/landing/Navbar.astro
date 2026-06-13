@@ -1,6 +1,6 @@
 ---
 import { getLandingRouteMeta } from '../../lib/landingRoutes';
-import navbarScriptUrl from './navbar.client.ts?url';
+import navbarScriptUrl from './navbar.client.js?url&no-inline';
 
 interface Props {
   lang?: 'en' | 'zh';
@@ -228,4 +228,4 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
   }
 </style>
 
-<script type="module" src={navbarScriptUrl}></script>
+<script src={navbarScriptUrl}></script>

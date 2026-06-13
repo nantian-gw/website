@@ -239,10 +239,17 @@ test("built landing pages emit page-specific canonicals and avoid inline landing
   const about = readArtifact("dist/about/index.html");
   const zhAbout = readArtifact("dist/zh/about/index.html");
   const home = readArtifact("dist/index.html");
+  const homeScripts = [...home.matchAll(/<script[^>]*src="([^"]+)"[^>]*><\/script>/g)].map(([, src]) => src);
+  const aboutScripts = [...about.matchAll(/<script[^>]*src="([^"]+)"[^>]*><\/script>/g)].map(([, src]) => src);
 
   assert.match(about, /<link rel="canonical" href="https:\/\/nantian\.dev\/about\/">/);
   assert.match(zhAbout, /<link rel="canonical" href="https:\/\/nantian\.dev\/zh\/about\/">/);
   assert.match(zhAbout, /href="\/zh\/"/);
   assert.doesNotMatch(home, /<script type="module">const d=document\.getElementById\("landing-navbar"\)/);
   assert.doesNotMatch(home, /\$\{copiedLabel\}|\$\{copyLabel\}/);
+  assert.ok(homeScripts.every((src) => !src.startsWith("data:")), "home landing scripts must not ship as data: module URLs");
+  assert.ok(aboutScripts.every((src) => !src.startsWith("data:")), "about landing scripts must not ship as data: module URLs");
+  assert.match(home, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
+  assert.match(home, /<script[^>]*src="\/_astro\/quickstart\.client\.[^"]+\.js"[^>]*><\/script>/i);
+  assert.match(about, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
 });
