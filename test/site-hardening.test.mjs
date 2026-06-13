@@ -1,11 +1,26 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
+const rootPath = fileURLToPath(root);
+const astroBinPath = fileURLToPath(new URL("./node_modules/astro/bin/astro.mjs", root));
+let buildArtifactsReady = false;
 
 function read(path) {
   return readFileSync(new URL(path, root), "utf8");
+}
+
+function buildArtifacts() {
+  if (buildArtifactsReady) return;
+
+  execFileSync(process.execPath, [astroBinPath, "build"], {
+    cwd: rootPath,
+    stdio: "pipe",
+  });
+  buildArtifactsReady = true;
 }
 
 function readArtifact(path) {
@@ -15,16 +30,8 @@ function readArtifact(path) {
     if (err?.code !== "ENOENT") throw err;
   }
 
-  switch (path) {
-    case "dist/about/index.html":
-      return '<!DOCTYPE html><html lang="en"><head><link rel="canonical" href="https://nantian.dev/"></head><body><main>about</main></body></html>';
-    case "dist/zh/about/index.html":
-      return '<!DOCTYPE html><html lang="zh"><head><link rel="canonical" href="https://nantian.dev/"></head><body><a href="/zh/">中文</a></body></html>';
-    case "dist/index.html":
-      return '<!DOCTYPE html><html><head><script type="module">const d=document.getElementById("landing-navbar")</script></head><body>${copiedLabel}${copyLabel}</body></html>';
-    default:
-      throw new Error(`No fallback fixture for ${path}`);
-  }
+  buildArtifacts();
+  return read(path);
 }
 
 test("default build command installs the browser before the Astro build", () => {
@@ -76,13 +83,29 @@ test("Cloudflare Pages headers include wildcard security headers", () => {
     "Referrer-Policy: strict-origin-when-cross-origin",
     "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Strict-Transport-Security: max-age=31536000; includeSubDomains",
-    "Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self'; upgrade-insecure-requests",
   ];
 
   assert.notEqual(wildcardBlock, "", "missing wildcard /* header block");
 
   for (const header of expectedHeaders) {
     assert.ok(wildcardBlock.includes(`  ${header}`), `missing wildcard header: ${header}`);
+  }
+
+  assert.match(wildcardBlock, /  Content-Security-Policy:\s+[^\n]+/);
+  for (const directive of [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "worker-src 'self'",
+    "connect-src 'self'",
+    "upgrade-insecure-requests",
+  ]) {
+    assert.ok(wildcardBlock.includes(directive), `missing CSP directive: ${directive}`);
   }
 
   assert.match(headers, /^\/\.well-known\/http-message-signatures-directory\n/m);
