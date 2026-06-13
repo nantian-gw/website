@@ -51,7 +51,7 @@ Chart 默认值偏保守：
 * 控制面和数据面默认各运行 2 个副本；dashboard 默认 1 个副本。
 * Chart 默认使用 `featureMode: standard`。
 * Chart 默认不渲染 Gateway API CRD：`gatewayAPI.installCRDs: false`，`gatewayAPI.channel: standard`。
-* 数据面和 dashboard 镜像 tag 留空时会回退到 `.Chart.AppVersion`；当前 chart appVersion 是 `0.1.0`。
+* 当前 chart 默认对 controlplane、dataplane 和 dashboard 都使用 `latest` tag；生产环境应在 values 文件里显式固定不可变 tag 或 digest。
 * HPA 默认关闭，配置为 `hpa.enabled: false`。
 * Prometheus Operator ServiceMonitor 默认关闭，配置为 `serviceMonitor.enabled: false`。
 * NetworkPolicy 默认开启，配置为 `networkPolicies.enabled: true`。

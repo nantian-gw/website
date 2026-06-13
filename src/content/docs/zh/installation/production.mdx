@@ -272,22 +272,22 @@ controlplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/nantian-controlplane"
-    tag: "sha-b3b9649"
+    tag: "sha-<controlplane-commit>"
 
 dataplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dataplane"
-    tag: "0.1.0"
+    tag: "sha-<dataplane-commit>"
 
 dashboard:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dashboard"
-    tag: "0.1.0"
+    tag: "sha-<dashboard-commit>"
 ```
 
-生产环境使用不可变 release tag 或镜像 digest。不要使用 `latest`，否则回滚和审计都会变得不明确。
+把这些占位符替换成你已经同步到私有仓库的不可变 tag 或 digest。不要使用 `latest`，否则回滚和审计都会变得不明确。
 
 ## 部署
 

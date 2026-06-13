@@ -6,6 +6,8 @@ Kustomize 是一种声明式、面向 patch 的部署方式。你定义一个基
 
 这篇指南假定你熟悉 Kustomize 的基本概念。如果还没用过，[Kustomize 官方文档](https://kustomize.io/) 是个不错的起点。
 
+下面的目录和片段重点说明推荐的 Kustomize 管理方式，不代表当前 `gateway` 仓库里的清单可以在任意环境下直接 `kubectl apply -k` 原样安装。仓库内现有 overlays 更偏向开发、CI 和生产模板参考。
+
 ## 目录结构
 
 一个典型的 Nantian Gateway Kustomize 布局长这样：
@@ -220,17 +222,19 @@ spec:
 
 ## 部署
 
-Kustomize 部署非常简单：
+当前 `gateway/deploy/kubernetes/` 里的 Kustomize 清单更适合仓库内开发、CI 和长期环境模板参考，不是像 Helm 一样的开箱即用安装入口。当前 base 通过 `configMapGenerator` 直接引用仓库中的配置文件；在常见的 `kubectl apply -k` / `kustomize build` 默认安全限制下，这些仓库外路径会被拒绝，因此把仓库清单直接当成 copy-paste 安装命令并不可靠。
 
-```bash
-# 部署 base（开发/测试环境）
-kubectl apply -k deploy/base
+如果你的目标是按文档快速装起来，优先使用 [Helm 安装](/zh/installation/helm/)。
 
-# 部署生产 overlay
-kubectl apply -k deploy/overlays/production
+如果你确实要走 Kustomize，建议流程是：
+
+```text
+1. 复制或 fork 这些清单到你自己的部署仓库
+2. 让 overlay 自己持有 controlplane / dataplane 配置文件和必需的 Secret 模板
+3. 只对你自己的 overlay 执行 kubectl apply -k
 ```
 
-如果你用的是 Argo CD，直接把 `deploy/overlays/production` 配成 Application 的路径就行了。每次 Git commit 之后 Argo CD 会自动同步，不需要手动介入。
+如果你用的是 Argo CD 或 Flux，也应该把你整理过的自有 overlay 路径配置成 Application，而不是直接指向当前仓库默认 overlay 并假设它能原样安装。
 
 ## 各组件单独管理
 
