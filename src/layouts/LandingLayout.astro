@@ -7,21 +7,25 @@ import '@fontsource/inter/700.css';
 import '@fontsource/inter/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
+import { getLandingRouteMeta } from '../lib/landingRoutes';
 
 export interface Props {
   title?: string;
   description?: string;
   lang?: string;
-  canonical?: string;
+  pathname?: string;
 }
+const pathname = Astro.props.pathname ?? Astro.url.pathname;
+const routeMeta = getLandingRouteMeta(pathname);
 const {
   title = 'Nantian Gateway - Lightweight Kubernetes Gateway API | Go + Rust',
   description = 'Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency.',
-  lang = 'en',
-  canonical = 'https://nantian.dev/',
+  lang = routeMeta.lang,
 } = Astro.props;
+const canonical = routeMeta.canonicalUrl;
+const selfHrefLang = lang === 'zh' ? 'zh-CN' : 'en';
 const altLang = lang === 'en' ? 'zh-CN' : 'en';
-const altUrl = lang === 'en' ? 'https://nantian.dev/zh/' : 'https://nantian.dev/';
+const altUrl = routeMeta.alternateUrl;
 const ogLocale = lang === 'en' ? 'en_US' : 'zh_CN';
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -56,8 +60,8 @@ const orgJsonLd = {
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang={lang} href={canonical} />
-    <link rel="alternate" hreflang={altLang} href={altUrl} />
+    <link rel="alternate" hreflang={selfHrefLang} href={canonical} />
+    {altUrl && <link rel="alternate" hreflang={altLang} href={altUrl} />}
     <link rel="alternate" hreflang="x-default" href="https://nantian.dev/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />

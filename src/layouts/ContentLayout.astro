@@ -9,7 +9,7 @@ export interface Props {
   description?: string;
   heading: string;
   intro?: string;
-  canonical?: string;
+  pathname?: string;
 }
 
 const {
@@ -18,12 +18,12 @@ const {
   description,
   heading,
   intro,
-  canonical,
+  pathname = Astro.url.pathname,
 } = Astro.props;
 ---
 
-<LandingLayout lang={lang} title={title} description={description} canonical={canonical}>
-  <Navbar lang={lang} />
+<LandingLayout lang={lang} title={title} description={description} pathname={pathname}>
+  <Navbar lang={lang} pathname={pathname} />
   <main class="content-page">
     <div class="content-container">
       <header class="content-header">
