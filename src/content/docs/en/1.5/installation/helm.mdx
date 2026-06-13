@@ -92,7 +92,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "sha-b3b9649"
+    tag: "latest"
     pullPolicy: Always
   config:
     grpcAddr: ":18080"
@@ -104,7 +104,7 @@ controlplane:
       enableAiGateway: false
 ```
 
-The control plane default tag is pinned to the tested immutable `sha-b3b9649` build.
+The current chart default also uses the `latest` tag for the control plane so quick installs follow the current public image set. In production, override this with an immutable tag or digest in your values file.
 
 The control plane service split is:
 
@@ -122,7 +122,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: ""
+    tag: "latest"
     pullPolicy: Always
   resources:
     requests:
@@ -152,11 +152,11 @@ dashboard:
   replicas: 1
   image:
     repository: "nantian-gw/dashboard"
-    tag: ""
+    tag: "latest"
     pullPolicy: Always
 ```
 
-Data plane and dashboard image tags are empty by default; Helm resolves them to `.Chart.AppVersion`, currently `0.1.0`.
+The current chart default uses `latest` for control plane, data plane, and dashboard. This is convenient for quick install validation, but production environments should pin immutable tags or digests explicitly in their values files.
 
 Disable the dashboard when you do not need the web UI:
 

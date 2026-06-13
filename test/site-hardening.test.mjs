@@ -187,6 +187,17 @@ const chartDocPaths = [
   "public/llms-full.txt",
 ];
 
+const defaultInstallDocPaths = [
+  "src/content/docs/en/installation/index.mdx",
+  "src/content/docs/zh/installation/index.mdx",
+  "src/content/docs/en/installation/helm.mdx",
+  "src/content/docs/zh/installation/helm.mdx",
+  "src/content/docs/en/1.5/installation/index.mdx",
+  "src/content/docs/zh/1.5/installation/index.mdx",
+  "src/content/docs/en/1.5/installation/helm.mdx",
+  "src/content/docs/zh/1.5/installation/helm.mdx",
+];
+
 function readMany(paths) {
   return paths.map((path) => `\n--- ${path} ---\n${read(path)}`).join("\n");
 }
@@ -203,13 +214,14 @@ test("chart-facing docs use the current Helm repository and chart location", () 
   assert.doesNotMatch(docs, /deploy\/helm/);
 });
 
-test("chart-facing docs describe current default images and app version semantics", () => {
-  const docs = readMany(chartDocPaths);
+test("default-install docs describe current default image tag semantics", () => {
+  const docs = readMany(defaultInstallDocPaths);
 
-  assert.match(docs, /tag:\s*"sha-b3b9649"/);
-  assert.match(docs, /Helm resolves them to `\.Chart\.AppVersion`/i);
-  assert.match(docs, /0\.1\.0/);
-  assert.doesNotMatch(docs, /tag:\s*"latest"|tag:\s*latest/);
+  assert.match(docs, /tag:\s*"latest"/);
+  assert.doesNotMatch(docs, /tag:\s*"sha-b3b9649"/);
+  assert.doesNotMatch(docs, /tag:\s*""/);
+  assert.doesNotMatch(docs, /\.Chart\.AppVersion/);
+  assert.doesNotMatch(docs, /currently `0\.1\.0`/);
 });
 
 test("chart-facing docs use current Helm values and rendered service names", () => {
