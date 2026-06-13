@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "audit:ci": "node ./scripts/check-npm-audit.mjs",
     "dev": "astro dev",
     "start": "astro dev",
     "build": "npm run setup:browser && astro build",

@@ -46,16 +46,29 @@ test("default build command installs the browser before the Astro build", () => 
   }
 });
 
-test("CI runs hardening tests and installs the browser before building", () => {
+test("CI installs the browser before running hardening tests and builds", () => {
   const ci = read(".github/workflows/ci.yml");
 
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run setup:browser:ci/);
   assert.match(ci, /npm run build:astro/);
   assert.ok(
+    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm test"),
+    "CI must install the browser before running the hardening test suite",
+  );
+  assert.ok(
     ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:astro"),
     "CI must install the browser before running the build",
   );
+});
+
+test("CI audit uses the named policy script instead of raw npm audit", () => {
+  const ci = read(".github/workflows/ci.yml");
+  const pkg = JSON.parse(read("package.json"));
+
+  assert.equal(pkg.scripts["audit:ci"], "node ./scripts/check-npm-audit.mjs");
+  assert.match(ci, /npm run audit:ci/);
+  assert.doesNotMatch(ci, /npm audit --audit-level=high/);
 });
 
 test("Cloudflare Pages config declares the static output directory", () => {
@@ -227,14 +240,24 @@ test("landing layouts derive canonical metadata and navbar links from route cont
   assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });
 
-test("quick start copy labels and CSP avoid inline-script regressions", () => {
+test("quick start copy labels stay externalized for landing pages", () => {
   const quickStart = read("src/components/landing/QuickStart.astro");
-  const headers = read("public/_headers");
 
   assert.doesNotMatch(quickStart, /\$\{copiedLabel\}/);
   assert.doesNotMatch(quickStart, /\$\{copyLabel\}/);
   assert.match(quickStart, /<script is:inline src=\{quickStartScriptUrl\}><\/script>/);
-  assert.doesNotMatch(headers, /script-src[^\n]*'unsafe-inline'/);
+});
+
+test("docs pages keep required Starlight inline scripts and CSP allows them", () => {
+  const headers = read("public/_headers");
+  const docsPage = readArtifact("dist/en/concepts/index.html");
+  const landingHome = readArtifact("dist/index.html");
+
+  assert.match(headers, /script-src[^\n]*'unsafe-inline'/);
+  assert.match(docsPage, /window\.StarlightThemeProvider/);
+  assert.match(docsPage, /customElements\.define\("starlight-theme-select"/);
+  assert.match(docsPage, /customElements\.define\("starlight-lang-select"/);
+  assert.match(landingHome, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
 });
 
 test("built landing pages emit page-specific canonicals and avoid inline landing scripts", () => {

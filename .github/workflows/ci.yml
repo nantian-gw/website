@@ -20,7 +20,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high
+      - run: npm run audit:ci
 
   lint:
     runs-on: ubuntu-latest
@@ -42,6 +42,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run setup:browser:ci
       - run: npm test
 
   build:
