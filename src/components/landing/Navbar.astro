@@ -1,15 +1,21 @@
 ---
+import { getLandingRouteMeta } from '../../lib/landingRoutes';
+import navbarScriptUrl from './navbar.client.js?url&no-inline';
+
 interface Props {
   lang?: 'en' | 'zh';
+  pathname?: string;
 }
 
-const { lang = 'en' } = Astro.props;
+const { lang = 'en', pathname = lang === 'zh' ? '/zh/' : '/' } = Astro.props;
+const routeMeta = getLandingRouteMeta(pathname);
+const homeHref = routeMeta.homePath;
 
 const t = {
   docs: lang === 'zh' ? '文档' : 'Docs',
   github: 'GitHub',
   switchLang: lang === 'zh' ? 'EN' : '中文',
-  switchHref: lang === 'zh' ? '/' : '/zh/',
+  switchHref: routeMeta.alternatePath ?? (lang === 'zh' ? '/' : '/zh/'),
 };
 
 const docsHref = `/${lang}/concepts/`;
@@ -25,7 +31,7 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
   >
     <!-- Left: Logo + Brand -->
     <a
-      href="/"
+      href={homeHref}
       class="inline-flex items-center gap-2.5 group shrink-0"
       aria-label="Nantian Gateway home"
     >
@@ -222,67 +228,4 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
   }
 </style>
 
-<script>
-  // ── Scroll detection ──
-  const navbar = document.getElementById('landing-navbar')!;
-
-  function updateNavbarScroll() {
-    if (window.scrollY > 10) {
-      navbar.classList.add('scrolled');
-    } else {
-      navbar.classList.remove('scrolled');
-    }
-  }
-
-  // Initial check
-  updateNavbarScroll();
-  window.addEventListener('scroll', updateNavbarScroll, { passive: true });
-
-  // ── Mobile menu toggle ──
-  const menuToggle = document.getElementById('mobile-menu-toggle')!;
-  const mobileMenu = document.getElementById('mobile-menu')!;
-  const menuIconOpen = document.getElementById('menu-icon-open')!;
-  const menuIconClose = document.getElementById('menu-icon-close')!;
-  const mobileNavLinks = mobileMenu.querySelectorAll('.mobile-nav-link');
-
-  let isMenuOpen = false;
-
-  function openMenu() {
-    isMenuOpen = true;
-    mobileMenu.classList.add('open');
-    menuIconOpen.classList.add('hidden');
-    menuIconClose.classList.remove('hidden');
-    menuToggle.setAttribute('aria-expanded', 'true');
-  }
-
-  function closeMenu() {
-    isMenuOpen = false;
-    mobileMenu.classList.remove('open');
-    menuIconOpen.classList.remove('hidden');
-    menuIconClose.classList.add('hidden');
-    menuToggle.setAttribute('aria-expanded', 'false');
-  }
-
-  menuToggle.addEventListener('click', () => {
-    if (isMenuOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
-  });
-
-  // Close menu when a link is clicked
-  mobileNavLinks.forEach((link) => {
-    link.addEventListener('click', () => {
-      closeMenu();
-    });
-  });
-
-  // Close menu on Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isMenuOpen) {
-      closeMenu();
-      menuToggle.focus();
-    }
-  });
-</script>
+<script is:inline src={navbarScriptUrl}></script>

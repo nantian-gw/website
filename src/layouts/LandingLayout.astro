@@ -7,29 +7,34 @@ import '@fontsource/inter/700.css';
 import '@fontsource/inter/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
+import { getLandingRouteMeta } from '../lib/landingRoutes';
 
 export interface Props {
   title?: string;
   description?: string;
   lang?: string;
-  canonical?: string;
+  pathname?: string;
 }
+const pathname = Astro.props.pathname ?? Astro.url.pathname;
+const routeMeta = getLandingRouteMeta(pathname);
 const {
   title = 'Nantian Gateway - Lightweight Kubernetes Gateway API | Go + Rust',
   description = 'Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency.',
-  lang = 'en',
-  canonical = 'https://nantian.dev/',
 } = Astro.props;
-const altLang = lang === 'en' ? 'zh-CN' : 'en';
-const altUrl = lang === 'en' ? 'https://nantian.dev/zh/' : 'https://nantian.dev/';
-const ogLocale = lang === 'en' ? 'en_US' : 'zh_CN';
+const routeLang = routeMeta.lang;
+const canonical = routeMeta.canonicalUrl;
+const selfHrefLang = routeLang === 'zh' ? 'zh-CN' : 'en';
+const altLang = routeLang === 'en' ? 'zh-CN' : 'en';
+const altUrl = routeMeta.alternateUrl;
+const xDefaultUrl = routeMeta.xDefaultUrl;
+const ogLocale = routeLang === 'en' ? 'en_US' : 'zh_CN';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'WebSite',
   'name': 'Nantian Gateway',
   'url': 'https://nantian.dev/',
   'description': description,
-  'inLanguage': lang === 'zh' ? 'zh' : 'en',
+  'inLanguage': routeLang,
   'potentialAction': {
     '@type': 'SearchAction',
     'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
@@ -49,16 +54,16 @@ const orgJsonLd = {
 ---
 
 <!doctype html>
-<html lang={lang}>
+<html lang={routeLang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang={lang} href={canonical} />
-    <link rel="alternate" hreflang={altLang} href={altUrl} />
-    <link rel="alternate" hreflang="x-default" href="https://nantian.dev/" />
+    <link rel="alternate" hreflang={selfHrefLang} href={canonical} />
+    {altUrl && <link rel="alternate" hreflang={altLang} href={altUrl} />}
+    <link rel="alternate" hreflang="x-default" href={xDefaultUrl} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="sitemap" href="/sitemap-index.xml" />
     <meta property="og:title" content={title} />

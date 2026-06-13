@@ -224,6 +224,7 @@ test("landing layouts derive canonical metadata and navbar links from route cont
   assert.match(landingLayout, /Astro\.url\.pathname/);
   assert.doesNotMatch(navbar, /<a\s+href=\"\/\"/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
+  assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });
 
 test("quick start copy labels and CSP avoid inline-script regressions", () => {
@@ -232,6 +233,7 @@ test("quick start copy labels and CSP avoid inline-script regressions", () => {
 
   assert.doesNotMatch(quickStart, /\$\{copiedLabel\}/);
   assert.doesNotMatch(quickStart, /\$\{copyLabel\}/);
+  assert.match(quickStart, /<script is:inline src=\{quickStartScriptUrl\}><\/script>/);
   assert.doesNotMatch(headers, /script-src[^\n]*'unsafe-inline'/);
 });
 
@@ -239,10 +241,17 @@ test("built landing pages emit page-specific canonicals and avoid inline landing
   const about = readArtifact("dist/about/index.html");
   const zhAbout = readArtifact("dist/zh/about/index.html");
   const home = readArtifact("dist/index.html");
+  const homeScripts = [...home.matchAll(/<script[^>]*src="([^"]+)"[^>]*><\/script>/g)].map(([, src]) => src);
+  const aboutScripts = [...about.matchAll(/<script[^>]*src="([^"]+)"[^>]*><\/script>/g)].map(([, src]) => src);
 
   assert.match(about, /<link rel="canonical" href="https:\/\/nantian\.dev\/about\/">/);
   assert.match(zhAbout, /<link rel="canonical" href="https:\/\/nantian\.dev\/zh\/about\/">/);
   assert.match(zhAbout, /href="\/zh\/"/);
   assert.doesNotMatch(home, /<script type="module">const d=document\.getElementById\("landing-navbar"\)/);
   assert.doesNotMatch(home, /\$\{copiedLabel\}|\$\{copyLabel\}/);
+  assert.ok(homeScripts.every((src) => !src.startsWith("data:")), "home landing scripts must not ship as data: module URLs");
+  assert.ok(aboutScripts.every((src) => !src.startsWith("data:")), "about landing scripts must not ship as data: module URLs");
+  assert.match(home, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
+  assert.match(home, /<script[^>]*src="\/_astro\/quickstart\.client\.[^"]+\.js"[^>]*><\/script>/i);
+  assert.match(about, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
 });
