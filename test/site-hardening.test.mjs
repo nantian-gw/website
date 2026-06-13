@@ -224,6 +224,7 @@ test("landing layouts derive canonical metadata and navbar links from route cont
   assert.match(landingLayout, /Astro\.url\.pathname/);
   assert.doesNotMatch(navbar, /<a\s+href=\"\/\"/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
+  assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });
 
 test("quick start copy labels and CSP avoid inline-script regressions", () => {
@@ -232,6 +233,7 @@ test("quick start copy labels and CSP avoid inline-script regressions", () => {
 
   assert.doesNotMatch(quickStart, /\$\{copiedLabel\}/);
   assert.doesNotMatch(quickStart, /\$\{copyLabel\}/);
+  assert.match(quickStart, /<script is:inline src=\{quickStartScriptUrl\}><\/script>/);
   assert.doesNotMatch(headers, /script-src[^\n]*'unsafe-inline'/);
 });
 
