@@ -24,12 +24,6 @@ function buildArtifacts() {
 }
 
 function readArtifact(path) {
-  try {
-    return read(path);
-  } catch (err) {
-    if (err?.code !== "ENOENT") throw err;
-  }
-
   buildArtifacts();
   return read(path);
 }
