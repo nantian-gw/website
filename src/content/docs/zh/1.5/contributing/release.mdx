@@ -23,6 +23,8 @@ Nantian Gateway 遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN
 * **预发布版**：`v1.3.0-alpha.1`、`v1.3.0-beta.1`、`v1.3.0-rc.1` — 功能预览和测试
 * **开发版**：`v0.0.0-dev` — 从 `main` 分支构建的版本
 
+项目已经拆分为多个组件仓库。稳定发布使用同一个 product version，例如 `v1.3.0`，作为 controlplane、dataplane 和 dashboard 镜像 tag。Helm chart 使用不带 `v` 前缀的 chart version，例如 `1.3.0`，并在 `appVersion: "v1.3.0"` 中记录 product version。`latest`、`sha-*`、`ci-*` 等开发镜像 tag 只用于验证，不应替代稳定发布 tag。
+
 ### 支持策略
 
 Nantian Gateway 维护最近两个 MINOR 版本的安全和关键 Bug 修复：
@@ -66,17 +68,21 @@ make test-conformance
 ### 2. 创建发布分支
 
 ```bash
-# 创建发布分支
-git checkout -b release/v1.3.0
+product_version=v1.3.0
+chart_version=${product_version#v}
 
-# 更新版本号
-# 编辑 gateway/VERSION 文件，写入 1.3.0
-echo "1.3.0" > gateway/VERSION
+# 在组件仓库中创建发布分支
+git checkout -b release/${product_version}
 
-# 更新 Helm Chart 版本
-# 编辑 helm-charts/charts/nantian-gw/Chart.yaml
-# 修改 version 和 appVersion 字段
+# 协调这个 product version 对应的拆分仓库版本：
+# - controlplane image: ghcr.io/nantian-gw/nantian-controlplane:${product_version}
+# - dataplane image: ghcr.io/nantian-gw/dataplane:${product_version}
+# - dashboard image: ghcr.io/nantian-gw/dashboard:${product_version}
+# - chart version: ${chart_version}
+# - chart appVersion: ${product_version}
 ```
+
+更新 `helm-charts/charts/nantian-gw/Chart.yaml`，让 `version` 等于 chart version，`appVersion` 等于 product version。稳定发布时，组件镜像 tag 应与同一个 product version 对齐。
 
 ### 3. 更新变更日志
 
@@ -107,12 +113,17 @@ echo "1.3.0" > gateway/VERSION
 ### 4. 提交并创建标签
 
 ```bash
-# 提交版本变更
-git add gateway/VERSION helm-charts/charts/nantian-gw CHANGELOG.md
-git commit -m "chore(release): prepare v1.3.0"
+product_version=v1.3.0
 
-# 推送到 GitHub
-git push origin release/v1.3.0
+# 在每个受影响的组件仓库中提交发布变更
+git add CHANGELOG.md
+git commit -m "chore(release): prepare v1.3.0"
+git push origin release/${product_version}
+
+# 在 helm-charts 仓库中提交 chart version 和 appVersion 更新
+git add charts/nantian-gw/Chart.yaml CHANGELOG.md
+git commit -m "chore(chart): release v1.3.0"
+git push origin release/${product_version}
 
 # 创建 PR 合并到 main
 # 在 GitHub 上创建 Pull Request，标题为 "Release v1.3.0"
@@ -192,7 +203,7 @@ git tag -a v1.2.4 -m "Patch release v1.2.4"
 * \[ ] 所有 CI 检查通过（Go test、Rust test、lint、e2e）
 * \[ ] Gateway API 合规性测试通过
 * \[ ] 变更日志已更新，包含所有面向用户的变更
-* \[ ] 版本号已更新（VERSION、Chart.yaml）
+* \[ ] product version、chart version 和 Chart.yaml `appVersion` 已协调
 * \[ ] 容器镜像已推送到 ghcr.io
 * \[ ] Helm Chart 已打包并推送
 * \[ ] 文档站对应版本的文档已更新

@@ -23,6 +23,8 @@ Nantian Gateway follows the [Semantic Versioning 2.0.0](https://semver.org/) spe
 * **Pre-release**: `v1.3.0-alpha.1`, `v1.3.0-beta.1`, `v1.3.0-rc.1` — feature preview and testing
 * **Development build**: `v0.0.0-dev` — built from the `main` branch
 
+The project is split across component repositories. A stable release uses one product version such as `v1.3.0` for the controlplane, dataplane, and dashboard image tags. The Helm chart uses chart version `1.3.0` and records the product version in `appVersion: "v1.3.0"`. Development image tags such as `latest`, `sha-*`, and `ci-*` are for validation and should not replace stable release tags.
+
 ### Support Policy
 
 Nantian Gateway maintains security and critical bug fixes for the two most recent MINOR versions:
@@ -66,17 +68,21 @@ make test-conformance
 ### 2. Create a Release Branch
 
 ```bash
-# Create a release branch
-git checkout -b release/v1.3.0
+product_version=v1.3.0
+chart_version=${product_version#v}
 
-# Update the version number
-# Edit gateway/VERSION, write 1.3.0
-echo "1.3.0" > gateway/VERSION
+# Create release branches in the component repositories
+git checkout -b release/${product_version}
 
-# Update the Helm Chart version
-# Edit helm-charts/charts/nantian-gw/Chart.yaml
-# Modify the version and appVersion fields
+# Coordinate the split repositories for this product version:
+# - controlplane image: ghcr.io/nantian-gw/nantian-controlplane:${product_version}
+# - dataplane image: ghcr.io/nantian-gw/dataplane:${product_version}
+# - dashboard image: ghcr.io/nantian-gw/dashboard:${product_version}
+# - chart version: ${chart_version}
+# - chart appVersion: ${product_version}
 ```
+
+Update `helm-charts/charts/nantian-gw/Chart.yaml` so `version` equals the chart version and `appVersion` equals the product version. Keep the component image tags aligned with the same product version for stable releases.
 
 ### 3. Update the Changelog
 
@@ -107,12 +113,17 @@ Add the new version's change record to `CHANGELOG.md`. Use the following format:
 ### 4. Commit and Create a Tag
 
 ```bash
-# Commit the version changes
-git add gateway/VERSION helm-charts/charts/nantian-gw CHANGELOG.md
-git commit -m "chore(release): prepare v1.3.0"
+product_version=v1.3.0
 
-# Push to GitHub
-git push origin release/v1.3.0
+# Commit the release changes in each affected component repository
+git add CHANGELOG.md
+git commit -m "chore(release): prepare v1.3.0"
+git push origin release/${product_version}
+
+# Commit the Helm chart version and appVersion update in the helm-charts repository
+git add charts/nantian-gw/Chart.yaml CHANGELOG.md
+git commit -m "chore(chart): release v1.3.0"
+git push origin release/${product_version}
 
 # Create a PR to merge into main
 # On GitHub, create a Pull Request titled "Release v1.3.0"
@@ -192,7 +203,7 @@ Confirm the following before releasing:
 * \[ ] All CI checks pass (Go test, Rust test, lint, e2e)
 * \[ ] Gateway API conformance tests pass
 * \[ ] Changelog is updated with all user-facing changes
-* \[ ] Version numbers are updated (VERSION, Chart.yaml)
+* \[ ] Product version, chart version, and Chart.yaml `appVersion` are coordinated
 * \[ ] Container images are pushed to ghcr.io
 * \[ ] Helm Chart is packaged and pushed
 * \[ ] Documentation for the corresponding version is updated

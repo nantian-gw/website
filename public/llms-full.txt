@@ -535,7 +535,7 @@ URL: https://nantian.dev/en/installation/ha/
 ## Helm Installation
 URL: https://nantian.dev/en/installation/helm/
 
-The Helm chart is published at https://chart.nantian.dev, lives in helm-charts/charts/nantian-gw, defaults to featureMode: standard, does not render Gateway API CRDs unless gatewayAPI.installCRDs=true, pins the control plane image to sha-b3b9649, and lets data plane/dashboard image tags resolve to appVersion 0.1.0.
+The Helm chart is published at https://chart.nantian.dev, lives in helm-charts/charts/nantian-gw, defaults to featureMode: standard, does not render Gateway API CRDs unless gatewayAPI.installCRDs=true, uses the latest tag for controlplane, dataplane, and dashboard images by default, and production values should pin immutable release tags or digests.
 
 
 ## Installation Overview

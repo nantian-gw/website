@@ -230,19 +230,19 @@ controlplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/nantian-controlplane"
-    tag: "sha-b3b9649"
+    tag: "v1.3.0"
 
 dataplane:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dataplane"
-    tag: "0.1.0"
+    tag: "v1.3.0"
 
 dashboard:
   image:
     registry: "registry.example.com"
     repository: "nantian-gw/dashboard"
-    tag: "0.1.0"
+    tag: "v1.3.0"
 ```
 
 Use immutable release tags or image digests in production. Avoid `latest`, because it makes rollbacks and audits ambiguous.

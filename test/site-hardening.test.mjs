@@ -224,6 +224,32 @@ test("default-install docs describe current default image tag semantics", () => 
   assert.doesNotMatch(docs, /currently `0\.1\.0`/);
 });
 
+test("LLM reference files describe current Helm image defaults", () => {
+  const docs = readMany(["public/llms.txt", "public/llms-full.txt"]);
+
+  assert.match(docs, /uses the latest tag/i);
+  assert.doesNotMatch(docs, /sha-b3b9649/);
+  assert.doesNotMatch(docs, /\.Chart\.AppVersion/);
+  assert.doesNotMatch(docs, /appVersion 0\.1\.0/);
+});
+
+test("release docs describe split repository version coordination", () => {
+  const docs = readMany([
+    "src/content/docs/en/contributing/release.mdx",
+    "src/content/docs/zh/contributing/release.mdx",
+    "src/content/docs/en/1.5/contributing/release.mdx",
+    "src/content/docs/zh/1.5/contributing/release.mdx",
+  ]);
+
+  assert.match(docs, /product version/i);
+  assert.match(docs, /chart version/i);
+  assert.match(docs, /appVersion/i);
+  assert.match(docs, /controlplane/i);
+  assert.match(docs, /dataplane/i);
+  assert.match(docs, /dashboard/i);
+  assert.doesNotMatch(docs, /gateway\/VERSION/);
+});
+
 test("chart-facing docs use current Helm values and rendered service names", () => {
   const docs = readMany(chartDocPaths);
 
@@ -234,6 +260,8 @@ test("chart-facing docs use current Helm values and rendered service names", () 
   assert.match(docs, /\/etc\/nantian-gw\/config\.yaml/);
   assert.match(docs, /nantian-gw-dataplane-admin/);
   assert.match(docs, /http:\/\/nantian-gw-dataplane-admin\.nantian-gw\.svc\.cluster\.local:19080/);
+  assert.doesNotMatch(docs, /sha-b3b9649/);
+  assert.doesNotMatch(docs, /tag:\s*"0\.1\.0"/);
   assert.doesNotMatch(docs, /monitoring:\s*\n\s+serviceMonitor/);
   assert.doesNotMatch(docs, /monitoring\.serviceMonitor/);
   assert.doesNotMatch(docs, /\/etc\/nantian\/config\.yaml/);
