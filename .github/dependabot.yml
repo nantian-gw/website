@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "deps(docs)"
+    groups:
+      astro-stack:
+        patterns:
+          - "astro"
+          - "@astrojs/*"
+          - "starlight-versions"
+          - "astro-pagefind"
+      docs-tooling:
+        patterns:
+          - "playwright"
+          - "typescript"
+          - "sharp"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
