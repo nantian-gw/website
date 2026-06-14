@@ -20,7 +20,7 @@
     "@astrojs/starlight": "^0.39.3",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
-    "@tailwindcss/postcss": "^4.3.0",
+    "@tailwindcss/postcss": "^4.3.1",
     "@tailwindcss/vite": "^4.0.0",
     "astro": "^6.0.0",
     "astro-pagefind": "^2.0.0",
