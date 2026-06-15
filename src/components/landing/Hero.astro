@@ -19,6 +19,12 @@ const quickStartHref = isZh
   ? '/zh/getting-started/quick-start/'
   : '/getting-started/quick-start/';
 const githubHref = 'https://github.com/nantian-gw/gateway';
+const comparisonHref = isZh ? '/zh/comparison/' : '/comparison/';
+const faqHref = isZh ? '/zh/faq/' : '/faq/';
+const useCasesHref = isZh ? '/zh/use-cases/' : '/use-cases/';
+const comparisonLabel = isZh ? '竞品对比' : 'Comparison';
+const faqLabel = 'FAQ';
+const useCasesLabel = isZh ? '使用场景' : 'Use Cases';
 ---
 
 <section class="hero" aria-label={isZh ? '首页横幅' : 'Hero banner'}>
@@ -66,6 +72,15 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
     <div class="github-badge">
       <span class="github-badge-star" aria-hidden="true">★</span>
       <span class="github-badge-text">GitHub</span>
+    </div>
+
+    <!-- Quick links to high-value pages -->
+    <div class="hero-quick-links">
+      <a href={comparisonHref} class="hero-quick-link">{comparisonLabel}</a>
+      <span class="hero-quick-sep" aria-hidden="true">·</span>
+      <a href={faqHref} class="hero-quick-link">{faqLabel}</a>
+      <span class="hero-quick-sep" aria-hidden="true">·</span>
+      <a href={useCasesHref} class="hero-quick-link">{useCasesLabel}</a>
     </div>
   </div>
 </section>
@@ -467,6 +482,34 @@ const githubHref = 'https://github.com/nantian-gw/gateway';
 
   .github-badge-text {
     font-weight: 500;
+  }
+
+  /* ===== Quick Links ===== */
+  .hero-quick-links {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hero-quick-link {
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: color 0.2s ease;
+    font-weight: 500;
+  }
+
+  .hero-quick-link:hover {
+    color: var(--color-accent-light);
+  }
+
+  .hero-quick-sep {
+    color: var(--color-border);
+    font-size: 0.875rem;
+    user-select: none;
   }
 
   /* ===== Responsive ===== */
