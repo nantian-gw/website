@@ -1,0 +1,304 @@
+---
+title: Testing Guide
+slug: 1.5/contributing/testing
+---
+
+Nantian Gateway's testing system covers three layers: the control plane (Go), the data plane (Rust), and end-to-end integration tests. This page explains how to run each type of test, write new tests, and understand the CI pipeline.
+
+## Testing Overview
+
+| Test Type | Language | Framework | Directory | Speed |
+|-----------|----------|-----------|-----------|-------|
+| Control plane unit tests | Go | `testing` + `testify` | `gateway/internal/*/` | Fast (seconds) |
+| Control plane integration tests | Go | `envtest` | `gateway/internal/*/` | Medium (minutes) |
+| Data plane unit tests | Rust | `cargo test` | `dataplane/src/*/` | Fast (seconds) |
+| Data plane integration tests | Rust | `cargo test --test` | `dataplane/tests/` | Medium (minutes) |
+| End-to-end tests | Go | Gateway API Conformance | `gateway/test/e2e/` | Slow (tens of minutes) |
+| Conformance tests | Go | Gateway API Conformance | `gateway/test/conformance/` | Slow (tens of minutes) |
+
+## Control Plane Tests
+
+### Running Unit Tests
+
+```bash
+cd gateway
+
+# Run all unit tests
+go test ./internal/...
+
+# Run tests for a specific package
+go test ./internal/translator/...
+
+# Run a specific test function
+go test -run TestTranslateHTTPRoute ./internal/translator/
+
+# Run with verbose output
+go test -v ./internal/...
+
+# Run with coverage report
+go test -coverprofile=coverage.out ./internal/...
+go tool cover -html=coverage.out
+```
+
+### Running Integration Tests
+
+The control plane's integration tests use the `controller-runtime` `envtest` framework, which launches a real API Server binary locally:
+
+```bash
+# Run integration tests (requires envtest environment setup first)
+go test -tags=integration ./internal/controller/...
+
+# First-time setup requires installing the envtest binary
+go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+```
+
+:::note[envtest Environment]
+`envtest` downloads a lightweight Kubernetes API Server binary (approximately 100MB). The first run requires a network connection. After downloading, the binary is cached locally and subsequent runs won't need to re-download it.
+:::
+
+### Writing Control Plane Tests
+
+Control plane tests follow standard Go community practices. Unit test files live in the same directory as source files, ending in `_test.go`.
+
+```go
+// gateway/internal/translator/httproute_test.go
+package translator
+
+import (
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+    gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+)
+
+func TestTranslateHTTPRoute(t *testing.T) {
+    route := &gwv1.HTTPRoute{
+        // ... construct test data
+    }
+
+    result, err := TranslateHTTPRoute(route)
+
+    require.NoError(t, err)
+    assert.Equal(t, "expected-name", result.Name)
+    assert.Len(t, result.Rules, 2)
+}
+```
+
+Testing best practices:
+
+* Use `testify/assert` for assertions, `testify/require` for precondition checks
+* Name test functions following the `Test<FunctionName>_<Scenario>` format
+* Use table-driven tests to cover multiple input scenarios
+* Mock external dependencies (Kubernetes Client, gRPC client, etc.)
+
+## Data Plane Tests
+
+### Running Unit Tests
+
+```bash
+cd dataplane
+
+# Run all tests
+cargo test
+
+# Run tests for a specific module
+cargo test --lib proxy::http
+
+# Run a specific test function
+cargo test test_http_route_match
+
+# Show test output
+cargo test -- --nocapture
+
+# Run in parallel (defaults to CPU core count)
+cargo test -- --test-threads=4
+```
+
+### Running Integration Tests
+
+Data plane integration tests are located in the `dataplane/tests/` directory:
+
+```bash
+# Run all integration tests
+cargo test --test integration
+
+# Run a specific integration test file
+cargo test --test proxy_integration
+```
+
+### Writing Data Plane Tests
+
+Rust tests are placed inside source files (unit tests) or in the `tests/` directory (integration tests):
+
+```rust
+// dataplane/src/proxy/http.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_prefix_match() {
+        let matcher = PathMatcher::new("PathPrefix", "/api/v1");
+        assert!(matcher.matches("/api/v1/users"));
+        assert!(!matcher.matches("/other/path"));
+    }
+
+    #[tokio::test]
+    async fn test_http_route_resolution() {
+        let route = build_test_route();
+        let backend = resolve_backend(&route, &build_test_request()).await;
+        assert!(backend.is_some());
+    }
+}
+```
+
+Testing best practices:
+
+* Place unit tests in `#[cfg(test)] mod tests`
+* Use `#[tokio::test]` attribute for async tests
+* Use `assert!`, `assert_eq!`, `assert_ne!` macros for assertions
+* For complex scenarios, use `rstest` or `test-case` crates for parameterized tests
+
+## End-to-End Tests
+
+End-to-end tests verify that the control plane and data plane work together correctly in a real Kubernetes cluster:
+
+```bash
+cd gateway
+
+# Run end-to-end tests (requires a Kind cluster)
+make test-e2e
+
+# Run manually
+go test -tags=e2e ./test/e2e/... -v
+```
+
+The end-to-end test workflow:
+
+1. Install Nantian Gateway in a Kind cluster
+2. Deploy sample backend services
+3. Create Gateway and HTTPRoute resources
+4. Send requests to the gateway via port forwarding
+5. Verify response content and status codes
+
+## Gateway API Conformance Tests
+
+Nantian Gateway runs the official Gateway API conformance test suite to verify the implementation's compliance with the specification:
+
+```bash
+cd gateway
+
+# Run conformance tests
+make test-conformance
+
+# Run manually
+go test -tags=conformance ./test/conformance/... -v
+```
+
+Conformance tests produce a report listing all passing and failing features. This report serves as the basis for the project's declared feature support.
+
+## Code Quality Checks
+
+### Go Code
+
+```bash
+cd gateway
+
+# Code formatting
+gofmt -w .
+
+# Lint checks
+golangci-lint run ./...
+
+# Static analysis
+go vet ./...
+```
+
+### Rust Code
+
+```bash
+cd dataplane
+
+# Code formatting
+cargo fmt
+
+# Lint checks
+cargo clippy -- -D warnings
+
+# Check for unused dependencies
+cargo udeps
+```
+
+### Protobuf
+
+```bash
+cd proto
+
+# Format check
+buf format -d
+
+# Lint check
+buf lint
+```
+
+## CI Pipeline
+
+Nantian Gateway uses GitHub Actions for continuous integration. Each PR triggers the following checks:
+
+| Check | Description | Trigger Condition |
+|-------|-------------|-------------------|
+| Go Unit Tests | Control plane unit tests | All PRs |
+| Go Integration Tests | Control plane integration tests | All PRs |
+| Rust Unit Tests | Data plane unit tests | All PRs |
+| Rust Integration Tests | Data plane integration tests | All PRs |
+| Go Lint | golangci-lint | All PRs |
+| Rust Lint | clippy + fmt | All PRs |
+| Proto Lint | buf lint | Proto changes |
+| E2E Tests | End-to-end tests | Before merging to main |
+| Conformance Tests | Gateway API conformance tests | Before merging to main |
+
+CI configuration files are located in the `.github/workflows/` directory.
+
+:::tip[Running CI Locally]
+Before pushing a PR, we recommend running the checks that CI will execute, locally:
+
+```bash
+# Control plane tests (Go)
+cd gateway
+go test ./internal/...
+golangci-lint run ./...
+
+# Data plane tests (Rust)
+cd dataplane
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
+cargo fmt --all -- --check
+```
+
+The CI workflow files are located in `.github/workflows/ci.yml` within each repository.
+:::
+
+## Test Coverage
+
+The project uses Codecov to track test coverage:
+
+```bash
+# Go coverage
+cd gateway
+go test -coverprofile=coverage.out ./internal/...
+go tool cover -func=coverage.out
+
+# Rust coverage (requires cargo-tarpaulin)
+cd dataplane
+cargo install cargo-tarpaulin
+cargo tarpaulin --out Html
+```
+
+Coverage reports are automatically uploaded to Codecov as part of CI. The project doesn't enforce a hard coverage threshold, but new code is encouraged to include corresponding test cases.
+
+## Next Steps
+
+* See [Release Process](/1.5/contributing/release) to learn about version release rules
+* See [Development Setup](/1.5/contributing/development) to learn about local environment setup
+* See [Contributing Overview](/1.5/contributing/) to understand the full contribution workflow

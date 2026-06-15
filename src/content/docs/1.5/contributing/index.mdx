@@ -1,0 +1,166 @@
+---
+title: Contributing Overview
+slug: 1.5/contributing
+---
+
+Nantian Gateway is an open source project that welcomes all forms of contribution. Whether you're fixing bugs, adding features, writing documentation, or making suggestions, this guide will help you understand where to start and how to participate.
+
+## Ways to Contribute
+
+Contributing isn't limited to writing code. Here are some ways you can get involved:
+
+| Method | Best For | Difficulty |
+|--------|----------|------------|
+| Report bugs | All users | Low |
+| Improve documentation | Users familiar with project features | Low |
+| Submit feature requests | Users with real-world use cases | Low |
+| Fix bugs | Go or Rust developers | Medium |
+| Implement new features | Experienced project contributors | Medium-High |
+| Code review | Experienced contributors | Medium |
+| Write tests | Developers familiar with test frameworks | Medium |
+| Community support | Experienced users | Low |
+
+## Before You Start
+
+### Code of Conduct
+
+By participating in the Nantian Gateway project, you agree to follow the project's [Code of Conduct](https://github.com/nantian-gw/gateway/blob/main/CODE_OF_CONDUCT.md). In short: respect others, communicate constructively, and reject any form of harassment or discrimination.
+
+### Contributor License Agreement
+
+Before submitting your first Pull Request, you need to sign the Contributor License Agreement (CLA). The CLA ensures the project can continue to distribute your contributions under the Apache 2.0 license. When you submit your first PR, the CLA assistant will automatically guide you through the signing process.
+
+### Communication Channels
+
+| Channel | Purpose |
+|---------|---------|
+| [GitHub Issues](https://github.com/nantian-gw/gateway/issues) | Bug reports, feature requests, technical discussions, usage questions, design proposals |
+
+## Contribution Workflow
+
+Nantian Gateway follows the standard GitHub workflow:
+
+1. **Fork** the main repository to your GitHub account
+2. **Clone** your fork locally
+3. Create a **feature branch**: `git checkout -b feature/your-feature-name`
+4. **Develop and test** your changes on the branch
+5. **Commit** your changes: `git commit -m "feat: add your feature description"`
+6. **Push** the branch: `git push origin feature/your-feature-name`
+7. Create a **Pull Request** on GitHub targeting the `main` branch
+8. Wait for CI checks to pass and code review
+
+### Commit Message Convention
+
+Nantian Gateway uses the [Conventional Commits](https://www.conventionalcommits.org/) specification. The commit message format is:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+Common `type` values:
+
+| Type | Description |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `test` | Add or modify tests |
+| `refactor` | Code refactoring (no functional change) |
+| `perf` | Performance optimization |
+| `chore` | Build, tooling, dependency changes |
+| `ci` | CI configuration changes |
+| `style` | Code formatting changes (no logic change) |
+
+Common `scope` values:
+
+| Scope | Description |
+|-------|-------------|
+| `controlplane` | Control plane code |
+| `dataplane` | Data plane code |
+| `proto` | Protocol definitions |
+| `crd` | Custom resource definitions |
+| `helm` | Helm Chart |
+| `docs` | Documentation |
+| `website` | Website and documentation site |
+
+Example:
+
+```
+feat(controlplane): add health check for backend endpoints
+
+Add periodic health checking for backend endpoints in the control plane.
+When an endpoint is unhealthy for 3 consecutive checks, it is marked as
+down and removed from the IR snapshot.
+
+Closes #123
+```
+
+### Pull Request Requirements
+
+Every PR must meet the following conditions before it can be merged:
+
+* \[ ] All tests pass (`go test` and `cargo test`)
+* \[ ] Code formatting checks pass (`gofmt`, `rustfmt`, `clippy`)
+* \[ ] No lint warnings
+* \[ ] New features include corresponding test cases
+* \[ ] API changes include corresponding documentation updates
+* \[ ] At least one maintainer approval
+
+## Project Structure
+
+Understanding the project structure helps you quickly locate the code you need to modify:
+
+```
+nantian-gw/
+├── gateway/                 # Go control plane
+│   ├── cmd/manager/         # Control plane entry point
+│   ├── internal/
+│   │   ├── controller/      # Kubernetes controllers
+│   │   ├── translator/      # Resource translator (Kubernetes → IR)
+│   │   ├── ir/              # Internal Representation (IR) definitions
+│   │   ├── xds/             # xDS gRPC server
+│   │   ├── admin/           # Admin API server
+│   │   └── reconciler/      # Reconciliation loops
+├── helm-charts/             # Helm chart repository
+│   └── charts/nantian-gw/   # Installable chart
+├── dataplane/               # Rust data plane
+│   ├── src/
+│   │   ├── proxy/           # Proxy core
+│   │   ├── xds/             # xDS client
+│   │   ├── http/            # HTTP route handling
+│   │   ├── grpc/            # gRPC route handling
+│   │   ├── stream/          # TCP/UDP stream handling
+│   │   ├── ai/              # AI gateway module
+│   │   ├── wasm/            # Wasm runtime
+│   │   ├── tls/             # TLS handling
+│   │   └── admin/           # Admin API server
+│   └── Cargo.toml
+├── proto/                   # Protobuf definitions
+│   └── gateway/control/v1/  # xDS protocol definitions
+├── dashboard/               # Next.js admin console
+├── website/                 # Documentation site (Starlight)
+└── docs/                    # Design docs and RFCs
+```
+
+## Finding Tasks
+
+If you're not sure where to start, here are some ways to find contribution tasks:
+
+* **Good First Issue**: GitHub Issues labeled `good first issue`, suitable for new contributors
+* **Help Wanted**: Issues labeled `help wanted`, indicating maintainers want community help but haven't had time to address them
+* **Documentation Improvements**: Places in the docs site and code comments marked with `TODO` or `FIXME`
+* **Test Coverage**: Any code path that lacks tests is a good target for contribution
+
+:::tip[Advice for New Contributors]
+Start with a `good first issue`. These issues are typically well-scoped, moderately difficult, and come with guidance from maintainers. Before starting, leave a comment on the issue to indicate you plan to work on it, avoiding duplicate effort.
+:::
+
+## Next Steps
+
+* See [Development Setup](/1.5/contributing/development) to learn how to set up your local development environment
+* See [Testing Guide](/1.5/contributing/testing) to understand the test framework and workflow
+* See [Release Process](/1.5/contributing/release) to learn about version release rules

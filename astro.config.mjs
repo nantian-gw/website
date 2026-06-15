@@ -125,9 +125,9 @@ export default defineConfig({
           versions: [{ slug: '1.5' }],
         }),
       ],
-      defaultLocale: 'en',
+      defaultLocale: 'root',
       locales: {
-        en: {
+        root: {
           label: 'English',
           lang: 'en',
         },

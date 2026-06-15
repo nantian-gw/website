@@ -1,0 +1,58 @@
+---
+title: Core Concepts
+slug: 1.5/concepts
+---
+
+This section introduces the fundamental concepts behind Nantian Gateway and the Kubernetes Gateway API. If you are new to API gateways, Kubernetes ingress, or the Gateway API specification, start here.
+
+These pages explain the *what* and *why* before the *how*. For implementation details, see the [Getting Started](/1.5/getting-started/quick-start) and [Configuration](/1.5/configuration/) sections.
+
+## What is an API Gateway?
+
+An API gateway is a reverse proxy that sits between clients and backend services, managing how traffic enters your system. It handles concerns that individual services should not need to address:
+
+* **Traffic routing** — directing requests to the correct backend based on path, headers, or other attributes
+* **TLS termination** — decrypting HTTPS traffic at the edge before forwarding to services
+* **Rate limiting** — protecting services from excessive traffic
+* **Authentication** — validating credentials before requests reach backend services
+* **Observability** — generating metrics, logs, and traces for all traffic flowing through the system
+
+In Kubernetes, an API gateway typically replaces or augments the built-in Ingress resource, providing a richer routing model and more advanced traffic management capabilities.
+
+## Why Use Nantian Gateway?
+
+Nantian Gateway implements the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) specification, a community-driven standard for configuring gateway and routing rules in Kubernetes. Choosing a Gateway API implementation means adopting a standardized configuration model that works across multiple gateway implementations, reducing vendor lock-in.
+
+Beyond Gateway API compliance, Nantian Gateway provides:
+
+* **Split-plane architecture** — a Go control plane communicates with Rust data planes over gRPC bidirectional xDS streams, allowing independent scaling of management and data path components
+* **Built-in AI gateway** — native support for AI model provider routing, token-based rate limiting, and prompt security, without requiring additional proxy deployments
+* **Custom resource extensions** — Kubernetes CRDs for AI provider management, token policies, Wasm plugins, and backend load balancing
+
+## Key Terminology
+
+### Gateway
+
+A Gateway resource defines a point of entry into the cluster — a listener that accepts connections on a specific port and protocol. Each Gateway references a GatewayClass that determines which controller (implementation) manages it.
+
+### Route
+
+Route resources (HTTPRoute, GRPCRoute, TCPRoute, TLSRoute, UDPRoute) define how traffic matching specific criteria is forwarded to backend services. A Route attaches to a Gateway, specifying which listener it applies to.
+
+### Control Plane
+
+The control plane is the management component that watches Kubernetes resources, translates them into internal configuration, and pushes configuration snapshots to data plane instances. In Nantian Gateway, the control plane is written in Go.
+
+### Data Plane
+
+The data plane is the proxy component that handles actual client traffic — TLS termination, routing, rate limiting, and request forwarding. In Nantian Gateway, each data plane instance is a Rust binary that receives configuration from the control plane over gRPC.
+
+### xDS
+
+xDS (discovery service) is a protocol specification from the Envoy project that defines how configuration is delivered to proxies. Nantian Gateway uses xDS over gRPC bidirectional streams to push routing tables, backend configurations, and policy updates to data plane instances in real time.
+
+## Next Steps
+
+* [Understanding the Gateway API](/1.5/concepts/gateway-api) — learn the resource model
+* [Split-Plane Architecture](/1.5/concepts/split-plane) — understand the control plane and data plane design
+* [Quick Start](/1.5/getting-started/quick-start) — deploy Nantian Gateway in five minutes

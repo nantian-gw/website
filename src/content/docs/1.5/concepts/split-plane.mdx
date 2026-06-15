@@ -1,0 +1,105 @@
+---
+title: Split-Plane Architecture
+slug: 1.5/concepts/split-plane
+---
+
+Nantian Gateway uses a split-plane architecture where the control plane and data plane are separate processes communicating over gRPC. This design is fundamental to how the gateway operates and scales.
+
+## Why Split-Plane?
+
+Many gateway implementations embed the proxy directly within the controller process. This simplifies deployment but creates operational constraints:
+
+* **Scaling is coupled** — scaling the control plane to handle more Kubernetes resources also scales the data plane, even when unnecessary
+* **Failure domains overlap** — a control plane crash can take down the proxy alongside it
+* **Resource contention** — management workloads compete with data path workloads for CPU and memory
+
+A split-plane architecture separates these concerns. The control plane focuses on configuration management and translation, while the data plane focuses on request processing. Each plane can be scaled, monitored, and debugged independently.
+
+## Architecture Overview
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                      Kubernetes Cluster                      │
+│                                                              │
+│  ┌──────────────────┐       ┌─────────────────────────────┐ │
+│  │   Control Plane   │       │       Data Plane (Rust)      │ │
+│  │      (Go)         │       │                              │ │
+│  │                   │ gRPC  │  ┌─────────────────────────┐│ │
+│  │  • Watch K8s API  │◄─────►│  │   Proxy Runtime         ││ │
+│  │  • Translate CRDs │ xDS   │  │  • TLS termination      ││ │
+│  │  • Push config    │       │  │  • HTTP routing          ││ │
+│  │  • Admin API      │       │  │  • Rate limiting         ││ │
+│  │  • Web Dashboard  │       │  │  • AI gateway            ││ │
+│  └──────────────────┘       │  │  • Wasm extensions       ││ │
+│                              │  └─────────────────────────┘│ │
+│                              │                              │ │
+│                              │  ┌─────────────────────────┐│ │
+│                              │  │   xDS Client             ││ │
+│                              │  │  • Receive config        ││ │
+│                              │  │  • Apply snapshots       ││ │
+│                              │  │  • Health reporting      ││ │
+│                              │  └─────────────────────────┘│ │
+│                              └─────────────────────────────┘ │
+│                                                              │
+│                         ┌──────────┐                         │
+│                         │ Backend   │                         │
+│                         │ Services  │                         │
+│                         └──────────┘                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Control Plane (Go)
+
+The control plane is written in Go and runs as a Kubernetes deployment. It performs the following responsibilities:
+
+1. **Watch Kubernetes API** — monitors Gateway API resources (Gateway, HTTPRoute, etc.) and Nantian Gateway custom resources (AIService, TokenPolicy, WasmPlugin, BackendLBPolicy)
+2. **Translate configuration** — converts Kubernetes resources into an internal configuration model that the data plane understands
+3. **Push configuration via xDS** — streams configuration snapshots to connected data plane instances over gRPC bidirectional streams
+4. **Serve Admin API** — provides an HTTP API for operational queries and management
+5. **Host Web Dashboard** — serves a Next.js-based admin interface for monitoring and configuration
+
+The control plane is deployed as a highly available replica set. In the event of a control plane failure, existing data plane instances continue to operate with their current configuration, but new configuration changes are not applied until the control plane recovers.
+
+### Data Plane (Rust)
+
+The data plane is written in Rust and runs as a separate deployment. Each instance handles the actual request path:
+
+1. **Receive configuration** — establishes a gRPC connection to the control plane and receives configuration snapshots
+2. **Apply configuration** — activates the received configuration atomically, ensuring consistent routing behavior
+3. **Process requests** — terminates TLS, routes HTTP and gRPC traffic, applies rate limits, transforms headers, and forwards requests to backend services
+4. **Run AI gateway** — handles AI provider protocol adaptation, token counting, and PII masking within the proxy
+5. **Report health** — sends metrics and health status back to the control plane
+
+The data plane is designed for high throughput. Rust's memory safety guarantees and zero-cost abstractions provide performance comparable to C++ proxies while reducing the risk of memory-related vulnerabilities.
+
+### xDS Communication
+
+The control plane and data plane communicate over [gRPC bidirectional streams](https://grpc.io/) using the [xDS protocol](https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol). This protocol defines how configuration is serialized, versioned, and delivered.
+
+Key properties of the xDS communication:
+
+* **Bidirectional** — the data plane can send acknowledgments and health reports back to the control plane
+* **Incremental** — only changed configuration is transmitted, reducing bandwidth
+* **Versioned** — each configuration snapshot has a version, allowing the data plane to detect and reject stale updates
+* **Atomic** — configuration snapshots are applied atomically, preventing partial configuration states
+
+When a data plane instance connects, it receives the full current configuration snapshot. Subsequent changes are delivered incrementally. If the connection is lost, the data plane reconnects and receives the latest snapshot.
+
+## Independent Scaling
+
+The split-plane design allows each plane to scale based on its own requirements:
+
+| Concern | Control Plane | Data Plane |
+|---------|--------------|------------|
+| **Scaling trigger** | Number of Kubernetes resources | Request throughput |
+| **Typical replicas** | 2 (HA) | 2+ (load-dependent) |
+| **Resource profile** | CPU for config translation | Network and CPU for traffic |
+| **Failure impact** | Cannot apply new config | Cannot process traffic |
+
+This separation means a traffic spike that requires scaling the data plane does not affect the control plane, and a large number of Kubernetes resources that load the control plane does not affect request processing.
+
+## Next Steps
+
+* [Gateway API Concepts](/1.5/concepts/gateway-api) — understand the Kubernetes resources the control plane watches
+* [Architecture Details](/1.5/architecture/) — deep dive into control plane and data plane internals
+* [Quick Start](/1.5/getting-started/quick-start) — deploy the split-plane architecture in your cluster

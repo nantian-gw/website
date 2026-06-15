@@ -1,0 +1,118 @@
+---
+title: TLS / mTLS
+slug: 1.5/configuration/tls
+---
+
+Nantian Gateway supports TLS for three communication channels: the admin HTTP API, the gRPC xDS stream between control plane and data plane, and the xDS transport from the data plane side. Each channel is configured independently.
+
+## Control Plane TLS
+
+The control plane exposes two TLS-capable servers: the admin HTTP server and the gRPC xDS server.
+
+### Admin TLS
+
+Secures the admin HTTP API with server-side TLS:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `adminTLS.enabled` | bool | `false` | Enable TLS on the admin HTTP server |
+| `adminTLS.certPath` | string | `""` | Path to the server certificate file (PEM) |
+| `adminTLS.keyPath` | string | `""` | Path to the server private key file (PEM) |
+
+When enabled, the admin server serves HTTPS instead of HTTP. The certificate and key must be valid PEM-encoded files readable by the control plane process. In Kubernetes, mount these from a Secret volume.
+
+:::tip[Certificate rotation]
+The control plane does not watch certificate files for changes. To rotate certificates, restart the control plane process. In Kubernetes, this occurs automatically during a rolling update.
+:::
+
+### gRPC TLS
+
+Secures the gRPC xDS stream with optional mutual TLS:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `grpcTLS.enabled` | bool | `false` | Enable TLS on the gRPC server |
+| `grpcTLS.certPath` | string | `""` | Path to the server certificate file (PEM) |
+| `grpcTLS.keyPath` | string | `""` | Path to the server private key file (PEM) |
+| `grpcTLS.clientCAPath` | string | `""` | Path to the CA certificate for verifying client certificates |
+| `grpcTLS.requireClientCert` | bool | `false` | Require and verify client certificates (mTLS) |
+
+Setting `requireClientCert` to `true` enables mutual TLS. Every data plane that connects must present a certificate signed by the CA specified in `clientCAPath`. Without mTLS, any client that can reach the gRPC port can receive configuration snapshots.
+
+:::caution[Production gRPC]
+The gRPC stream carries the complete gateway configuration, including route rules, backend addresses, and TLS secrets. In production, always enable gRPC TLS with mTLS. Without it, network access to the gRPC port enables configuration interception or injection.
+:::
+
+## Data Plane TLS
+
+The data plane has two TLS-related configuration sections: the proxy runtime (client-facing TLS) and the xDS transport (control plane connection).
+
+### Proxy Runtime TLS
+
+These settings control TLS behavior for traffic passing through the data plane:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `tls.minVersion` | string | `"1.2"` | Minimum TLS version accepted (`"1.2"` or `"1.3"`) |
+| `tls.maxVersion` | string | `"1.3"` | Maximum TLS version offered |
+| `tls.cipherSuites` | \[]string | `[]` | Allowed cipher suites (empty = defaults) |
+| `tls.sessionCacheSize` | int | `2048` | TLS session cache entries for resumption |
+| `tls.sessionCacheLifetime` | duration | `"10m"` | Lifetime of cached TLS sessions |
+
+### xDS Transport TLS
+
+Configures how the data plane connects to the control plane's gRPC server:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `xds.tls.enabled` | bool | `false` | Enable TLS for the xDS connection |
+| `xds.tls.serverName` | string | `""` | Expected server name for certificate validation |
+| `xds.tls.caCertPath` | string | `""` | Path to the CA certificate for verifying the server |
+| `xds.tls.clientCertPath` | string | `""` | Path to the client certificate (for mTLS) |
+| `xds.tls.clientKeyPath` | string | `""` | Path to the client private key (for mTLS) |
+
+When both `clientCertPath` and `clientKeyPath` are set, the data plane presents a client certificate to the control plane, satisfying the mTLS requirement when `requireClientCert` is enabled on the gRPC server.
+
+## Example: Full mTLS Configuration
+
+The following configuration enables mTLS on the gRPC stream and TLS on the admin API:
+
+```yaml
+# Control plane
+grpcTLS:
+  enabled: true
+  certPath: /etc/certs/grpc/tls.crt
+  keyPath: /etc/certs/grpc/tls.key
+  clientCAPath: /etc/certs/grpc/ca.crt
+  requireClientCert: true
+
+adminTLS:
+  enabled: true
+  certPath: /etc/certs/admin/tls.crt
+  keyPath: /etc/certs/admin/tls.key
+
+# Data plane
+xds:
+  tls:
+    enabled: true
+    serverName: nantian-gw-controlplane.nantian-gw.svc
+    caCertPath: /etc/certs/xds/ca.crt
+    clientCertPath: /etc/certs/xds/tls.crt
+    clientKeyPath: /etc/certs/xds/tls.key
+```
+
+## Certificate Management
+
+Certificates can be provisioned through several approaches:
+
+* **cert-manager** — automatically issues and rotates certificates using the Kubernetes cert-manager operator
+* **Manual provisioning** — generate certificates with tools like `openssl` or `cfssl` and mount them as Kubernetes Secrets
+* **Vault** — integrate with HashiCorp Vault for centralized certificate management
+
+For production deployments, cert-manager is recommended. It handles certificate issuance, renewal, and rotation without manual intervention.
+
+## Next Steps
+
+* [Configuration Overview](/1.5/configuration/) — general configuration structure
+* [Security Best Practices](/1.5/operations/) — operational security guidance
+* [Production Deployment](/1.5/installation/production/) — production-grade installation
