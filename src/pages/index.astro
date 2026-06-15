@@ -2,17 +2,25 @@
 import LandingLayout from '../layouts/LandingLayout.astro';
 import Navbar from '../components/landing/Navbar.astro';
 import Hero from '../components/landing/Hero.astro';
+import HomeIntro from '../components/landing/HomeIntro.astro';
 import Features from '../components/landing/Features.astro';
 import ArchitectureDiagram from '../components/landing/ArchitectureDiagram.astro';
+import CodeExample from '../components/landing/CodeExample.astro';
+import Comparison from '../components/landing/Comparison.astro';
+import UseCases from '../components/landing/UseCases.astro';
 import QuickStart from '../components/landing/QuickStart.astro';
 import Footer from '../components/landing/Footer.astro';
 ---
 
-<LandingLayout lang="en" pathname="/" title="Nantian Gateway - Kubernetes Gateway API | Go + Rust" description="Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency. Quick start in 5 minutes.">
+<LandingLayout lang="en" pathname="/" title="Nantian Gateway - Kubernetes Gateway API | Go + Rust" description="Open-source Kubernetes Gateway API with Go control plane + Rust data plane. Split-plane architecture for high performance. Quick start in 5 minutes.">
   <Navbar lang="en" pathname="/" />
   <Hero lang="en" />
+  <HomeIntro lang="en" />
+  <CodeExample lang="en" />
   <ArchitectureDiagram lang="en" />
   <Features lang="en" />
+  <Comparison lang="en" />
+  <UseCases lang="en" />
   <QuickStart lang="en" />
   <Footer lang="en" />
 </LandingLayout>
