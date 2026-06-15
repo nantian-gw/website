@@ -23,7 +23,7 @@ const {
 } = Astro.props;
 const routeLang = routeMeta.lang;
 const canonical = routeMeta.canonicalUrl;
-const selfHrefLang = routeLang === 'zh' ? 'zh-CN' : 'en';
+const selfHrefLang = routeLang === 'zh-CN' ? 'zh-CN' : 'en';
 const altLang = routeLang === 'en' ? 'zh-CN' : 'en';
 const altUrl = routeMeta.alternateUrl;
 const xDefaultUrl = routeMeta.xDefaultUrl;
@@ -59,7 +59,7 @@ const orgJsonLd = {
 ---
 
 <!doctype html>
-<html lang={routeLang}>
+<html lang={routeLang === 'zh' ? 'zh-CN' : routeLang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -90,6 +90,8 @@ const orgJsonLd = {
     <slot name="head" />
   </head>
   <body class="bg-[var(--color-bg-base)] text-[var(--color-text-primary)] antialiased">
-    <slot />
+    <main>
+      <slot />
+    </main>
   </body>
 </html>
