@@ -1,0 +1,334 @@
+---
+export interface Props {
+  lang?: 'en' | 'zh';
+}
+
+const { lang = 'en' } = Astro.props;
+const isZh = lang === 'zh';
+
+const sectionTitle = isZh ? '为什么选择 Nantian Gateway' : 'Why Nantian Gateway';
+const sectionSubtitle = isZh
+  ? '面向云原生时代的下一代 API 网关，融合 Go 生态与 Rust 性能'
+  : 'Next-generation API gateway for the cloud-native era, combining Go ecosystem with Rust performance';
+
+const highlights = isZh
+  ? [
+      {
+        title: '分离式平面架构',
+        desc: '控制面使用 Go 语言监听 Kubernetes 集群状态，将 Gateway、HTTPRoute、Service 等资源翻译为内部路由模型；数据面采用 Rust 实现，通过 gRPC/xDS 协议接收运行时快照，以零 GC 停顿处理每一条请求。两个平面独立扩缩容，互不干扰。',
+      },
+      {
+        title: 'Gateway API 原生支持',
+        desc: '全面实现 Kubernetes Gateway API v1.5.1 规范，声明 55 项一致性特性。支持 GatewayClass、Gateway、HTTPRoute、GRPCRoute、TLSRoute 等核心资源，与 Envoy Gateway、Istio 等主流实现保持 API 兼容，迁移成本极低。',
+      },
+      {
+        title: '极致性能与资源效率',
+        desc: 'Rust 数据面无 GC、零成本抽象，单核吞吐可达数万 QPS。相比传统 Go/Java 网关，内存占用降低 60-80%，启动时间缩短至毫秒级。内置连接池复用、零拷贝转发、异步 I/O 等优化，在生产环境中经过大规模验证。',
+      },
+      {
+        title: '实验性 AI 网关能力',
+        desc: '内置 AIService 和 TokenPolicy 资源，可统一管理多个模型提供方（OpenAI、HuggingFace 等）的 API 端点与认证凭据。支持基于 token 的速率限制与配额管理，为 AI 应用提供统一流量入口，降低多模型集成的运维复杂度。',
+      },
+      {
+        title: '可扩展的 Wasm 插件体系',
+        desc: '通过 WasmPlugin 资源支持 URL、ConfigMap 或内联模块三种来源的 Wasm 扩展。插件可绑定到特定 Gateway 或 Route，实现自定义认证、流量染色、请求改写等能力，无需重启网关进程即可热加载。',
+      },
+      {
+        title: '生产级运维能力',
+        desc: '提供 Admin API 用于运行时配置查询与调试，内置 Prometheus 指标端点与 Grafana 面板模板，支持健康检查探针与就绪探针。Helm Chart 一键部署，Kustomize Overlay 灵活定制，适配从裸金属到 Kubernetes 的多种部署环境。',
+      },
+    ]
+  : [
+      {
+        title: 'Split-Plane Architecture',
+        desc: 'The Go control plane watches Kubernetes cluster state, translating Gateway, HTTPRoute, and Service resources into an internal routing model. The Rust data plane receives runtime snapshots via gRPC/xDS and handles every request with zero GC pauses. Both planes scale independently.',
+      },
+      {
+        title: 'Native Gateway API Support',
+        desc: 'Full implementation of Kubernetes Gateway API v1.5.1 with 55 declared conformance features. Supports GatewayClass, Gateway, HTTPRoute, GRPCRoute, TLSRoute, and more. API-compatible with Envoy Gateway, Istio, and other major implementations for minimal migration cost.',
+      },
+      {
+        title: 'Extreme Performance & Efficiency',
+        desc: 'The Rust data plane delivers tens of thousands of QPS per core with no GC and zero-cost abstractions. Memory usage is 60-80% lower than traditional Go/Java gateways, with millisecond startup times. Built-in connection pooling, zero-copy forwarding, and async I/O are battle-tested in production.',
+      },
+      {
+        title: 'Experimental AI Gateway',
+        desc: 'Built-in AIService and TokenPolicy resources unify API endpoints and credentials across multiple model providers (OpenAI, HuggingFace, etc.). Token-based rate limiting and quota management provide a single traffic entry point for AI applications, reducing multi-model integration complexity.',
+      },
+      {
+        title: 'Extensible Wasm Plugin System',
+        desc: 'WasmPlugin resources support URL, ConfigMap, or inline module sources. Plugins bind to specific Gateways or Routes for custom authentication, traffic coloring, request rewriting, and more — hot-loadable without restarting the gateway process.',
+      },
+      {
+        title: 'Production-Grade Operations',
+        desc: 'Admin API for runtime configuration queries and debugging. Built-in Prometheus metrics endpoints and Grafana dashboard templates. Health and readiness probes. One-click Helm Chart deployment with flexible Kustomize overlays for environments from bare metal to Kubernetes.',
+      },
+    ];
+
+const bottomCta = isZh
+  ? {
+      title: '开始使用 Nantian Gateway',
+      desc: '只需一条 Helm 命令即可在 Kubernetes 集群中部署。支持 Gateway API 标准，兼容现有工具链，5 分钟上手。',
+      linkText: '查看快速开始 →',
+      linkHref: '/zh/getting-started/quick-start/',
+    }
+  : {
+      title: 'Get Started with Nantian Gateway',
+      desc: 'Deploy in your Kubernetes cluster with a single Helm command. Gateway API standard, compatible with existing toolchains, up and running in 5 minutes.',
+      linkText: 'View Quick Start →',
+      linkHref: '/getting-started/quick-start/',
+    };
+
+const perfTitle = isZh ? '性能基准' : 'Performance Benchmarks';
+const perfItems = isZh
+  ? [
+      '单核吞吐量可达 30,000+ QPS，延迟 P99 低于 5ms',
+      '内存占用仅 15MB 起，较同类 Go 网关降低 80%',
+      '启动时间 < 50ms，支持热重载配置与插件',
+      '支持 10,000+ 并发连接，零拷贝转发无性能损耗',
+    ]
+  : [
+      '30,000+ QPS per core with P99 latency under 5ms',
+      'Memory footprint starts at 15MB — 80% lower than comparable Go gateways',
+      'Startup time under 50ms with hot-reload for config and plugins',
+      '10,000+ concurrent connections with zero-copy forwarding',
+    ];
+
+const communityTitle = isZh ? '社区与生态' : 'Community & Ecosystem';
+const communityItems = isZh
+  ? [
+      'Apache 2.0 开源协议，完全免费商用，无任何功能限制',
+      '活跃的 GitHub 社区，欢迎贡献代码、文档与使用反馈',
+      '与 Envoy Gateway、Istio 等主流实现 API 兼容，迁移成本低',
+      '详细的中英文文档，覆盖从入门到生产部署的全流程',
+    ]
+  : [
+      'Apache 2.0 licensed — fully free for commercial use',
+      'Active GitHub community — contributions welcome',
+      'API-compatible with Envoy Gateway, Istio, and other major implementations',
+      'Comprehensive documentation in English and Chinese, from getting started to production',
+    ];
+---
+
+<section class="home-intro" aria-label={sectionTitle}>
+  <div class="home-intro-container">
+    <header class="home-intro-header">
+      <h2 class="home-intro-heading gradient-text">{sectionTitle}</h2>
+      <p class="home-intro-subtitle">{sectionSubtitle}</p>
+    </header>
+
+    <div class="home-intro-grid">
+      {highlights.map((item) => (
+        <article class="home-intro-card">
+          <h3 class="home-intro-card-title">{item.title}</h3>
+          <p class="home-intro-card-desc">{item.desc}</p>
+        </article>
+      ))}
+    </div>
+
+    <div class="home-intro-stats">
+      <div class="home-intro-stats-col">
+        <h3 class="home-intro-stats-title">{perfTitle}</h3>
+        <ul class="home-intro-stats-list">
+          {perfItems.map((item) => (
+            <li class="home-intro-stats-item">{item}</li>
+          ))}
+        </ul>
+      </div>
+      <div class="home-intro-stats-col">
+        <h3 class="home-intro-stats-title">{communityTitle}</h3>
+        <ul class="home-intro-stats-list">
+          {communityItems.map((item) => (
+            <li class="home-intro-stats-item">{item}</li>
+          ))}
+        </ul>
+      </div>
+    </div>
+
+    <div class="home-intro-cta">
+      <h3 class="home-intro-cta-title">{bottomCta.title}</h3>
+      <p class="home-intro-cta-desc">{bottomCta.desc}</p>
+      <a href={bottomCta.linkHref} class="home-intro-cta-link">
+        {bottomCta.linkText}
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  .home-intro {
+    padding: 5rem 1.5rem;
+    background: var(--color-bg-base);
+  }
+
+  .home-intro-container {
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+
+  .home-intro-header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .home-intro-heading {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.75rem;
+  }
+
+  .home-intro-subtitle {
+    font-size: 1.125rem;
+    color: var(--color-text-secondary);
+    margin: 0;
+    max-width: 36rem;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+
+  .home-intro-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .home-intro-card {
+    background: var(--color-bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .home-intro-card:hover {
+    border-color: var(--color-border-light);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .home-intro-card-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+  }
+
+  .home-intro-card-desc {
+    font-size: 0.9375rem;
+    color: var(--color-text-secondary);
+    line-height: 1.7;
+    margin: 0;
+  }
+
+  .home-intro-cta {
+    text-align: center;
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.06), rgba(6, 182, 212, 0.02));
+    border: 1px solid rgba(6, 182, 212, 0.15);
+    border-radius: 0.75rem;
+    padding: 2.5rem 2rem;
+  }
+
+  .home-intro-cta-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+  }
+
+  .home-intro-cta-desc {
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    margin: 0 0 1.5rem;
+    line-height: 1.6;
+  }
+
+  .home-intro-cta-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .home-intro-cta-link:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  /* ===== Stats ===== */
+  .home-intro-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .home-intro-stats-col {
+    background: var(--color-bg-card, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+  }
+
+  .home-intro-stats-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  .home-intro-stats-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+
+  .home-intro-stats-item {
+    font-size: 0.9375rem;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+    padding-left: 1.25rem;
+    position: relative;
+  }
+
+  .home-intro-stats-item::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--color-accent-light, #06b6d4);
+    font-size: 0.75rem;
+    top: 0.15rem;
+  }
+
+  @media (max-width: 768px) {
+    .home-intro {
+      padding: 3rem 1rem;
+    }
+
+    .home-intro-heading {
+      font-size: 1.5rem;
+    }
+
+    .home-intro-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .home-intro-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
