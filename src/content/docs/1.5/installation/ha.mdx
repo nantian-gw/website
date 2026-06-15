@@ -1,0 +1,164 @@
+---
+title: High Availability
+slug: 1.5/installation/ha
+---
+
+Nantian Gateway's split-plane architecture gives you flexibility in how you configure high availability. The control plane and data plane have different failure modes and different recovery characteristics, so they need different HA strategies.
+
+This guide covers multi-replica deployment, zone-aware scheduling, leader election, and what happens during each type of failure.
+
+## Component roles in HA
+
+The two planes handle failure differently:
+
+**Control plane**: Uses Kubernetes leader election. Only one replica is the active leader at any time. The leader watches Gateway API resources, computes configuration snapshots, and pushes them to data planes over gRPC/xDS streams. Standby replicas are idle and take over if the leader fails. Leader election uses a Lease resource in the `nantian-gw` namespace with a 15-second lease duration and 10-second renew deadline.
+
+**Data plane**: All replicas are active and share traffic. Each data plane maintains its own gRPC/xDS connection to the control plane and receives configuration snapshots independently. If a data plane pod fails, Kubernetes replaces it. The new pod connects to the control plane, receives the latest snapshot, and starts accepting traffic.
+
+**Dashboard**: Single replica. The dashboard is stateless, so losing it only affects the UI. The gateway continues routing traffic normally.
+
+## Minimum production HA configuration
+
+```yaml
+controlplane:
+  replicas: 2
+  pdb:
+    minAvailable: 1
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: controlplane
+          topologyKey: kubernetes.io/hostname
+
+dataplane:
+  replicas: 3
+  pdb:
+    minAvailable: 2
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/component: dataplane
+          topologyKey: kubernetes.io/hostname
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: dataplane
+```
+
+## Multi-zone deployment
+
+Spreading data plane replicas across availability zones protects against zone-level failures. The topology spread constraint above ensures the scheduler distributes pods evenly across zones.
+
+For a three-zone cluster with three data plane replicas, each zone gets one pod. If a zone goes down, the remaining two pods handle all traffic. Your PDB (`minAvailable: 2`) allows the cluster to evict the pod in the failed zone without blocking the remaining pods.
+
+:::warn[Zone count vs. replica count]
+If you have more zones than replicas, some zones will be empty. That's fine. The `maxSkew: 1` constraint ensures pods are spread as evenly as possible given the available zones. If you have fewer zones than replicas, the scheduler will place multiple pods in some zones. The anti-affinity rule on `kubernetes.io/hostname` still prevents pods from landing on the same node.
+:::
+
+## What happens during failures
+
+### Control plane leader failure
+
+1. The leader pod stops sending lease renewals.
+2. After `renewDeadline` (10 seconds), one of the standby replicas acquires the lease and becomes the new leader.
+3. The new leader rebuilds its internal state from the Kubernetes API and begins pushing snapshots to data planes.
+4. Data planes receive a new snapshot with the same configuration. No traffic interruption.
+
+Total recovery time: 10 to 30 seconds. Gateway API resources are not modified during this window, so no routes are created or deleted.
+
+### Data plane pod failure
+
+1. Kubernetes detects the pod is unhealthy or missing.
+2. The Deployment controller creates a replacement pod.
+3. The new pod starts, connects to the control plane, and receives the latest configuration snapshot.
+4. Once the readiness probe passes, the pod starts accepting traffic.
+
+Total recovery time: 30 to 60 seconds, depending on image pull time and startup probe configuration. The remaining data plane pods continue serving traffic throughout.
+
+### Data plane gRPC stream break
+
+If the data plane loses its gRPC connection to the control plane without the pod itself failing:
+
+1. The data plane attempts to reconnect with exponential backoff.
+2. While disconnected, the data plane continues routing traffic using its last received configuration snapshot.
+3. If the control plane is back within the reconnection window, the data plane resumes receiving delta updates. There's no traffic interruption.
+4. If the control plane stays down for an extended period, the data plane eventually times out. By default, the data plane keeps serving with the last known configuration indefinitely.
+
+:::note[Stale configuration risk]
+A data plane serving from a stale snapshot is better than a data plane that stops routing traffic. But if you've made changes to Gateway API resources that haven't been pushed to the data plane, the proxy is operating on outdated rules. Monitor the `control_plane_connected` metric to detect this condition.
+:::
+
+### Complete zone failure
+
+If all data plane pods in a zone fail simultaneously:
+
+1. The remaining pods in other zones handle the full traffic load.
+2. Kubernetes recreates pods in the failed zone when nodes return.
+3. New pods connect to the control plane and receive the current configuration.
+
+Make sure your resource requests and limits account for this scenario. If three data plane pods handle your normal traffic load and you lose one zone, the remaining pods must handle the same volume. Set resource requests at 150% of expected per-pod traffic to leave headroom for zone failure.
+
+## Leader election tuning
+
+The default leader election settings are a reasonable balance between fast failover and stability:
+
+```yaml
+controlplane:
+  config:
+    leaderElection:
+      enabled: true
+      id: "nantian-controlplane-leader"
+      leaseDuration: "15s"
+      renewDeadline: "10s"
+      retryPeriod: "2s"
+```
+
+**`leaseDuration`**: How long a lease is valid. If the leader doesn't renew within this window, the lease expires and a standby can claim it.
+
+**`renewDeadline`**: How long the leader has to renew the lease before it considers itself lost. Must be less than `leaseDuration`.
+
+**`retryPeriod`**: How often the leader attempts to renew.
+
+Tighten these for faster failover if your cluster's API server is responsive. Loosen them if you see false leader flips due to API server latency:
+
+```yaml
+# Aggressive failover (responsive API server)
+leaderElection:
+  leaseDuration: "10s"
+  renewDeadline: "5s"
+  retryPeriod: "1s"
+
+# Conservative (slow API server, noisy network)
+leaderElection:
+  leaseDuration: "30s"
+  renewDeadline: "20s"
+  retryPeriod: "5s"
+```
+
+:::caution
+Setting `leaseDuration` too low can cause the leader to flip back and forth if the API server is slow. Each flip causes a brief period where no configuration updates are pushed. Monitor the `leader_election_master_status` metric from the control plane to track flip frequency.
+:::
+
+## Monitoring HA health
+
+Key metrics to watch:
+
+| Metric | What it means |
+|--------|--------------|
+| `leader_election_master_status` | 1 if this control plane is the leader, 0 otherwise |
+| `control_plane_connected` | Number of data planes connected to the control plane |
+| `xds_active_streams` | Active gRPC/xDS streams |
+| `xds_snapshot_version` | Configuration snapshot version applied to each data plane |
+
+Alert on:
+
+* Zero leaders for more than 30 seconds (control plane HA failure)
+* `control_plane_connected` dropping below expected replicas (data plane disconnect)
+* `xds_snapshot_version` diverging across data planes (stale configuration)

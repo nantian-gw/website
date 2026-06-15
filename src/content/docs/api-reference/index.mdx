@@ -1,0 +1,150 @@
+---
+title: API Reference Overview
+---
+
+Nantian Gateway exposes four API surfaces, each targeting different use cases and roles. This page helps you understand what each API is for and find the reference docs you need.
+
+## API Surface Overview
+
+Nantian Gateway's API architecture spans three layers, each serving a distinct purpose:
+
+**Kubernetes CRDs** form the declarative configuration layer. You describe your desired gateway topology in YAML, and the control plane reconciles it into running configuration. This layer includes both standard Gateway API resources and Nantian Gateway's own custom resource definitions.
+
+**Admin REST API** is the operational layer. It exposes runtime state for both the control plane and individual data plane proxies, giving operators a direct window into config snapshots, connected clients, health status, and metrics.
+
+**gRPC xDS Protocol** is the configuration distribution layer. The control plane streams configuration snapshots to every data plane instance over a persistent bidirectional gRPC connection, using Envoy's battle-tested xDS model.
+
+### Four API Surfaces
+
+| API Surface | Audience | Description | Protocol |
+|-------------|----------|-------------|----------|
+| **Gateway API Resources** | Platform ops, app developers | Define routing rules using Kubernetes native resources | REST (Kubernetes API) |
+| **Custom CRDs** | Platform ops, AI platform teams | Extend Gateway API with AI service management, token policies, Wasm plugins, and load balancing | REST (Kubernetes API) |
+| **Admin API** | Operations, SRE | Runtime diagnostics, config inspection, health probes | HTTP REST |
+| **xDS Protocol** | Platform developers, contributors | Configuration distribution protocol between control plane and data plane | gRPC bidirectional streaming |
+
+## Gateway API Resources (Extended)
+
+Nantian Gateway implements the full Kubernetes Gateway API specification, supporting the following resource types:
+
+| Resource | Role |
+|----------|------|
+| `GatewayClass` | Cluster-scoped definition of the gateway implementation. The control plane claims GatewayClasses with `controllerName: gateway.networking.k8s.io/nantian-gw`. |
+| `Gateway` | Defines a set of listeners (port, protocol, TLS) that accept traffic. Routes bind to specific Gateways and listeners via `parentRefs`. |
+| `HTTPRoute` | HTTP and HTTPS traffic routing with path-based, header-based, and query-based matching. The most commonly used route type. |
+| `GRPCRoute` | gRPC traffic routing with method-level and service-level matching. Supports gRPC-specific features like reflection and health checking. |
+| `TCPRoute` | Layer 4 TCP traffic routing. Suitable for non-HTTP protocols that need simple port forwarding. |
+| `UDPRoute` | Layer 4 UDP traffic routing. Used for DNS, streaming, and other UDP-based workloads. |
+| `TLSRoute` | TLS passthrough routing. Forwards TLS-encrypted connections to backends without terminating TLS at the gateway. |
+| `BackendTLSPolicy` | Configures TLS verification between the gateway and backend services, including CA certificates and hostname verification. |
+| `ReferenceGrant` | Authorizes cross-namespace references, allowing routes in one namespace to reference backends in another. |
+
+Each route type can be attached to one or more Gateways, and multiple routes can coexist on the same listener. For details on every resource field, see the [Gateway API Resources](/api-reference/gateway-api) reference.
+
+## Custom CRDs
+
+:::caution[Experimental]
+These CRDs are **experimental** (`v1alpha1`). APIs may change incompatibly in future releases.
+:::
+
+Nantian Gateway extends the standard Gateway API with custom and experimental resources:
+
+| CRD | Description |
+|-----|-------------|
+| `AIService` | `gateway.nantian.dev/v1alpha1` resource that configures one AI provider/model target. |
+| `TokenPolicy` | `gateway.nantian.dev/v1alpha1` resource that attaches token and request limits to local Gateway API targets. |
+| `WasmPlugin` | `gateway.nantian.dev/v1alpha1` resource that loads a Wasm module and binds it to target resources. |
+| `BackendLBPolicy` | `gateway.networking.k8s.io/v1alpha2` Gateway API experimental resource for backend load-balancing behavior. |
+
+Enable the relevant experimental feature flags before creating these resources. See the [Custom And Experimental Resources](/api-reference/crds) reference for current fields and YAML examples.
+
+## Admin API Endpoints
+
+The Admin API is served separately by the control plane (port `8081`) and each data plane proxy. It provides the following categories of endpoints:
+
+| Category | Purpose | Example Endpoints |
+|----------|---------|-------------------|
+| **Health** | Liveness and readiness probes for Kubernetes | `/healthz`, `/readyz` |
+| **Config Inspection** | View the current configuration state and snapshot versions | `/api/v1/config/snapshot`, `/api/v1/config/snapshot/version` |
+| **Resource Listing** | Enumerate gateways, routes, and backend clusters | `/api/v1/gateways`, `/api/v1/routes`, `/api/v1/backends` |
+| **Client Management** | Inspect connected xDS clients and their status | `/api/v1/clients`, `/api/v1/clients/{node_id}` |
+| **Metrics** | Prometheus-format metrics for monitoring | `/api/v1/metrics` |
+
+The control plane Admin API provides a cluster-level view of all gateways, routes, and connected data planes. The data plane Admin API provides per-instance runtime state, including active listeners, connection pools, and per-backend health status. For the complete endpoint reference, see [Admin API](/api-reference/admin-api).
+
+## gRPC xDS Protocol
+
+The xDS protocol is the backbone of configuration distribution in Nantian Gateway. The control plane streams configuration to every data plane instance over a persistent gRPC bidirectional stream, built on the same architecture as Envoy's xDS model.
+
+**What it transports:** The protocol carries four categories of configuration resources:
+
+- **Listeners** — port bindings, protocol config, and TLS certificates
+- **Routes** — HTTP/gRPC/TCP/UDP routing rules with match conditions and backend references
+- **Clusters** — upstream backend groups with connection settings, timeouts, and circuit breakers
+- **Endpoints** — individual backend IP addresses and ports discovered through service discovery
+
+**How data planes consume it:** Each data plane opens a `StreamConfiguration` RPC to the control plane, declares which resource types it subscribes to, and receives a complete configuration snapshot. The control plane pushes incremental updates whenever configuration changes. The data plane acknowledges each update with an ACK or NACK, and the control plane tracks which version each data plane is running.
+
+This push-based model means configuration changes propagate to all data planes within seconds, with no polling overhead. For the protocol specification, message formats, and field definitions, see [xDS Protocol](/api-reference/xds-proto).
+
+## Where to Start
+
+If you only need to configure gateway routing, start with [Gateway API Resources](/api-reference/gateway-api). This API follows the Kubernetes Gateway API specification, so your `HTTPRoute`, `Gateway`, and other configs work exactly the same as with any other compatible implementation.
+
+If you need to manage AI model routing, token quotas, Wasm plugins, or custom load balancing policies, continue to the [Custom CRDs](/api-reference/crds) section. Nantian Gateway's four CRDs (`AIService`, `TokenPolicy`, `WasmPlugin`, `BackendLBPolicy`) extend the standard Gateway API, letting you manage these advanced features with the same Kubernetes native workflow.
+
+For troubleshooting, the [Admin API](/api-reference/admin-api) is your go-to entry point. It exposes the internal state of both the control plane and data plane, including config snapshot versions, xDS client connection status, and backend health check results.
+
+If you're developing Nantian Gateway itself or need to understand the communication protocol between the control plane and data plane, the [xDS Protocol](/api-reference/xds-proto) section describes the message formats and field definitions carried over the gRPC bidirectional stream in detail.
+
+## Resource Model Relationships
+
+Nantian Gateway's API resources have a clear hierarchical structure. Understanding these relationships helps you plan your configuration layout:
+
+```
+GatewayClass
+  └── Gateway
+       ├── HTTPRoute
+       ├── GRPCRoute
+       ├── TCPRoute
+       ├── UDPRoute
+       ├── TLSRoute
+       └── MeshRoute (service mesh)
+              ├── AIService (AI backend config)
+              ├── TokenPolicy (token quotas)
+              ├── WasmPlugin (custom extensions)
+              └── BackendLBPolicy (load balancing policy)
+```
+
+`GatewayClass` defines the gateway implementation type, which the Nantian Gateway control plane watches and claims. `Gateway` defines listeners (port, protocol, TLS config), and route resources (`HTTPRoute`, etc.) bind traffic rules to specific `Gateway` instances and listeners.
+
+The four custom CRDs can be referenced at the route level or backend level, giving you flexible control over AI service connections, token limits, Wasm plugin injection, and load balancing behavior.
+
+## Compatibility & Versioning
+
+Nantian Gateway is based on [Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) and declares support for **55 features** across the Core, Extended, and Implementation-specific conformance levels. The specific feature gate coverage is detailed in the [Gateway API Resources](/api-reference/gateway-api) reference.
+
+**Upgrade policy:** Nantian Gateway follows the Kubernetes Gateway API versioning policy. Standard resources (`GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`) use the `v1` stable API and are guaranteed backward-compatible. Alpha resources (`TCPRoute`, `UDPRoute`, `TLSRoute`, `BackendTLSPolicy`) may change between releases. Custom CRDs use the `v1alpha1` API group and may evolve as the AI gateway feature set matures.
+
+**Deprecation:** When a resource version is deprecated, it remains functional for at least two minor releases before removal. Deprecation notices appear in the changelog and in the resource's status conditions. The control plane emits warnings via Kubernetes Events for deprecated fields in use.
+
+## Protocol Details
+
+### Kubernetes API (REST)
+
+Both Gateway API resources and custom CRDs are managed through the Kubernetes API Server. You submit YAML configurations using `kubectl`, `helm`, or any Kubernetes client tool. The control plane receives changes via Watch and translates them into internal configuration.
+
+### Admin API (HTTP REST)
+
+The control plane and data plane each expose an HTTP REST interface. The control plane's Admin API provides a cluster-level configuration view, while the data plane's Admin API provides runtime state for a single proxy instance. Both APIs return JSON-formatted responses.
+
+### xDS Protocol (gRPC Bidirectional Streaming)
+
+Communication between the control plane and data plane does not use REST. Instead, it runs over gRPC bidirectional streaming. The control plane proactively pushes configuration snapshots, and the data plane acknowledges receipt and reports status. This protocol is based on Envoy's xDS model, proven at scale in production environments.
+
+## Next Steps
+
+- See [Gateway API Resources](/api-reference/gateway-api) for standard routing configuration
+- See [Custom CRDs](/api-reference/crds) for Nantian Gateway's extension capabilities
+- See [Admin API](/api-reference/admin-api) for runtime diagnostics endpoints
+- See [xDS Protocol](/api-reference/xds-proto) for the control plane/data plane communication protocol

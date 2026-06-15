@@ -3,107 +3,107 @@
 
 
 ## Admin API
-URL: https://nantian.dev/en/api-reference/admin-api/
+URL: https://nantian.dev/api-reference/admin-api/
 
 
 ## Custom CRDs
-URL: https://nantian.dev/en/api-reference/crds/
+URL: https://nantian.dev/api-reference/crds/
 
 
 ## Gateway API Resources
-URL: https://nantian.dev/en/api-reference/gateway-api/
+URL: https://nantian.dev/api-reference/gateway-api/
 
 
 ## API Reference Overview
-URL: https://nantian.dev/en/api-reference/index/
+URL: https://nantian.dev/api-reference/index/
 
 
 ## xDS Protocol
-URL: https://nantian.dev/en/api-reference/xds-proto/
+URL: https://nantian.dev/api-reference/xds-proto/
 
 
 ## Admin API
-URL: https://nantian.dev/en/architecture/admin-api/
+URL: https://nantian.dev/architecture/admin-api/
 
 
 ## Control Plane Design
-URL: https://nantian.dev/en/architecture/controlplane/
+URL: https://nantian.dev/architecture/controlplane/
 
 
 ## Data Plane Design
-URL: https://nantian.dev/en/architecture/dataplane/
+URL: https://nantian.dev/architecture/dataplane/
 
 
 ## Architecture Overview
-URL: https://nantian.dev/en/architecture/index/
+URL: https://nantian.dev/architecture/index/
 
 
 ## Comparison
-URL: https://nantian.dev/en/comparison/
+URL: https://nantian.dev/comparison/
 
 
 ## Understanding the Gateway API
-URL: https://nantian.dev/en/concepts/gateway-api/
+URL: https://nantian.dev/concepts/gateway-api/
 
 
 ## Core Concepts
-URL: https://nantian.dev/en/concepts/index/
+URL: https://nantian.dev/concepts/index/
 
 
 ## Split-Plane Architecture
-URL: https://nantian.dev/en/concepts/split-plane/
+URL: https://nantian.dev/concepts/split-plane/
 
 
 ## Control Plane Configuration
-URL: https://nantian.dev/en/configuration/controlplane/
+URL: https://nantian.dev/configuration/controlplane/
 
 
 ## Data Plane Configuration
-URL: https://nantian.dev/en/configuration/dataplane/
+URL: https://nantian.dev/configuration/dataplane/
 
 
 ## Configuration Overview
-URL: https://nantian.dev/en/configuration/index/
+URL: https://nantian.dev/configuration/index/
 
 
 ## Observability
-URL: https://nantian.dev/en/configuration/observability/
+URL: https://nantian.dev/configuration/observability/
 
 
 ## TLS / mTLS
-URL: https://nantian.dev/en/configuration/tls/
+URL: https://nantian.dev/configuration/tls/
 
 
 ## Performance Tuning
-URL: https://nantian.dev/en/configuration/tuning/
+URL: https://nantian.dev/configuration/tuning/
 
 
 ## gRPC xDS Configuration
-URL: https://nantian.dev/en/configuration/xds/
+URL: https://nantian.dev/configuration/xds/
 
 
 ## Development Setup
-URL: https://nantian.dev/en/contributing/development/
+URL: https://nantian.dev/contributing/development/
 
 
 ## Contributing Overview
-URL: https://nantian.dev/en/contributing/index/
+URL: https://nantian.dev/contributing/index/
 
 
 ## Release Process
-URL: https://nantian.dev/en/contributing/release/
+URL: https://nantian.dev/contributing/release/
 
 
 ## Testing Guide
-URL: https://nantian.dev/en/contributing/testing/
+URL: https://nantian.dev/contributing/testing/
 
 
 ## Frequently Asked Questions
-URL: https://nantian.dev/en/faq/index/
+URL: https://nantian.dev/faq/index/
 
 
 ## Your First Route
-URL: https://nantian.dev/en/getting-started/first-route/
+URL: https://nantian.dev/getting-started/first-route/
 
 apiVersion: apps/v1
 kind: Deployment
@@ -514,32 +514,32 @@ kubectl delete gateway my-gateway -n echo
 
 You've deployed a Gateway and HTTPRoute and verified traffic flows through the data plane. Here are some next steps:
 
-- **Installation options**: Learn about [Helm customization](/en/installation/helm), [Kustomize overlays](/en/installation/kustomize), and [production deployment](/en/installation/production).
-- **TLS configuration**: Set up [TLS listeners and mTLS](/en/configuration/tls) for secure traffic.
-- **Observability**: Enable [metrics scraping](/en/operations/metrics) and set up [Grafana dashboards](/en/operations/grafana).
-- **Architecture**: Read the [architecture overview](/en/architecture/) to understand the control plane and data plane split.
-- **API reference**: Browse the [Gateway API resources](/en/api-reference/gateway-api) and [custom CRDs](/en/api-reference/crds).
+- **Installation options**: Learn about [Helm customization](/installation/helm), [Kustomize overlays](/installation/kustomize), and [production deployment](/installation/production).
+- **TLS configuration**: Set up [TLS listeners and mTLS](/configuration/tls) for secure traffic.
+- **Observability**: Enable [metrics scraping](/operations/metrics) and set up [Grafana dashboards](/operations/grafana).
+- **Architecture**: Read the [architecture overview](/architecture/) to understand the control plane and data plane split.
+- **API reference**: Browse the [Gateway API resources](/api-reference/gateway-api) and [custom CRDs](/api-reference/crds).
 
 ## Prerequisites
-URL: https://nantian.dev/en/getting-started/prerequisites/
+URL: https://nantian.dev/getting-started/prerequisites/
 
 
 ## Quick Start
-URL: https://nantian.dev/en/getting-started/quick-start/
+URL: https://nantian.dev/getting-started/quick-start/
 
 
 ## High Availability
-URL: https://nantian.dev/en/installation/ha/
+URL: https://nantian.dev/installation/ha/
 
 
 ## Helm Installation
-URL: https://nantian.dev/en/installation/helm/
+URL: https://nantian.dev/installation/helm/
 
 The Helm chart is published at https://chart.nantian.dev, lives in helm-charts/charts/nantian-gw, defaults to featureMode: standard, does not render Gateway API CRDs unless gatewayAPI.installCRDs=true, uses the latest tag for controlplane, dataplane, and dashboard images by default, and production values should pin immutable release tags or digests.
 
 
 ## Installation Overview
-URL: https://nantian.dev/en/installation/index/
+URL: https://nantian.dev/installation/index/
 
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -581,50 +581,50 @@ kubectl delete -f test-gateway.yaml
 
 ## What's next
 
-After installation, head to the [Quick Start](/en/getting-started/quick-start) to verify everything is running and create your first route. If you're deploying to production, read the [Production deployment](/en/installation/production) guide before exposing the gateway to live traffic.
+After installation, head to the [Quick Start](/getting-started/quick-start) to verify everything is running and create your first route. If you're deploying to production, read the [Production deployment](/installation/production) guide before exposing the gateway to live traffic.
 
 ## Kustomize Installation
-URL: https://nantian.dev/en/installation/kustomize/
+URL: https://nantian.dev/installation/kustomize/
 
 
 ## Production Deployment
-URL: https://nantian.dev/en/installation/production/
+URL: https://nantian.dev/installation/production/
 
 
 ## Upgrade Guide
-URL: https://nantian.dev/en/installation/upgrade/
+URL: https://nantian.dev/installation/upgrade/
 
 
 ## Alerting Rules
-URL: https://nantian.dev/en/operations/alerting/
+URL: https://nantian.dev/operations/alerting/
 
 
 ## Backup & Recovery
-URL: https://nantian.dev/en/operations/backup/
+URL: https://nantian.dev/operations/backup/
 
 
 ## Grafana Dashboard
-URL: https://nantian.dev/en/operations/grafana/
+URL: https://nantian.dev/operations/grafana/
 
 
 ## Operations Overview
-URL: https://nantian.dev/en/operations/index/
+URL: https://nantian.dev/operations/index/
 
 
 ## Metrics Reference
-URL: https://nantian.dev/en/operations/metrics/
+URL: https://nantian.dev/operations/metrics/
 
 
 ## Troubleshooting
-URL: https://nantian.dev/en/operations/troubleshooting/
+URL: https://nantian.dev/operations/troubleshooting/
 
 
 ## What is Nantian Gateway
-URL: https://nantian.dev/en/overview/index/
+URL: https://nantian.dev/overview/index/
 
 
 ## Use Cases
-URL: https://nantian.dev/en/use-cases/
+URL: https://nantian.dev/use-cases/
 
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

@@ -1,0 +1,107 @@
+---
+title: Comparison
+slug: 1.5/comparison
+---
+
+Choosing a Kubernetes gateway involves tradeoffs in architecture, performance, feature coverage, and operational complexity. This page compares Nantian Gateway with four well-known alternatives to help you understand where each fits.
+
+:::caution[Experimental features]
+Features marked 🧪 (AI gateway, Wasm plugins) are experimental. APIs and behavior may change in future releases.
+:::
+
+## Comparison Matrix
+
+| Feature | Nantian Gateway | Envoy Gateway | Istio | Contour | NGINX Gateway |
+|---------|----------------|---------------|-------|---------|---------------|
+| **Gateway API target** | v1.5.1 | v1.2.x | v1.2.x (via Gateway API) | v1.1.x | v1.2.x |
+| **Declared features** | 55 | ~40 | ~30 (Gateway API) | ~30 | ~35 |
+| **Control plane** | Go | Go | Go | Go | Go |
+| **Data plane** | Rust | C++ (Envoy) | C++ (Envoy) | C++ (Envoy) | C (NGINX) |
+| **Config protocol** | gRPC/xDS | gRPC/xDS | gRPC/xDS | gRPC/xDS | Custom |
+| **AI gateway** 🧪 | Built-in | No | No | No | No |
+| **Wasm runtime** 🧪 | wasmtime | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | No |
+| **Service mesh** | Yes (Gateway API Mesh) | No | Yes (core) | No | No |
+| **TCP/UDP/TLS** | Yes | Yes | Yes | Yes | Yes |
+| **gRPC routing** | Yes (named rules) | Yes | Yes | Limited | Yes |
+| **Dashboard** | Next.js admin | No built-in | Kiali | No built-in | No built-in |
+| **HA config** | PDBs, anti-affinity | HPA, PDB | HPA, PDB | HPA, PDB | Manual |
+| **License** | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 |
+| **Hosted by** | Independent | CNCF | CNCF | CNCF | NGINX/F5 |
+
+## Nantian Gateway vs Envoy Gateway
+
+**Envoy Gateway** is a CNCF project that provides a Kubernetes-native gateway using Envoy as its data plane. It's mature, well-documented, and has broad community backing.
+
+**Where Nantian Gateway differs:**
+
+The most visible difference is the data plane language. Envoy is written in C++, which has decades of proven performance but a steeper contribution curve and a larger attack surface. Nantian Gateway's Rust data plane aims for comparable performance with stronger memory safety guarantees. This matters more for teams that need to audit or extend the proxy itself.
+
+Nantian Gateway also includes an AI gateway module directly in the data plane. With Envoy Gateway, you'd need to deploy a separate AI proxy (like [LiteLLM](https://github.com/BerriAI/litellm) or [AI Gateway](https://github.com/Portkey-AI/gateway)) alongside the gateway, adding operational complexity and an extra hop. Nantian Gateway handles AI provider routing, token counting, rate limiting, and PII masking within the same proxy that handles your HTTP traffic.
+
+On the Gateway API coverage front, Nantian Gateway declares 55 features against the v1.5.1 spec, while Envoy Gateway targets v1.2.x with around 40 features. Nantian Gateway also supports Gateway API Mesh resources, which Envoy Gateway does not.
+
+Both projects use gRPC/xDS for config distribution, so the control plane architecture is similar. Both support Wasm plugins through wasmtime.
+
+## Nantian Gateway vs Istio
+
+**Istio** is the most widely deployed service mesh in Kubernetes ecosystems. It's a full-featured mesh platform with traffic management, security, and observability, built on top of Envoy sidecars.
+
+**Where Nantian Gateway differs:**
+
+Istio is a mesh first, gateway second. Its gateway functionality exists as a component of a larger mesh architecture that requires sidecar injection. Nantian Gateway is a gateway first, with mesh support as an extension. If you need a full mesh with mTLS, fine-grained authorization policies, and distributed tracing, Istio is the right choice. If you need a high-performance ingress gateway with optional mesh features, Nantian Gateway is a lighter fit.
+
+Nantian Gateway implements mesh through the Gateway API Mesh model, which doesn't require sidecars. This sidesteps the operational overhead of sidecar injection, pod lifecycle ordering, and the additional resource consumption that comes with a sidecar per pod.
+
+The AI gateway and dashboard features in Nantian Gateway have no Istio equivalent. Istio's observability is more comprehensive (Jaeger tracing, Kiali visualization), but Nantian Gateway's Prometheus and Grafana integration covers the gateway-specific metrics most teams need.
+
+## Nantian Gateway vs Contour
+
+**Contour** is a CNCF ingress controller that provides a Gateway API implementation on top of Envoy. It's known for simplicity and tight integration with the [Contour ingress route](https://projectcontour.io/docs/main/config/fundamentals/) model.
+
+**Where Nantian Gateway differs:**
+
+Contour uses Envoy, so the same data plane tradeoffs apply. Nantian Gateway's Rust proxy is a different approach to the same problem.
+
+Feature coverage is a meaningful difference. Nantian Gateway supports gRPC routing with named route rules, TLS mode-mixed (passthrough and terminate on the same listener), and a broader set of redirect status codes and HTTP matching features. Contour's Gateway API support is more conservative.
+
+Contour doesn't include AI gateway features, a Wasm plugin system, or a mesh model. If your needs are straightforward HTTP routing with TLS termination, Contour works well. Nantian Gateway targets teams that need multi-protocol routing, AI traffic management, and extensibility from a single proxy.
+
+## Nantian Gateway vs NGINX Gateway Fabric
+
+**NGINX Gateway Fabric** is the Kubernetes Gateway API implementation from the NGINX team at F5. It uses NGINX as its data plane, which is the most widely deployed web server and reverse proxy globally.
+
+**Where Nantian Gateway differs:**
+
+NGINX Gateway Fabric benefits from NGINX's massive installed base and ecosystem. The data plane is a battle-tested, well-understood C codebase. Nantian Gateway's Rust data plane is newer and less proven in production, but offers memory safety and a modern concurrency model.
+
+The feature gap is the largest differentiator. NGINX Gateway Fabric supports a subset of Gateway API features, focusing on the most common HTTP routing patterns. Nantian Gateway covers a broader spec surface, including gRPC routing, UDP routes, TLS mode-mixed, mesh resources, and more granular matching and redirect options.
+
+Nantian Gateway's AI gateway, Wasm plugin system, and dashboard have no NGINX Gateway Fabric equivalent. If you need AI traffic management or custom plugin logic at the proxy level, you'd need to add separate components to an NGINX-based deployment.
+
+## When to Choose Nantian Gateway
+
+Nantian Gateway is a strong fit when:
+
+* You need **comprehensive Gateway API coverage** (v1.5.1, 55 features) and want to stay close to the upstream spec
+* You're running **AI workloads** and want a single proxy that handles both API traffic and AI provider routing/rate limiting
+* You want **custom proxy logic** through Wasm plugins managed via Kubernetes CRDs
+* You prefer a **Rust data plane** for memory safety and concurrency
+* You need a **built-in admin dashboard** for gateway operations
+* You want **mesh features without sidecars**, using the Gateway API mesh model
+
+:::tip
+Nantian Gateway works well alongside existing infrastructure. You can deploy it as an ingress gateway while keeping your current mesh solution, or use it as a dedicated AI gateway in front of your model serving infrastructure.
+:::
+
+## When to Consider Alternatives
+
+Other gateways may be a better fit when:
+
+* You need a **full service mesh** with mTLS, SPIFFE identities, and deep tracing (Istio)
+* You want the most **battle-tested proxy** with the largest operational knowledge base (Envoy Gateway, NGINX Gateway)
+* You need **CNCF incubation or graduation** status for compliance requirements (Envoy Gateway, Istio, Contour)
+* You're running a **simple deployment** with minimal routing needs and want the smallest operational footprint (NGINX Gateway Fabric)
+
+:::note
+Nantian Gateway is a newer project and is not yet an officially recognized Gateway API implementation. It's suitable for evaluation, controlled trials, and contributor review. The [project status page](https://github.com/nantian-gw/gateway) tracks current maturity.
+:::

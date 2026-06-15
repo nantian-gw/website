@@ -129,6 +129,14 @@ test("sitemap redirect is permanent", () => {
   assert.doesNotMatch(redirects, /^\/sitemap\.xml \/sitemap-index\.xml 302$/m);
 });
 
+test("legacy /en compatibility redirects normalize to root English URLs", () => {
+  const redirects = read("public/_redirects");
+
+  assert.match(redirects, /^\/en \/ 301$/m);
+  assert.match(redirects, /^\/en\/ \/ 301$/m);
+  assert.match(redirects, /^\/en\/\* \/:splat 301$/m);
+});
+
 test("landing page supports reduced motion", () => {
   const hero = read("src/components/landing/Hero.astro");
   const customCss = read("src/styles/custom.css");
@@ -149,37 +157,37 @@ test("landing page supports reduced motion", () => {
 });
 
 const chartDocPaths = [
-  "src/content/docs/en/installation/helm.mdx",
+  "src/content/docs/installation/helm.mdx",
   "src/content/docs/zh/installation/helm.mdx",
-  "src/content/docs/en/1.5/installation/helm.mdx",
+  "src/content/docs/1.5/installation/helm.mdx",
   "src/content/docs/zh/1.5/installation/helm.mdx",
-  "src/content/docs/en/installation/production.mdx",
+  "src/content/docs/installation/production.mdx",
   "src/content/docs/zh/installation/production.mdx",
-  "src/content/docs/en/1.5/installation/production.mdx",
+  "src/content/docs/1.5/installation/production.mdx",
   "src/content/docs/zh/1.5/installation/production.mdx",
-  "src/content/docs/en/configuration/index.mdx",
+  "src/content/docs/configuration/index.mdx",
   "src/content/docs/zh/configuration/index.mdx",
-  "src/content/docs/en/1.5/configuration/index.mdx",
+  "src/content/docs/1.5/configuration/index.mdx",
   "src/content/docs/zh/1.5/configuration/index.mdx",
-  "src/content/docs/en/configuration/controlplane.mdx",
+  "src/content/docs/configuration/controlplane.mdx",
   "src/content/docs/zh/configuration/controlplane.mdx",
-  "src/content/docs/en/1.5/configuration/controlplane.mdx",
+  "src/content/docs/1.5/configuration/controlplane.mdx",
   "src/content/docs/zh/1.5/configuration/controlplane.mdx",
-  "src/content/docs/en/configuration/experimental-features.mdx",
+  "src/content/docs/configuration/experimental-features.mdx",
   "src/content/docs/zh/configuration/experimental-features.mdx",
-  "src/content/docs/en/1.5/configuration/experimental-features.mdx",
+  "src/content/docs/1.5/configuration/experimental-features.mdx",
   "src/content/docs/zh/1.5/configuration/experimental-features.mdx",
-  "src/content/docs/en/operations/grafana.mdx",
+  "src/content/docs/operations/grafana.mdx",
   "src/content/docs/zh/operations/grafana.mdx",
-  "src/content/docs/en/1.5/operations/grafana.mdx",
+  "src/content/docs/1.5/operations/grafana.mdx",
   "src/content/docs/zh/1.5/operations/grafana.mdx",
-  "src/content/docs/en/contributing/index.mdx",
+  "src/content/docs/contributing/index.mdx",
   "src/content/docs/zh/contributing/index.mdx",
-  "src/content/docs/en/1.5/contributing/index.mdx",
+  "src/content/docs/1.5/contributing/index.mdx",
   "src/content/docs/zh/1.5/contributing/index.mdx",
-  "src/content/docs/en/contributing/release.mdx",
+  "src/content/docs/contributing/release.mdx",
   "src/content/docs/zh/contributing/release.mdx",
-  "src/content/docs/en/1.5/contributing/release.mdx",
+  "src/content/docs/1.5/contributing/release.mdx",
   "src/content/docs/zh/1.5/contributing/release.mdx",
   "src/components/landing/QuickStart.astro",
   "src/components/landing/Features.astro",
@@ -188,13 +196,13 @@ const chartDocPaths = [
 ];
 
 const defaultInstallDocPaths = [
-  "src/content/docs/en/installation/index.mdx",
+  "src/content/docs/installation/index.mdx",
   "src/content/docs/zh/installation/index.mdx",
-  "src/content/docs/en/installation/helm.mdx",
+  "src/content/docs/installation/helm.mdx",
   "src/content/docs/zh/installation/helm.mdx",
-  "src/content/docs/en/1.5/installation/index.mdx",
+  "src/content/docs/1.5/installation/index.mdx",
   "src/content/docs/zh/1.5/installation/index.mdx",
-  "src/content/docs/en/1.5/installation/helm.mdx",
+  "src/content/docs/1.5/installation/helm.mdx",
   "src/content/docs/zh/1.5/installation/helm.mdx",
 ];
 
@@ -233,11 +241,25 @@ test("LLM reference files describe current Helm image defaults", () => {
   assert.doesNotMatch(docs, /appVersion 0\.1\.0/);
 });
 
+test("English surfaced docs links no longer publish /en prefixes", () => {
+  const docs = readMany([
+    "public/llms.txt",
+    "public/llms-full.txt",
+    "src/components/landing/Hero.astro",
+    "src/pages/about.astro",
+    "src/pages/contact.astro",
+  ]);
+
+  assert.doesNotMatch(docs, /https:\/\/nantian\.dev\/en\//);
+  assert.doesNotMatch(docs, /\/en\/getting-started\/quick-start\//);
+  assert.doesNotMatch(docs, /\/en\/contributing\//);
+});
+
 test("release docs describe split repository version coordination", () => {
   const docs = readMany([
-    "src/content/docs/en/contributing/release.mdx",
+    "src/content/docs/contributing/release.mdx",
     "src/content/docs/zh/contributing/release.mdx",
-    "src/content/docs/en/1.5/contributing/release.mdx",
+    "src/content/docs/1.5/contributing/release.mdx",
     "src/content/docs/zh/1.5/contributing/release.mdx",
   ]);
 
@@ -290,7 +312,7 @@ test("quick start copy labels stay externalized for landing pages", () => {
 
 test("docs pages keep required Starlight inline scripts and CSP allows them", () => {
   const headers = read("public/_headers");
-  const docsPage = readArtifact("dist/en/concepts/index.html");
+  const docsPage = readArtifact("dist/concepts/index.html");
   const landingHome = readArtifact("dist/index.html");
 
   assert.match(headers, /script-src[^\n]*'unsafe-inline'/);
@@ -298,6 +320,29 @@ test("docs pages keep required Starlight inline scripts and CSP allows them", ()
   assert.match(docsPage, /customElements\.define\("starlight-theme-select"/);
   assert.match(docsPage, /customElements\.define\("starlight-lang-select"/);
   assert.match(landingHome, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
+});
+
+test("English docs build at root locale with root-path metadata", () => {
+  const production = readArtifact("dist/installation/production/index.html");
+
+  assert.match(production, /<link rel="canonical" href="https:\/\/nantian\.dev\/installation\/production\/"\/?>/);
+  assert.match(production, /property="og:url" content="https:\/\/nantian\.dev\/installation\/production\/"/);
+  assert.match(production, /hreflang="en" href="https:\/\/nantian\.dev\/installation\/production\/"\/?>/);
+  assert.match(production, /hreflang="zh-CN" href="https:\/\/nantian\.dev\/zh\/installation\/production\/"\/?>/);
+  assert.match(production, /hreflang="x-default" href="https:\/\/nantian\.dev\/installation\/production\/"\/?>/);
+  assert.doesNotMatch(production, /https:\/\/nantian\.dev\/en\/installation\/production\//);
+});
+
+test("versioned English docs build at root locale without /en prefixes", () => {
+  const production = readArtifact("dist/1.5/installation/production/index.html");
+
+  assert.match(production, /<link rel="canonical" href="https:\/\/nantian\.dev\/1\.5\/installation\/production\/"\/?>/);
+  assert.match(production, /property="og:url" content="https:\/\/nantian\.dev\/1\.5\/installation\/production\/"/);
+  assert.match(production, /hreflang="en" href="https:\/\/nantian\.dev\/1\.5\/installation\/production\/"\/?>/);
+  assert.match(production, /hreflang="zh-CN" href="https:\/\/nantian\.dev\/zh\/1\.5\/installation\/production\/"\/?>/);
+  assert.match(production, /hreflang="x-default" href="https:\/\/nantian\.dev\/1\.5\/installation\/production\/"\/?>/);
+  assert.doesNotMatch(production, /https:\/\/nantian\.dev\/en\/1\.5\/installation\/production\//);
+  assert.doesNotMatch(production, /https:\/\/nantian\.dev\/zh\/en\/1\.5\/installation\/production\//);
 });
 
 test("built landing pages emit page-specific canonicals and avoid inline landing scripts", () => {

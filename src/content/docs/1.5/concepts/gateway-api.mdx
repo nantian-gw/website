@@ -1,0 +1,121 @@
+---
+title: Understanding the Gateway API
+slug: 1.5/concepts/gateway-api
+---
+
+The Kubernetes Gateway API is a specification for configuring HTTP and TCP routing in Kubernetes clusters. It provides a role-oriented, extensible model that separates infrastructure management from application routing configuration.
+
+This page explains the Gateway API resource model and how Nantian Gateway implements it.
+
+## Why Gateway API?
+
+Before the Gateway API, Kubernetes provided the Ingress resource for exposing HTTP services. Ingress served its purpose but had significant limitations:
+
+* **Limited expressiveness** — Ingress could only route based on host and path, with no support for header-based routing, traffic splitting, or request rewriting
+* **No role separation** — infrastructure operators and application developers shared the same resource, leading to configuration conflicts
+* **Implementation-specific annotations** — every ingress controller required different annotations for the same behavior, creating vendor lock-in
+
+The Gateway API addresses these limitations with a multi-resource model that separates concerns and provides richer routing capabilities as a community standard.
+
+## The Resource Model
+
+The Gateway API defines three primary resource types, each with a distinct role:
+
+### GatewayClass
+
+A GatewayClass defines a *class* of gateway implementation — for example, `nantian-gateway` or `envoy-gateway`. It is typically configured by the infrastructure operator and referenced by Gateway resources to determine which controller manages them.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nantian-gw
+spec:
+  controllerName: gateway.networking.k8s.io/nantian-gw
+```
+
+### Gateway
+
+A Gateway resource represents a point of network access — a listener that accepts connections on a specific address and port. Gateways are managed by infrastructure operators and define the *shape* of traffic entry, not the routing rules.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: external-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: tls-cert
+```
+
+### Route
+
+Route resources define how traffic is matched and forwarded to backend services. Different route types handle different protocols:
+
+| Route Type | Protocol | Use Case |
+|-----------|----------|----------|
+| `HTTPRoute` | HTTP/HTTPS | Web applications, REST APIs, gRPC-web |
+| `GRPCRoute` | gRPC | gRPC services with method-level routing |
+| `TCPRoute` | TCP | Non-HTTP protocols, database connections |
+| `TLSRoute` | TLS passthrough | Services that handle their own TLS |
+| `UDPRoute` | UDP | DNS, streaming, gaming |
+
+Example HTTPRoute that routes traffic based on path prefix:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app-routes
+spec:
+  parentRefs:
+    - name: external-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api-service
+          port: 8080
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /web
+      backendRefs:
+        - name: web-service
+          port: 3000
+```
+
+## Role-Oriented Design
+
+The Gateway API's resource model is deliberately split across organizational roles:
+
+* **Infrastructure providers** define GatewayClass resources (the *how*)
+* **Cluster operators** create Gateway resources (the *where*)
+* **Application developers** define Route resources (the *what*)
+
+This separation means an application team can define routing rules for their service without needing to know how the gateway is deployed or which implementation is in use. The infrastructure team can change the underlying gateway implementation without requiring application teams to update their route configurations.
+
+## Nantian Gateway Implementation
+
+Nantian Gateway targets the Gateway API v1.5.1 specification with 55 declared supported features. This includes:
+
+* **Core features**: HTTPRoute, Gateway, GatewayClass, ReferenceGrant
+* **Extended features**: HTTP header matching, query parameter matching, request mirroring, traffic splitting, URL rewriting, CORS, and more
+* **Mesh features**: Gateway API Mesh resources for service mesh configurations
+
+For a complete list of supported features, see the [API Reference](/1.5/api-reference/).
+
+## Next Steps
+
+* [Split-Plane Architecture](/1.5/concepts/split-plane) — understand how Nantian Gateway processes Gateway API resources internally
+* [Getting Started](/1.5/getting-started/quick-start) — deploy your first Gateway API resources
+* [API Reference: Gateway API Resources](/1.5/api-reference/gateway-api) — detailed resource reference

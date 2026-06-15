@@ -1,0 +1,176 @@
+---
+title: Grafana Dashboard
+---
+
+Nantian Gateway ships with a pre-built Grafana dashboard at `deploy/observability/grafana/pingora-gateway-observability-dashboard.json`. The dashboard provides a comprehensive view of both control plane and data plane health, performance, and resource utilization.
+
+## Importing the dashboard
+
+### Via Grafana UI
+
+1. Navigate to **Dashboards > New > Import**
+2. Upload `pingora-gateway-observability-dashboard.json` or paste its contents
+3. Select your Prometheus data source from the dropdown
+4. Click **Import**
+
+### Via ConfigMap (Kubernetes)
+
+If you deploy Grafana through the kube-prometheus-stack or a similar operator, mount the dashboard JSON as a ConfigMap with the `grafana_dashboard` label:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nantian-gateway-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  nantian-gateway.json: |
+    {
+      "uid": "nantian-gw-obsv",
+      ...
+    }
+```
+
+Apply it:
+
+```bash
+kubectl apply -f grafana-dashboard-configmap.yaml
+```
+
+### Metrics scraping with Helm
+
+The current Helm chart does not render a Grafana dashboard ConfigMap. Import the dashboard manually or manage the ConfigMap with your observability stack. To let Prometheus Operator scrape Nantian Gateway metrics, enable ServiceMonitor resources:
+
+```yaml
+serviceMonitor:
+  enabled: true
+```
+
+## Dashboard sections
+
+The dashboard is organized into these rows:
+
+### Executive Overview
+
+Top-level metrics in a single row for at-a-glance monitoring.
+
+| Panel | Metric | What it shows |
+|-------|--------|---------------|
+| Ready Pods | `nantian_gateway_dataplane_ready` | Number of data plane pods ready to serve traffic |
+| QPS | `nantian_gateway_dataplane_traffic_request_events_total` | Requests per second across all data planes |
+| Success Rate | Response flags ratio | Percentage of requests with no error flags |
+| P99 Latency | `nantian_gateway_dataplane_traffic_request_latency_ms` | 99th percentile request latency |
+### Control Plane
+
+Panels monitoring the control plane's internal operations:
+
+| Panel | Key metrics |
+|-------|-------------|
+| Snapshot builds | `nantian_gateway_snapshot_builds_total`, `nantian_gateway_snapshot_build_failures_total` |
+| Build duration | `nantian_gateway_snapshot_build_duration_seconds` |
+| Snapshot resource counts | `nantian_gateway_snapshot_resource_count` |
+| xDS stream status | `nantian_gateway_controlplane_xds_stream_terminations_total` |
+| xDS publish lag | `nantian_gateway_controlplane_xds_publish_ack_lag_seconds` |
+| Admin API requests | `nantian_gateway_controlplane_admin_requests_total` |
+| Reconciler runner | `nantian_gateway_controlplane_reconciler_runner_runs_total`, queue depth, settle state |
+### Data Plane
+
+Panels covering proxy performance and backend health:
+
+| Panel | Key metrics |
+|-------|-------------|
+| HTTP request rate | `nantian_gateway_dataplane_http_requests_total` by listener and route |
+| Request latency | `nantian_gateway_dataplane_http_request_duration_seconds` |
+| Backend connections | `nantian_gateway_dataplane_backend_connections_active` |
+| Backend health | `nantian_gateway_dataplane_backend_health_status` |
+| Connection errors | `nantian_gateway_dataplane_backend_connection_errors_total` |
+| Response status distribution | `nantian_gateway_dataplane_http_responses_total` by status code |
+### Resources
+
+Container resource utilization panels (requires cAdvisor and kube-state-metrics):
+
+| Panel | Recording rules used |
+|-------|---------------------|
+| CPU usage | `nantian_gateway_dataplane_container_cpu_cores` |
+| CPU throttle | `nantian_gateway_dataplane_container_cpu_throttle_ratio` |
+| Memory working set | `nantian_gateway_dataplane_container_memory_working_set_bytes` |
+| Memory vs limits | `nantian_gateway_dataplane_container_memory_limit_bytes` |
+## Dashboard variables
+
+The dashboard defines these template variables for filtering:
+
+| Variable | Type | Source | Description |
+|----------|------|--------|-------------|
+| `datasource` | Data source | User selection | Prometheus data source |
+| `namespace` | Query | `nantian_gateway_dataplane_ready` | Kubernetes namespace (default: `nantian-gw`) |
+| `pod_dp` | Query | `nantian_gateway_dataplane_ready` | Data plane pod selector (multi-select, default: all) |
+| `job_controlplane` | Query | `nantian_gateway_controlplane_admin_requests_total` | Control plane job selector |
+| `instance_cp` | Query | `nantian_gateway_controlplane_admin_requests_total` | Control plane instance selector |
+| `job_dataplane` | Query | `nantian_gateway_dataplane_admin_requests_total` | Data plane job selector |
+| `instance_dp` | Query | `nantian_gateway_dataplane_admin_requests_total` | Data plane instance selector |
+## Customizing the dashboard
+
+The dashboard is a standard Grafana JSON model. You can customize it through the Grafana UI or by editing the JSON directly.
+
+### Adding a panel
+
+1. Click **Add > Visualization** in the desired row
+2. Select a visualization type (time series, stat, gauge, table, etc.)
+3. Write a PromQL query in the query editor
+4. Configure the panel title, legend, and thresholds
+5. Save the dashboard
+
+### Changing the refresh interval
+
+The dashboard refreshes every 30 seconds by default. You can change this in the dashboard settings or by modifying the `refresh` field in the JSON:
+
+```json
+{
+  "refresh": "10s"
+}
+```
+
+### Adding alerts
+
+You can create Grafana alert rules directly from dashboard panels. Select a panel, click **Alert > Create alert rule from this panel**, and configure the threshold and notification channel.
+
+:::note
+Grafana alerts are evaluated by the Grafana server, not Prometheus. For production alerting, configure Prometheus alerting rules and use Alertmanager for notification routing. See [Alerting Rules](/operations/alerting) for recommended rules.
+:::
+
+## Troubleshooting dashboard issues
+
+### "No data" on all panels
+
+Check that Prometheus is scraping both the control plane and data plane metrics endpoints:
+
+```bash
+# Check Prometheus targets
+curl -s http://prometheus:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.job | startswith("nantian"))'
+
+# Test control plane metrics directly
+curl -s http://<control-plane-ip>:18082/metrics | head -20
+
+# Test data plane metrics directly
+curl -s http://<data-plane-ip>:<admin-port>/metrics | head -20
+```
+
+### Container resource panels show no data
+
+The resource panels depend on cAdvisor and kube-state-metrics. Verify these are running:
+
+```bash
+kubectl get pods -n monitoring | grep -E "cadvisor|kube-state-metrics"
+```
+
+### Wrong namespace in filters
+
+The dashboard defaults to the `nantian-gw` namespace. If you deployed the gateway in a different namespace, update the `namespace` variable in the dashboard settings or change the default value in the JSON.
+
+## What's next
+
+- [Alerting Rules](/operations/alerting) -- configure alerts for the metrics you're now monitoring
+- [Metrics Reference](/operations/metrics) -- complete catalog of all metrics used in the dashboard
+- [Troubleshooting](/operations/troubleshooting) -- what to do when the dashboard shows problems
