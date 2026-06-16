@@ -1,5 +1,6 @@
 ---
 title: What is Nantian Gateway
+description: "Overview of Nantian Gateway's split-plane architecture, core components, experimental capabilities, and operator entry points."
 ---
 
 Nantian Gateway is a Kubernetes Gateway API implementation built as a split-plane gateway stack. The Go control plane watches Kubernetes resources, translates Gateway API and Nantian extension resources into internal routing state, reports status, and publishes runtime snapshots over gRPC/xDS. The Rust data plane receives those snapshots and handles live traffic.

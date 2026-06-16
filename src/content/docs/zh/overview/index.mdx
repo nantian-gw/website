@@ -1,5 +1,6 @@
 ---
 title: 什么是 Nantian Gateway
+description: "南天网关的分离式平面架构、核心组件、实验性能力与运维入口概览。"
 ---
 
 Nantian Gateway 是一个基于 Kubernetes Gateway API 的分离式网关栈。Go 控制面监听 Kubernetes 资源，把 Gateway API 和 Nantian 扩展资源转换为内部路由状态，写入状态，并通过 gRPC/xDS 发布运行时快照。Rust 数据面接收这些快照并处理真实流量。

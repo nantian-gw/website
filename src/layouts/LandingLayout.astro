@@ -7,7 +7,7 @@ import '@fontsource/inter/700.css';
 import '@fontsource/inter/800.css';
 import '@fontsource/jetbrains-mono/400.css';
 import '@fontsource/jetbrains-mono/500.css';
-import { getLandingRouteMeta } from '../lib/landingRoutes';
+import { getLandingRouteMeta, normalizeLandingPath } from '../lib/landingRoutes';
 
 export interface Props {
   title?: string;
@@ -16,7 +16,8 @@ export interface Props {
   pathname?: string;
 }
 const pathname = Astro.props.pathname ?? Astro.url.pathname;
-const routeMeta = getLandingRouteMeta(pathname);
+const normalizedPathname = normalizeLandingPath(pathname);
+const routeMeta = getLandingRouteMeta(normalizedPathname);
 const {
   title = 'Nantian Gateway - Lightweight Kubernetes Gateway API | Go + Rust',
   description = 'Open-source Kubernetes Gateway API implementation with split-plane architecture. Go control plane + Rust data plane for high performance and efficiency.',
@@ -28,19 +29,29 @@ const altLang = routeLang === 'en' ? 'zh-CN' : 'en';
 const altUrl = routeMeta.alternateUrl;
 const xDefaultUrl = routeMeta.xDefaultUrl;
 const ogLocale = routeLang === 'en' ? 'en_US' : 'zh_CN';
-const jsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  'name': 'Nantian Gateway',
-  'url': 'https://nantian.dev/',
-  'description': description,
-  'inLanguage': routeLang,
-  'potentialAction': {
-    '@type': 'SearchAction',
-    'target': 'https://nantian.dev/{lang}/?search={search_term_string}',
-    'query-input': 'required name=search_term_string',
-  },
-};
+const isHomePage = normalizedPathname === routeMeta.homePath;
+const jsonLd = isHomePage
+  ? {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Nantian Gateway',
+      url: 'https://nantian.dev/',
+      description,
+      inLanguage: routeLang,
+    }
+  : {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: title,
+      url: canonical,
+      description,
+      inLanguage: routeLang,
+      isPartOf: {
+        '@type': 'WebSite',
+        name: 'Nantian Gateway',
+        url: 'https://nantian.dev/',
+      },
+    };
 const orgJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Organization',

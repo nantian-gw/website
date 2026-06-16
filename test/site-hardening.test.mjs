@@ -242,17 +242,45 @@ test("LLM reference files describe current Helm image defaults", () => {
 });
 
 test("English surfaced docs links no longer publish /en prefixes", () => {
-  const docs = readMany([
-    "public/llms.txt",
-    "public/llms-full.txt",
-    "src/components/landing/Hero.astro",
-    "src/pages/about.astro",
-    "src/pages/contact.astro",
-  ]);
+  const surfacedPages = {
+    "public/llms.txt": read("public/llms.txt"),
+    "public/llms-full.txt": read("public/llms-full.txt"),
+    "dist/index.html": readArtifact("dist/index.html"),
+    "dist/about/index.html": readArtifact("dist/about/index.html"),
+    "dist/overview/index.html": readArtifact("dist/overview/index.html"),
+  };
 
-  assert.doesNotMatch(docs, /https:\/\/nantian\.dev\/en\//);
-  assert.doesNotMatch(docs, /\/en\/getting-started\/quick-start\//);
-  assert.doesNotMatch(docs, /\/en\/contributing\//);
+  for (const [path, html] of Object.entries(surfacedPages)) {
+    assert.doesNotMatch(html, /https:\/\/nantian\.dev\/en\//, `${path} should not publish absolute /en/ URLs`);
+    assert.doesNotMatch(html, /\/en\/[a-z0-9-]+(?:\/[a-z0-9-]+)*\//, `${path} should not publish root-locale docs under /en/`);
+  }
+});
+
+test("docs pages stop publishing the shared generic description", () => {
+  const docsPages = {
+    "dist/overview/index.html": readArtifact("dist/overview/index.html"),
+    "dist/api-reference/index.html": readArtifact("dist/api-reference/index.html"),
+  };
+
+  for (const [path, html] of Object.entries(docsPages)) {
+    assert.doesNotMatch(
+      html,
+      /Nantian Gateway — High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities\./,
+      `${path} should not reuse the shared generic docs description`,
+    );
+    assert.doesNotMatch(html, /SearchAction|search_term_string/, `${path} should not advertise a fake search endpoint`);
+  }
+});
+
+test("landing pages do not advertise a nonexistent search endpoint", () => {
+  const landingPages = {
+    "dist/index.html": readArtifact("dist/index.html"),
+    "dist/about/index.html": readArtifact("dist/about/index.html"),
+  };
+
+  for (const [path, html] of Object.entries(landingPages)) {
+    assert.doesNotMatch(html, /SearchAction|search_term_string/, `${path} should not advertise a fake search endpoint`);
+  }
 });
 
 test("release docs describe split repository version coordination", () => {
