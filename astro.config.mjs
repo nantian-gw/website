@@ -119,6 +119,9 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'Nantian Gateway',
+      description:
+        'Nantian Gateway — High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.',
+      routeMiddleware: ['./src/starlightRouteData.ts'],
       logo: { src: './src/assets/logo.svg' },
       plugins: [
         starlightVersions({
@@ -151,17 +154,6 @@ export default defineConfig({
       head: [
         {
           tag: 'meta',
-          attrs: {
-            name: 'description',
-            content: 'Nantian Gateway — High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.',
-          },
-        },
-        {
-          tag: 'meta',
-          attrs: { property: 'og:description', content: 'Nantian Gateway — High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.' },
-        },
-        {
-          tag: 'meta',
           attrs: { property: 'og:image', content: 'https://nantian.dev/og-image.png' },
         },
         {
@@ -174,20 +166,11 @@ export default defineConfig({
         },
         {
           tag: 'meta',
-          attrs: { name: 'twitter:description', content: 'Nantian Gateway — High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.' },
-        },
-        {
-          tag: 'meta',
           attrs: { name: 'twitter:image', content: 'https://nantian.dev/og-image.png' },
         },
         {
           tag: 'meta',
           attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
-        },
-        {
-          tag: 'script',
-          attrs: { type: 'application/ld+json' },
-          content: '{"@context":"https://schema.org","@type":"WebSite","name":"Nantian Gateway","url":"https://nantian.dev/","description":"High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.","inLanguage":["en","zh"],"potentialAction":{"@type":"SearchAction","target":"https://nantian.dev/{lang}/?search={search_term_string}","query-input":"required name=search_term_string"}}',
         },
       ],
       customCss: ['./src/styles/custom.css'],

@@ -1,5 +1,6 @@
 ---
 title: Architecture Overview
+description: "How Nantian Gateway splits control plane and data plane responsibilities and moves runtime snapshots between them."
 ---
 
 Nantian Gateway uses a split-plane architecture. A Go control plane watches the Kubernetes API for Gateway resources, translates them into a device-independent internal representation, and pushes configuration snapshots to Rust data plane proxies over gRPC/xDS bidirectional streams. The two planes are deployed as separate Kubernetes workloads, scaled independently, and communicate exclusively through the gRPC channel.

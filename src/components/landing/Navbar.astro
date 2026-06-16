@@ -18,7 +18,7 @@ const t = {
   switchHref: routeMeta.alternatePath ?? (lang === 'zh' ? '/' : '/zh/'),
 };
 
-const docsHref = `/${lang}/concepts/`;
+const docsHref = routeMeta.lang === 'zh' ? '/zh/concepts/' : '/concepts/';
 const githubHref = 'https://github.com/nantian-gw/gateway';
 ---
 

@@ -35,19 +35,19 @@ const labels = isZh
       terms: 'Terms of Service',
     };
 
-const prefix = isZh ? '/zh' : '';
-const nonDocPrefix = isZh ? '/zh' : '';
+const docsPrefix = isZh ? '/zh' : '';
+const pagePrefix = isZh ? '/zh' : '';
 
 const links = [
-  { label: labels.quickStart, href: `${isZh ? '/zh' : '/en'}/getting-started/quick-start/` },
-  { label: labels.helm, href: `${isZh ? '/zh' : '/en'}/installation/helm/` },
-  { label: labels.experimental, href: `${isZh ? '/zh' : '/en'}/configuration/experimental-features/` },
-  { label: labels.operations, href: `${isZh ? '/zh' : '/en'}/operations/` },
-  { label: labels.api, href: `${isZh ? '/zh' : '/en'}/api-reference/` },
-  { label: labels.about, href: `${nonDocPrefix}/about/` },
-  { label: labels.contact, href: `${nonDocPrefix}/contact/` },
-  { label: labels.privacy, href: `${nonDocPrefix}/privacy/` },
-  { label: labels.terms, href: `${nonDocPrefix}/terms/` },
+  { label: labels.quickStart, href: `${docsPrefix}/getting-started/quick-start/` },
+  { label: labels.helm, href: `${docsPrefix}/installation/helm/` },
+  { label: labels.experimental, href: `${docsPrefix}/configuration/experimental-features/` },
+  { label: labels.operations, href: `${docsPrefix}/operations/` },
+  { label: labels.api, href: `${docsPrefix}/api-reference/` },
+  { label: labels.about, href: `${pagePrefix}/about/` },
+  { label: labels.contact, href: `${pagePrefix}/contact/` },
+  { label: labels.privacy, href: `${pagePrefix}/privacy/` },
+  { label: labels.terms, href: `${pagePrefix}/terms/` },
   { label: labels.github, href: 'https://github.com/nantian-gw/gateway', external: true },
   { label: labels.license, href: 'https://github.com/nantian-gw/gateway/blob/main/LICENSE', external: true },
 ];
