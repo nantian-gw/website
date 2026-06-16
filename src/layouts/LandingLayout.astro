@@ -24,7 +24,7 @@ const {
 } = Astro.props;
 const routeLang = routeMeta.lang;
 const canonical = routeMeta.canonicalUrl;
-const selfHrefLang = routeLang === 'zh-CN' ? 'zh-CN' : 'en';
+const selfHrefLang = routeLang === 'zh' ? 'zh-CN' : 'en';
 const altLang = routeLang === 'en' ? 'zh-CN' : 'en';
 const altUrl = routeMeta.alternateUrl;
 const xDefaultUrl = routeMeta.xDefaultUrl;
