@@ -105,6 +105,32 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 
 **Resolution**: Verify the data plane's `controlPlaneAddress` config points to the correct service. Test TCP connectivity from a data plane pod to the control plane service. Check TLS certificates if mTLS is enabled. Review NetworkPolicies in the namespace.
 
+### `xds stream superseded by newer connection`
+
+**Symptoms**: Data plane logs repeatedly show `xds stream superseded by newer connection`, while control plane logs alternate between `dataplane connected` and draining the older stream for the same node.
+
+**Diagnostic commands**:
+```bash
+kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --since=10m | \
+  grep -E 'dataplane connected|draining superseded dataplane stream|node_id'
+
+kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/args:/p'
+```
+
+**Common causes**:
+
+- **Duplicate runtime `nodeId` across replicas**: The control plane keeps only one active xDS stream per `nodeId`, so a newer connection replaces the older one.
+- **Old manifests still use a fixed `dataplane.config.nodeId`**: Static values such as `dp-kubernetes` are safe only as fallbacks when the runtime also receives a unique env override.
+- **Obsolete env wiring**: Older manifests may still inject `PGW_NODE_ID`. Current chart versions inject `AEG_NODE_ID` from Pod `metadata.name`.
+
+**Resolution**: Ensure every data plane replica has a unique runtime identity. With the current Helm chart, keep the `AEG_NODE_ID <- metadata.name` injection and avoid overriding it with a shared fixed value. If you maintain custom manifests, remove `PGW_NODE_ID`, keep `dataplane.config.nodeId` only as a fallback, and restart the data plane after applying the corrected Deployment.
+
+### Session persistence warning about auto-generated keys
+
+**Symptoms**: Data plane logs show warnings such as `session persistence is using an ephemeral, auto-generated secret` or `configure sharedSecret or sharedSecretFile`.
+
+**Resolution**: Configure `dataplane.sessionPersistence.existingSecret` or `dataplane.sessionPersistence.sharedSecret` when running more than one replica. Current Helm chart releases mount that Secret and wire the runtime `sessionPersistence.secretKeyFile` automatically, so sticky-session state survives restarts and can be shared across replicas.
+
 ### Leader election flapping
 
 **Symptoms**: Frequent leader transitions visible in control plane logs. Metrics show gaps or inconsistent values.

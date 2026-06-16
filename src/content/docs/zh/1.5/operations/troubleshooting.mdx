@@ -76,7 +76,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 4. 检查 xDS 连接：
    * 控制面日志中搜索 `xDS stream` 相关错误
    * 数据面日志中搜索 `xDS` 或 `grpc` 相关错误
-   * 确认控制面的 gRPC 端口（默认 18000）在数据面 Pod 中可达
+   * 确认控制面的 gRPC 端口（默认 18080）在数据面 Pod 中可达
 
 **常见原因**：
 
@@ -195,7 +195,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 
 1. 检查控制面和数据面的网络连通性：
    ```bash
-   kubectl exec -n nantian-gw <dataplane-pod> -- nc -zv <controlplane-svc> 18000
+   kubectl exec -n nantian-gw <dataplane-pod> -- nc -zv <controlplane-svc> 18080
    ```
 
 2. 检查 TLS 证书是否过期：
@@ -212,6 +212,39 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 * TLS 证书过期
 * 控制面 Leader 切换（短暂中断，数据面会自动重连）
 * 数据面或控制面 OOM 重启
+
+### `xds stream superseded by newer connection`
+
+**症状**：数据面日志持续出现 `xds stream superseded by newer connection`，同时控制面日志不断交替输出 `dataplane connected` 和 `draining superseded dataplane stream`，而且 `node_id` 一直相同。
+
+**排查步骤**：
+
+1. 查看控制面是否在反复替换同一个连接：
+   ```bash
+   kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --since=10m | \
+     grep -E 'dataplane connected|draining superseded dataplane stream|node_id'
+   ```
+
+2. 检查数据面 Deployment 的环境变量注入：
+   ```bash
+   kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/args:/p'
+   ```
+
+3. 如果是自定义清单，确认每个副本的运行时 `nodeId` 是否唯一。
+
+**常见原因**：
+
+* 多个数据面副本共用了同一个运行时 `nodeId`
+* 老清单把 `dataplane.config.nodeId` 固定成同一个值，例如 `dp-kubernetes`
+* 仍在使用已经废弃的 `PGW_NODE_ID`，而不是当前 chart 使用的 `AEG_NODE_ID`
+
+**解决方法**：确保每个数据面副本都有唯一的运行时身份。当前 Helm chart 会把 Pod `metadata.name` 注入到 `AEG_NODE_ID`，通常不需要额外修改；不要再用共享固定值覆盖它。若你维护的是自定义清单，请移除 `PGW_NODE_ID`，把 `dataplane.config.nodeId` 仅作为兜底值保留，然后重启数据面 Deployment。
+
+### 会话保持使用自动生成密钥的告警
+
+**症状**：数据面日志出现 `session persistence is using an ephemeral, auto-generated secret` 或 `configure sharedSecret or sharedSecretFile`。
+
+**解决方法**：多副本部署时请显式配置 `dataplane.sessionPersistence.existingSecret` 或 `dataplane.sessionPersistence.sharedSecret`。当前 Helm chart 会挂载对应 Secret，并自动把运行时 `sessionPersistence.secretKeyFile` 配好，这样会话保持状态才能跨重启和跨副本共享。
 
 ### 内存使用过高
 

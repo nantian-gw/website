@@ -206,6 +206,20 @@ const defaultInstallDocPaths = [
   "src/content/docs/zh/1.5/installation/helm.mdx",
 ];
 
+const dataplaneHelmIdentityDocPaths = [
+  "src/content/docs/installation/helm.mdx",
+  "src/content/docs/zh/installation/helm.mdx",
+  "src/content/docs/1.5/installation/helm.mdx",
+  "src/content/docs/zh/1.5/installation/helm.mdx",
+];
+
+const dataplaneTroubleshootingDocPaths = [
+  "src/content/docs/operations/troubleshooting.mdx",
+  "src/content/docs/zh/operations/troubleshooting.mdx",
+  "src/content/docs/1.5/operations/troubleshooting.mdx",
+  "src/content/docs/zh/1.5/operations/troubleshooting.mdx",
+];
+
 function readMany(paths) {
   return paths.map((path) => `\n--- ${path} ---\n${read(path)}`).join("\n");
 }
@@ -317,6 +331,24 @@ test("chart-facing docs use current Helm values and rendered service names", () 
   assert.doesNotMatch(docs, /\/etc\/nantian\/config\.yaml/);
   assert.doesNotMatch(docs, /nantian-dataplane-admin/);
   assert.doesNotMatch(docs, /dataplane\.config\.experimental/);
+});
+
+test("Helm docs explain Pod-derived dataplane node IDs and stable session-persistence settings", () => {
+  const docs = readMany(dataplaneHelmIdentityDocPaths);
+
+  assert.match(docs, /AEG_NODE_ID/);
+  assert.match(docs, /metadata\.name/);
+  assert.match(docs, /sharedSecret/);
+  assert.match(docs, /existingSecret/);
+});
+
+test("troubleshooting docs explain superseded xDS streams as duplicate dataplane node IDs", () => {
+  const docs = readMany(dataplaneTroubleshootingDocPaths);
+
+  assert.match(docs, /xds stream superseded by newer connection/);
+  assert.match(docs, /AEG_NODE_ID/);
+  assert.match(docs, /PGW_NODE_ID/);
+  assert.match(docs, /nodeId/);
 });
 
 test("landing layouts derive canonical metadata and navbar links from route context", () => {
