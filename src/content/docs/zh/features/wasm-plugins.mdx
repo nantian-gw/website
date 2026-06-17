@@ -1,0 +1,92 @@
+---
+title: Wasm 插件
+description: "使用实验性 WasmPlugin API 把沙箱化 Wasm 模块加载到 Nantian Gateway 数据面。"
+---
+
+Wasm 插件让平台团队不用重新构建数据面，就能添加自定义 request、response 或 stream 处理逻辑。插件通过 `WasmPlugin` 资源声明，并在 Rust 数据面运行时中执行。
+
+:::caution[实验功能]
+`WasmPlugin` 使用 `gateway.nantian.dev/v1alpha1`。生产发布前，先安装 CRD、启用实验功能，并完整测试每条插件路径。
+:::
+
+## 插件模型
+
+一个 `WasmPlugin` 主要包含四部分：
+
+| 部分 | 字段 | 作用 |
+| --- | --- | --- |
+| 模块来源 | `wasm.url`, `wasm.configMap`, `wasm.inline`, `wasm.sha256` | 定位并校验 `.wasm` 模块。 |
+| 目标绑定 | `targetRefs` | 把插件绑定到本地 Gateway API 目标资源。 |
+| Hook 选择 | `hooks` | 选择 `onRequest`、`onResponse` 或 `onStreamChunk`。 |
+| 沙箱限制 | `sandbox` | 限制内存、执行时间、网络和文件系统访问。 |
+
+## 示例
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: request-audit
+  namespace: nantian-demo
+spec:
+  wasm:
+    url: https://example.com/plugins/request-audit.wasm
+    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo
+  hooks:
+    - onRequest
+    - onResponse
+  config: |
+    {"mode":"audit"}
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+## 模块来源
+
+模块放在 artifact repository 时使用 `wasm.url`；希望由 Kubernetes 管理模块字节时使用 `wasm.configMap`；`wasm.inline` 只适合小型测试模块。外部来源建议配置 `wasm.sha256` 做供应链完整性校验。
+
+## 目标绑定
+
+`targetRefs` 选择插件运行位置。建议先绑定到单个 `HTTPRoute` 这类较小范围，验证行为后再扩大作用域。如果目标缺失或未被接受，检查控制面日志和资源 status。
+
+## Hook 生命周期
+
+- `onRequest` 在上游代理前运行，适合自定义认证、请求校验和请求补充。
+- `onResponse` 在响应返回客户端前运行，适合响应头、审计元数据和响应校验。
+- `onStreamChunk` 针对流式 chunk 运行，应尽量保持执行时间很短。
+
+插件应该快速返回。长时间运行或阻塞会增加路由延迟，并可能触发沙箱 deadline。
+
+## 沙箱限制
+
+生产环境应显式设置 sandbox：
+
+- `maxMemoryBytes` 限制插件堆内存。
+- `maxExecutionTimeMs` 限制 hook 执行时间。
+- `allowNetwork` 默认保持 `false`，除非插件明确需要网络访问。
+- `allowFileSystem` 默认保持 `false`，除非插件明确需要文件系统访问。
+
+数据面运行时会执行插件加载和执行边界，但 sandbox 设置仍然是生产风险模型的一部分。
+
+## 发布检查清单
+
+- 启用实验功能并验证 `wasmplugins.gateway.nantian.dev`。
+- 先在非关键 route 上测试插件。
+- 外部模块使用 `sha256` 固定。
+- 使用尽可能小的 `targetRefs` 范围。
+- 默认关闭 sandbox 网络和文件系统访问。
+- 观察数据面日志和 metrics 中的插件加载失败、拒绝和延迟。
+
+## 相关页面
+
+- [实验功能](/zh/configuration/experimental-features/)
+- [自定义和实验资源](/zh/api-reference/crds/)
+- [数据面架构](/zh/architecture/dataplane/)
+- [安全与可观测性](/zh/features/security-observability/)

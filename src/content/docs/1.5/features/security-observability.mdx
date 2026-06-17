@@ -1,0 +1,36 @@
+---
+title: Security And Observability
+description: "Use TLS, backend validation, cross-namespace reference controls, Admin API, metrics, Grafana, and troubleshooting surfaces in Nantian Gateway 1.5."
+slug: 1.5/features/security-observability
+---
+
+Security and observability are part of the gateway path. Nantian Gateway 1.5 combines Gateway API security resources with runtime diagnostics from the control plane and data plane.
+
+## TLS And Backend Validation
+
+Nantian Gateway supports TLS termination on `Gateway` listeners, TLS passthrough with `TLSRoute`, backend TLS validation with `BackendTLSPolicy`, and mixed listener designs.
+
+## Cross-Namespace Controls
+
+Use `ReferenceGrant` when a route in one namespace must reference a backend, certificate, or other resource in another namespace. Keep grants narrow and review them during application onboarding and offboarding.
+
+## Runtime Visibility
+
+| Surface | Purpose |
+| --- | --- |
+| Health probes | Kubernetes liveness and readiness checks. |
+| Admin API | Runtime config, connected clients, backend state, and diagnostics. |
+| Prometheus metrics | Request, route, backend, xDS, TLS, AI, and Wasm signals where enabled. |
+| Grafana dashboards | Visual entry points for gateway health and traffic behavior. |
+| Alerting rules | Availability, latency, error, and certificate risk signals. |
+| Troubleshooting docs | Known failure modes and inspection commands. |
+
+AI Gateway and Wasm plugins add feature-specific signals such as token usage, policy decisions, plugin load failures, plugin rejections, and hook latency. These capabilities remain experimental where they depend on `AIService`, `TokenPolicy`, or `WasmPlugin`.
+
+## Related Pages
+
+- [TLS / mTLS Configuration](/1.5/configuration/tls/)
+- [Observability Configuration](/1.5/configuration/observability/)
+- [Metrics Reference](/1.5/operations/metrics/)
+- [Grafana Dashboard](/1.5/operations/grafana/)
+- [Troubleshooting](/1.5/operations/troubleshooting/)

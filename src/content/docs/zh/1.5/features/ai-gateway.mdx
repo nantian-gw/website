@@ -1,0 +1,103 @@
+---
+title: AI 网关
+description: "使用 Nantian Gateway 1.5 配置实验性 AI provider 目标、token 策略和 AI 流量可观测性。"
+slug: zh/1.5/features/ai-gateway
+---
+
+Nantian Gateway 1.5 可以在数据面处理 AI 流量，让应用通过同一个 Kubernetes Gateway 出口访问模型，同时由平台统一控制 provider、凭据、token 配额和可观测性。
+
+:::caution[实验功能]
+AI Gateway 资源使用 `gateway.nantian.dev/v1alpha1`，默认关闭。创建 `AIService` 或 `TokenPolicy` 前，需要启用 `featureMode: experimental`、安装 Nantian CRD，并设置 `controlplane.config.features.enableAiGateway: true`。
+:::
+
+## 核心资源
+
+| Resource | 作用 |
+| --- | --- |
+| `AIService` | 定义一个 AI provider/model 目标，包括 provider format、model name、auth、timeout、retry 和 observability 设置。 |
+| `TokenPolicy` | 把 token 和请求限制绑定到本地 Gateway API 目标，例如某个 `HTTPRoute`。 |
+
+运行时包含 OpenAI、Anthropic、Ollama 格式处理、token 统计、限流、prompt 和 PII 处理、semantic cache、fallback、A/B testing、cost tracking 和 multitenant context 等模块。除非稳定 CRD 字段明确暴露某项行为，否则不要把这些模块当成可稳定配置的 Kubernetes 字段。
+
+## 启用方式
+
+```yaml
+featureMode: experimental
+controlplane:
+  config:
+    features:
+      enableAiGateway: true
+```
+
+验证 CRD：
+
+```bash
+kubectl get crd aiservices.gateway.nantian.dev
+kubectl get crd tokenpolicies.gateway.nantian.dev
+```
+
+## AIService 示例
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-gpt4o
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  auth:
+    type: bearer
+    secret: openai-api-key
+    key: token
+    header: Authorization
+  timeout: 60s
+  retry:
+    maxRetries: 2
+    backoff: 500ms
+```
+
+## TokenPolicy 示例
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: ai-route-quota
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ai-route
+  tokensPerMinute: 100000
+  tokensPerHour: 5000000
+  requestsPerMinute: 1000
+  scope: route
+  burst: 1.5
+  onLimit: reject
+```
+
+## 可观测性
+
+`AIService` 可以携带 Langfuse 和 OpenTelemetry 设置。Nantian Gateway 不内置这些后端，需要指向你自己运维的系统。
+
+```yaml
+observability:
+  langfuse:
+    host: https://langfuse.example.com
+    publicKey: langfuse-public
+    secretKey: langfuse-secret
+  otel:
+    endpoint: http://otel-collector.observability.svc:4317
+    serviceName: nantian-ai-gateway
+```
+
+## 相关页面
+
+- [实验功能](/zh/1.5/configuration/experimental-features/)
+- [自定义和实验资源](/zh/1.5/api-reference/crds/)
+- [指标参考](/zh/1.5/operations/metrics/)
+- [故障排查](/zh/1.5/operations/troubleshooting/)

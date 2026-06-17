@@ -24,6 +24,17 @@ const sidebar = [
     ],
   },
   {
+    label: 'Features',
+    translations: { 'zh-CN': '功能' },
+    items: [
+      { label: 'Overview', link: 'features/', translations: { 'zh-CN': '概述' } },
+      { label: 'AI Gateway', link: 'features/ai-gateway', translations: { 'zh-CN': 'AI 网关' } },
+      { label: 'Wasm Plugins', link: 'features/wasm-plugins', translations: { 'zh-CN': 'Wasm 插件' } },
+      { label: 'Traffic Management', link: 'features/traffic-management', translations: { 'zh-CN': '流量治理' } },
+      { label: 'Security And Observability', link: 'features/security-observability', translations: { 'zh-CN': '安全与可观测性' } },
+    ],
+  },
+  {
     label: 'Getting Started',
     translations: { 'zh-CN': '快速开始' },
     items: [

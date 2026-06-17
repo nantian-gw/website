@@ -1,0 +1,36 @@
+---
+title: 安全与可观测性
+description: "在 Nantian Gateway 1.5 中使用 TLS、后端校验、跨 namespace 引用控制、Admin API、metrics、Grafana 和故障排查能力。"
+slug: zh/1.5/features/security-observability
+---
+
+安全和可观测性属于网关路径的一部分。Nantian Gateway 1.5 把 Gateway API 安全资源和控制面、数据面的运行时诊断能力组合在一起。
+
+## TLS 和后端校验
+
+Nantian Gateway 支持在 `Gateway` listener 上做 TLS termination、使用 `TLSRoute` 做 TLS passthrough、使用 `BackendTLSPolicy` 做后端 TLS 校验，以及组合多种 listener TLS 行为。
+
+## 跨 Namespace 控制
+
+某个 namespace 中的 route 需要引用另一个 namespace 的 backend、certificate 或其他资源时，使用 `ReferenceGrant` 显式授权。授权应保持最小范围，并在应用上线和下线时审查。
+
+## 运行时可见性
+
+| 入口 | 作用 |
+| --- | --- |
+| Health probes | Kubernetes liveness/readiness 检查。 |
+| Admin API | 运行时 config、connected clients、backend state 和诊断端点。 |
+| Prometheus metrics | 请求、route、backend、xDS、TLS，以及启用后的 AI 和 Wasm 信号。 |
+| Grafana dashboards | 网关健康和流量行为的可视化入口。 |
+| Alerting rules | 可用性、延迟、错误和证书风险信号。 |
+| Troubleshooting docs | 已知故障模式和排查命令。 |
+
+AI Gateway 和 Wasm 插件会增加 token 使用、策略决策、插件加载失败、插件拒绝和 hook 延迟等特定信号。只要这些能力依赖 `AIService`、`TokenPolicy` 或 `WasmPlugin`，就仍属于实验能力。
+
+## 相关页面
+
+- [TLS / mTLS 配置](/zh/1.5/configuration/tls/)
+- [可观测性配置](/zh/1.5/configuration/observability/)
+- [指标参考](/zh/1.5/operations/metrics/)
+- [Grafana 仪表盘](/zh/1.5/operations/grafana/)
+- [故障排查](/zh/1.5/operations/troubleshooting/)

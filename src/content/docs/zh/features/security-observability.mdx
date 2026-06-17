@@ -1,0 +1,71 @@
+---
+title: 安全与可观测性
+description: "使用 TLS、后端校验、跨 namespace 引用控制、Admin API、metrics、Grafana 和故障排查能力。"
+---
+
+安全和可观测性属于网关路径的一部分，不是额外附加组件。Nantian Gateway 把 Gateway API 安全资源和控制面、数据面的运行时诊断能力组合在一起。
+
+## TLS 和后端校验
+
+Nantian Gateway 支持几种 TLS 模式：
+
+- 在 `Gateway` listener 上做 TLS termination，用于标准 HTTPS 入口。
+- 使用 `TLSRoute` 做 TLS passthrough，让后端工作负载自己终止 TLS。
+- 使用 `BackendTLSPolicy` 做后端 TLS 校验。
+- 根据不同 route 需求组合多种 listener TLS 行为。
+
+运维细节见 [TLS / mTLS 配置](/zh/configuration/tls/)；资源字段见 [Gateway API 资源](/zh/api-reference/gateway-api/)。
+
+## 跨 Namespace 控制
+
+Gateway API 引用默认受 namespace 约束。某个 namespace 中的 route 需要引用另一个 namespace 的 backend、certificate 或其他资源时，使用 `ReferenceGrant` 显式授权。
+
+授权应保持最小范围：
+
+- 只授权真正需要访问的 source namespace。
+- 只授权应该被引用的 resource kind。
+- 应用上线和下线时同步审查 grant。
+
+## 运行时可见性
+
+这套系统暴露多个运维入口：
+
+| 入口 | 作用 |
+| --- | --- |
+| Health probes | 控制面和数据面 Pod 的 Kubernetes liveness/readiness 检查。 |
+| Admin API | 运行时 config、connected clients、backend state 和诊断端点。 |
+| Prometheus metrics | 请求、route、backend、xDS、TLS，以及启用后的 AI 和 Wasm 信号。 |
+| Grafana dashboards | 网关健康和流量行为的预置可视化入口。 |
+| Alerting rules | 可用性、延迟、错误和证书风险的生产信号。 |
+| Troubleshooting docs | 已知故障模式和排查命令。 |
+
+从 [可观测性配置](/zh/configuration/observability/) 开始，再使用 [指标参考](/zh/operations/metrics/) 和 [Grafana 仪表盘](/zh/operations/grafana/)。
+
+## AI 和 Wasm 信号
+
+AI Gateway 和 Wasm 插件会增加 token 使用、策略决策、插件加载失败、插件拒绝和 hook 延迟等特定信号。只要这些能力依赖 `AIService`、`TokenPolicy` 或 `WasmPlugin`，就仍属于实验能力。
+
+功能级 rollout 指南见：
+
+- [AI 网关](/zh/features/ai-gateway/)
+- [Wasm 插件](/zh/features/wasm-plugins/)
+
+## 故障排查入口
+
+当 route 行为异常时：
+
+1. 检查 `Gateway`、route 和 policy 资源的 Kubernetes status。
+2. 检查控制面日志中的翻译和 reconcile 错误。
+3. 检查数据面日志中的 xDS、backend、TLS、AI 或 Wasm runtime 错误。
+4. 查看 metrics 和 dashboards 中的 route 级症状。
+5. 需要 runtime state 而不是 desired state 时，使用 Admin API。
+
+命令和已知故障模式见 [故障排查](/zh/operations/troubleshooting/)。
+
+## 相关页面
+
+- [TLS / mTLS 配置](/zh/configuration/tls/)
+- [可观测性配置](/zh/configuration/observability/)
+- [指标参考](/zh/operations/metrics/)
+- [Grafana 仪表盘](/zh/operations/grafana/)
+- [故障排查](/zh/operations/troubleshooting/)

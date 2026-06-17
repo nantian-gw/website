@@ -1,0 +1,71 @@
+---
+title: Security And Observability
+description: "Use TLS, backend validation, cross-namespace reference controls, Admin API, metrics, Grafana, and troubleshooting surfaces."
+---
+
+Security and observability are part of the gateway path, not separate add-ons. Nantian Gateway combines Gateway API security resources with runtime diagnostics from the control plane and data plane.
+
+## TLS And Backend Validation
+
+Nantian Gateway supports several TLS patterns:
+
+- TLS termination on `Gateway` listeners for standard HTTPS ingress.
+- TLS passthrough with `TLSRoute` when backend workloads terminate TLS.
+- Backend TLS validation with `BackendTLSPolicy`.
+- Mixed listener designs when different routes require different TLS behavior.
+
+Use [TLS / mTLS Configuration](/configuration/tls/) for operational details and [Gateway API Resources](/api-reference/gateway-api/) for resource fields.
+
+## Cross-Namespace Controls
+
+Gateway API references are namespace-scoped by default. Use `ReferenceGrant` when a route in one namespace must reference a backend, certificate, or other resource in another namespace.
+
+Keep grants narrow:
+
+- Grant only the source namespace that needs access.
+- Grant only the resource kind that should be referenced.
+- Review grants as part of application onboarding and offboarding.
+
+## Runtime Visibility
+
+The stack exposes several operational surfaces:
+
+| Surface | Purpose |
+| --- | --- |
+| Health probes | Kubernetes liveness and readiness checks for control plane and data plane pods. |
+| Admin API | Runtime config, connected clients, backend state, and diagnostic endpoints. |
+| Prometheus metrics | Request, route, backend, xDS, TLS, AI, and Wasm signals where enabled. |
+| Grafana dashboards | Prebuilt visual entry points for gateway health and traffic behavior. |
+| Alerting rules | Production signals for availability, latency, errors, and certificate risk. |
+| Troubleshooting docs | Known failure modes and inspection commands. |
+
+Start with [Observability Configuration](/configuration/observability/), then use [Metrics Reference](/operations/metrics/) and [Grafana Dashboard](/operations/grafana/).
+
+## AI And Wasm Signals
+
+AI Gateway and Wasm plugins add feature-specific signals such as token usage, policy decisions, plugin load failures, plugin rejections, and hook latency. These capabilities are experimental where they depend on `AIService`, `TokenPolicy`, or `WasmPlugin`.
+
+Use the dedicated pages for feature-specific rollout guidance:
+
+- [AI Gateway](/features/ai-gateway/)
+- [Wasm Plugins](/features/wasm-plugins/)
+
+## Troubleshooting Entry Points
+
+When a route behaves unexpectedly:
+
+1. Check Kubernetes status on `Gateway`, route, and policy resources.
+2. Check control plane logs for translation and reconciliation errors.
+3. Check data plane logs for xDS, backend, TLS, AI, or Wasm runtime errors.
+4. Inspect metrics and dashboards for route-level symptoms.
+5. Use the Admin API when you need runtime state instead of desired state.
+
+For commands and known failure modes, see [Troubleshooting](/operations/troubleshooting/).
+
+## Related Pages
+
+- [TLS / mTLS Configuration](/configuration/tls/)
+- [Observability Configuration](/configuration/observability/)
+- [Metrics Reference](/operations/metrics/)
+- [Grafana Dashboard](/operations/grafana/)
+- [Troubleshooting](/operations/troubleshooting/)

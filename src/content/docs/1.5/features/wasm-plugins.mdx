@@ -1,0 +1,64 @@
+---
+title: Wasm Plugins
+description: "Load sandboxed Wasm modules into the Nantian Gateway 1.5 data plane with the experimental WasmPlugin API."
+slug: 1.5/features/wasm-plugins
+---
+
+Wasm plugins let platform teams add custom request, response, or stream processing without rebuilding the data plane. Plugins are declared with `WasmPlugin` resources and executed inside the Rust data plane runtime.
+
+:::caution[Experimental]
+`WasmPlugin` uses `gateway.nantian.dev/v1alpha1`. Install the CRD, enable experimental features, and test each plugin path before production rollout.
+:::
+
+## Plugin Model
+
+| Part | Fields | Purpose |
+| --- | --- | --- |
+| Module source | `wasm.url`, `wasm.configMap`, `wasm.inline`, `wasm.sha256` | Locates and verifies the `.wasm` module. |
+| Target binding | `targetRefs` | Binds the plugin to local Gateway API target resources. |
+| Hook selection | `hooks` | Selects `onRequest`, `onResponse`, or `onStreamChunk`. |
+| Sandbox limits | `sandbox` | Bounds memory, execution time, network, and filesystem access. |
+
+## Example
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: request-audit
+  namespace: nantian-demo
+spec:
+  wasm:
+    url: https://example.com/plugins/request-audit.wasm
+    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo
+  hooks:
+    - onRequest
+    - onResponse
+    - onStreamChunk
+  config: |
+    {"mode":"audit"}
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+## Rollout Checklist
+
+- Enable experimental features and verify `wasmplugins.gateway.nantian.dev`.
+- Pin external modules with `sha256`.
+- Use narrow `targetRefs` first.
+- Keep `allowNetwork` and `allowFileSystem` disabled unless required.
+- Watch data plane logs and metrics for plugin load failures, rejections, and latency.
+
+## Related Pages
+
+- [Experimental Features](/1.5/configuration/experimental-features/)
+- [Custom And Experimental Resources](/1.5/api-reference/crds/)
+- [Data Plane Architecture](/1.5/architecture/dataplane/)
+- [Security And Observability](/1.5/features/security-observability/)

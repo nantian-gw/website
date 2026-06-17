@@ -1,0 +1,38 @@
+---
+title: 功能
+description: "Nantian Gateway 1.5 路由、AI 网关、Wasm 扩展、安全和可观测性的功能地图。"
+slug: zh/1.5/features
+---
+
+Nantian Gateway 1.5 把标准 Kubernetes Gateway API 路由能力，与 AI 流量、token 策略、Wasm 插件和后端负载均衡策略等实验扩展组合在一起。
+
+## 功能地图
+
+| 领域 | 主要 API | 稳定性 | 从这里开始 |
+| --- | --- | --- | --- |
+| 流量路由 | `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute` | 取决于资源本身，属于 Gateway API standard 或 alpha | [流量治理](/zh/1.5/features/traffic-management/) |
+| AI 流量 | `AIService`, `TokenPolicy` | Nantian 实验 API | [AI 网关](/zh/1.5/features/ai-gateway/) |
+| 自定义代理逻辑 | `WasmPlugin` | Nantian 实验 API | [Wasm 插件](/zh/1.5/features/wasm-plugins/) |
+| 后端策略 | `BackendLBPolicy` | Gateway API 实验策略 | [流量治理](/zh/1.5/features/traffic-management/) |
+| 安全和运维 | `BackendTLSPolicy`, `ReferenceGrant`, Admin API, metrics | 稳定、扩展和实验能力混合 | [安全与可观测性](/zh/1.5/features/security-observability/) |
+
+## 稳定 Gateway API 能力
+
+使用 `GatewayClass`、`Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute`、`TLSRoute`、`BackendTLSPolicy` 和 `ReferenceGrant` 配置可移植的 Kubernetes 原生路由。字段细节见 [Gateway API 资源](/zh/1.5/api-reference/gateway-api/)。
+
+## 实验扩展能力
+
+Nantian Gateway 1.5 也包含实验性 `AIService`、`TokenPolicy`、`WasmPlugin` 和 `BackendLBPolicy`。
+
+:::caution[实验 API]
+创建实验资源前，先安装所需 CRD 并启用对应 feature flags。这些资源的 schema 和运行时行为可能在后续版本变化。
+:::
+
+使用这些 API 前先读 [实验功能](/zh/1.5/configuration/experimental-features/)，再看 [自定义和实验资源](/zh/1.5/api-reference/crds/)。
+
+## 下一步
+
+- [AI 网关](/zh/1.5/features/ai-gateway/)
+- [Wasm 插件](/zh/1.5/features/wasm-plugins/)
+- [流量治理](/zh/1.5/features/traffic-management/)
+- [安全与可观测性](/zh/1.5/features/security-observability/)

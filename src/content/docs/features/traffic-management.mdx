@@ -1,0 +1,95 @@
+---
+title: Traffic Management
+description: "Route HTTP, gRPC, TCP, UDP, and TLS traffic and apply experimental backend load-balancing policy."
+---
+
+Nantian Gateway uses Kubernetes Gateway API resources as the primary traffic-management interface. The same model covers edge ingress, internal service routing, gRPC, raw TCP or UDP streams, and TLS passthrough.
+
+## Route Types
+
+| Traffic | Resource | Use case |
+| --- | --- | --- |
+| HTTP and HTTPS | `HTTPRoute` | REST APIs, web apps, header/path/query matching, redirects, rewrites, and traffic splitting. |
+| gRPC | `GRPCRoute` | Service and method routing for gRPC workloads. |
+| TCP | `TCPRoute` | Databases, queues, and custom TCP protocols. |
+| UDP | `UDPRoute` | DNS, telemetry, media, and custom UDP protocols. |
+| TLS passthrough | `TLSRoute` | SNI-based forwarding when backends terminate TLS themselves. |
+
+Start with [Your First Route](/getting-started/first-route/) for the minimal HTTP path, then use [Gateway API Resources](/api-reference/gateway-api/) for field-level details.
+
+## Weighted Traffic Splitting
+
+Gateway API `backendRefs.weight` supports canary and A/B rollout patterns:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: api-v1
+          port: 8080
+          weight: 90
+        - name: api-v2
+          port: 8080
+          weight: 10
+```
+
+Use weights with observability so you can compare latency, error rate, and backend behavior during a rollout.
+
+## Backend Load-Balancing Policy
+
+`BackendLBPolicy` is an experimental Gateway API policy that configures how a backend target is balanced.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: echo-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: echo
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+```
+
+Supported strategy values are:
+
+- `RoundRobin`
+- `ConsistentHash`
+- `LeastRequest`
+- `Random`
+
+For `ConsistentHash`, supported key types are:
+
+- `SourceIP`
+- `Header`
+- `Hostname`
+
+When `keyType: Header` is used, set `headerName`.
+
+## Production Notes
+
+- Keep route ownership clear by namespace and application team.
+- Use `ReferenceGrant` for intentional cross-namespace backend references.
+- Prefer small canary percentages until health signals are visible.
+- Treat `BackendLBPolicy` as experimental and verify generated data plane behavior before relying on it.
+- Use the [Production Installation](/installation/production/) guide for high-availability deployment patterns.
+
+## Related Pages
+
+- [Gateway API Resources](/api-reference/gateway-api/)
+- [Custom And Experimental Resources](/api-reference/crds/)
+- [Security And Observability](/features/security-observability/)
+- [Production Installation](/installation/production/)
