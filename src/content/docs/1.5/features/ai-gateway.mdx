@@ -1,0 +1,103 @@
+---
+title: AI Gateway
+description: "Configure experimental AI provider targets, token policies, and AI traffic observability with Nantian Gateway 1.5."
+slug: 1.5/features/ai-gateway
+---
+
+Nantian Gateway 1.5 can handle AI traffic in the data plane so applications route through one Kubernetes Gateway while the platform controls providers, credentials, token quotas, and observability.
+
+:::caution[Experimental]
+AI Gateway resources use `gateway.nantian.dev/v1alpha1` and are disabled by default. Enable `featureMode: experimental`, install the Nantian CRDs, and set `controlplane.config.features.enableAiGateway: true` before creating `AIService` or `TokenPolicy`.
+:::
+
+## Core Resources
+
+| Resource | Purpose |
+| --- | --- |
+| `AIService` | Defines one AI provider/model target, including provider format, model name, auth, timeout, retry, and observability settings. |
+| `TokenPolicy` | Attaches token and request limits to local Gateway API targets such as an `HTTPRoute`. |
+
+The runtime includes modules for OpenAI, Anthropic, and Ollama format handling, token accounting, rate limiting, prompt and PII processing, semantic cache, fallback, A/B testing, cost tracking, and multitenant context. Treat those as runtime modules unless a stable CRD field explicitly exposes the behavior you want to configure.
+
+## Enablement
+
+```yaml
+featureMode: experimental
+controlplane:
+  config:
+    features:
+      enableAiGateway: true
+```
+
+Verify the CRDs:
+
+```bash
+kubectl get crd aiservices.gateway.nantian.dev
+kubectl get crd tokenpolicies.gateway.nantian.dev
+```
+
+## AIService Example
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-gpt4o
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  auth:
+    type: bearer
+    secret: openai-api-key
+    key: token
+    header: Authorization
+  timeout: 60s
+  retry:
+    maxRetries: 2
+    backoff: 500ms
+```
+
+## TokenPolicy Example
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: ai-route-quota
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: ai-route
+  tokensPerMinute: 100000
+  tokensPerHour: 5000000
+  requestsPerMinute: 1000
+  scope: route
+  burst: 1.5
+  onLimit: reject
+```
+
+## Observability
+
+`AIService` can carry Langfuse and OpenTelemetry settings. Nantian Gateway does not bundle those backends; point fields at systems you operate.
+
+```yaml
+observability:
+  langfuse:
+    host: https://langfuse.example.com
+    publicKey: langfuse-public
+    secretKey: langfuse-secret
+  otel:
+    endpoint: http://otel-collector.observability.svc:4317
+    serviceName: nantian-ai-gateway
+```
+
+## Related Pages
+
+- [Experimental Features](/1.5/configuration/experimental-features/)
+- [Custom And Experimental Resources](/1.5/api-reference/crds/)
+- [Metrics Reference](/1.5/operations/metrics/)
+- [Troubleshooting](/1.5/operations/troubleshooting/)

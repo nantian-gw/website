@@ -1,0 +1,65 @@
+---
+title: 流量治理
+description: "在 Nantian Gateway 1.5 中路由 HTTP、gRPC、TCP、UDP 和 TLS 流量，并应用实验性后端负载均衡策略。"
+slug: zh/1.5/features/traffic-management
+---
+
+Nantian Gateway 1.5 使用 Kubernetes Gateway API 资源作为主要流量治理接口。
+
+## 路由类型
+
+| 流量 | Resource | 场景 |
+| --- | --- | --- |
+| HTTP 和 HTTPS | `HTTPRoute` | REST API、Web 应用、matching、filters 和流量拆分。 |
+| gRPC | `GRPCRoute` | gRPC 工作负载的 service 和 method 路由。 |
+| TCP | `TCPRoute` | 数据库、队列和自定义 TCP 协议。 |
+| UDP | `UDPRoute` | DNS、遥测、媒体和自定义 UDP 协议。 |
+| TLS 透传 | `TLSRoute` | 后端自己终止 TLS 时，基于 SNI 转发。 |
+
+## 加权流量拆分
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary
+spec:
+  rules:
+    - backendRefs:
+        - name: api-v1
+          port: 8080
+          weight: 90
+        - name: api-v2
+          port: 8080
+          weight: 10
+```
+
+## 后端负载均衡策略
+
+`BackendLBPolicy` 是一个实验性 Gateway API policy，用于配置 backend balancing。
+
+支持的 strategy 值包括 `RoundRobin`、`ConsistentHash`、`LeastRequest` 和 `Random`。`ConsistentHash` 支持的 key type 包括 `SourceIP`、`Header` 和 `Hostname`。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: echo-lb
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: echo
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+```
+
+## 相关页面
+
+- [Gateway API 资源](/zh/1.5/api-reference/gateway-api/)
+- [自定义和实验资源](/zh/1.5/api-reference/crds/)
+- [第一个路由](/zh/1.5/getting-started/first-route/)
+- [生产安装](/zh/1.5/installation/production/)

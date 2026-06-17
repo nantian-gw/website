@@ -1,0 +1,51 @@
+---
+title: Features
+description: "A guided map of Nantian Gateway routing, AI Gateway, Wasm extension, security, and observability capabilities."
+---
+
+Nantian Gateway combines standard Kubernetes Gateway API routing with experimental extension APIs for AI traffic, token-aware policy, Wasm plugins, and backend load-balancing policy. This section gives each major capability a direct entry point.
+
+## Feature Map
+
+| Area | Primary APIs | Stability | Start here |
+| --- | --- | --- | --- |
+| Traffic routing | `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute` | Gateway API standard or alpha, depending on resource | [Traffic Management](/features/traffic-management/) |
+| AI traffic | `AIService`, `TokenPolicy` | Experimental Nantian API | [AI Gateway](/features/ai-gateway/) |
+| Custom proxy logic | `WasmPlugin` | Experimental Nantian API | [Wasm Plugins](/features/wasm-plugins/) |
+| Backend policy | `BackendLBPolicy` | Experimental Gateway API policy | [Traffic Management](/features/traffic-management/) |
+| Security and operations | `BackendTLSPolicy`, `ReferenceGrant`, Admin API, metrics | Mixed stable and extended APIs | [Security And Observability](/features/security-observability/) |
+
+## Stable Gateway API Capabilities
+
+Use the standard Gateway API resources when you need portable Kubernetes-native routing:
+
+- `GatewayClass` identifies the Nantian Gateway controller.
+- `Gateway` defines listeners, ports, protocols, and TLS modes.
+- `HTTPRoute` and `GRPCRoute` route application traffic with matches, filters, and weighted backends.
+- `TCPRoute`, `UDPRoute`, and `TLSRoute` handle non-HTTP and TLS passthrough workloads.
+- `BackendTLSPolicy` configures TLS validation from the gateway to backend services.
+- `ReferenceGrant` allows controlled cross-namespace references.
+
+These resources are the default way to configure Nantian Gateway. For field-level details, see [Gateway API Resources](/api-reference/gateway-api/).
+
+## Experimental Extension Capabilities
+
+Nantian Gateway also ships experimental extension APIs:
+
+- `AIService` describes an AI provider and model target.
+- `TokenPolicy` attaches token and request quotas to local Gateway API targets.
+- `WasmPlugin` loads a sandboxed Wasm module and binds it to target resources.
+- `BackendLBPolicy` selects backend load-balancing behavior and optional session persistence.
+
+:::caution[Experimental APIs]
+Install the required CRDs and enable the documented feature flags before creating experimental resources. Their schemas and runtime behavior can change between releases.
+:::
+
+Read [Experimental Features](/configuration/experimental-features/) before using these APIs, then use [Custom And Experimental Resources](/api-reference/crds/) for current field references.
+
+## Where To Go Next
+
+- [AI Gateway](/features/ai-gateway/) for provider/model targets, token quotas, and AI observability.
+- [Wasm Plugins](/features/wasm-plugins/) for sandboxed request, response, and stream hooks.
+- [Traffic Management](/features/traffic-management/) for Gateway API routing, traffic splitting, and backend load-balancing policy.
+- [Security And Observability](/features/security-observability/) for TLS, cross-namespace controls, Admin API, metrics, Grafana, and troubleshooting.

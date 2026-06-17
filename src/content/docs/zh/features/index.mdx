@@ -1,0 +1,51 @@
+---
+title: 功能
+description: "Nantian Gateway 路由、AI 网关、Wasm 扩展、安全和可观测性的功能地图。"
+---
+
+Nantian Gateway 把标准 Kubernetes Gateway API 路由能力，与 AI 流量、token 策略、Wasm 插件和后端负载均衡策略等实验扩展组合在一起。本节给主要能力提供直接入口。
+
+## 功能地图
+
+| 领域 | 主要 API | 稳定性 | 从这里开始 |
+| --- | --- | --- | --- |
+| 流量路由 | `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute` | 取决于资源本身，属于 Gateway API standard 或 alpha | [流量治理](/zh/features/traffic-management/) |
+| AI 流量 | `AIService`, `TokenPolicy` | Nantian 实验 API | [AI 网关](/zh/features/ai-gateway/) |
+| 自定义代理逻辑 | `WasmPlugin` | Nantian 实验 API | [Wasm 插件](/zh/features/wasm-plugins/) |
+| 后端策略 | `BackendLBPolicy` | Gateway API 实验策略 | [流量治理](/zh/features/traffic-management/) |
+| 安全和运维 | `BackendTLSPolicy`, `ReferenceGrant`, Admin API, metrics | 稳定、扩展和实验能力混合 | [安全与可观测性](/zh/features/security-observability/) |
+
+## 稳定 Gateway API 能力
+
+需要可移植的 Kubernetes 原生路由时，优先使用标准 Gateway API 资源：
+
+- `GatewayClass` 标识 Nantian Gateway controller。
+- `Gateway` 定义监听器、端口、协议和 TLS 模式。
+- `HTTPRoute` 和 `GRPCRoute` 用 matches、filters 和 weighted backends 路由应用流量。
+- `TCPRoute`、`UDPRoute` 和 `TLSRoute` 处理非 HTTP 以及 TLS 透传负载。
+- `BackendTLSPolicy` 配置网关到后端服务的 TLS 校验。
+- `ReferenceGrant` 控制跨 namespace 引用。
+
+这些资源是配置 Nantian Gateway 的默认方式。字段细节见 [Gateway API 资源](/zh/api-reference/gateway-api/)。
+
+## 实验扩展能力
+
+Nantian Gateway 也提供实验扩展 API：
+
+- `AIService` 描述一个 AI provider 和 model 目标。
+- `TokenPolicy` 把 token 和请求配额挂到本地 Gateway API 目标上。
+- `WasmPlugin` 加载沙箱化 Wasm 模块并绑定到目标资源。
+- `BackendLBPolicy` 选择后端负载均衡行为和可选 session persistence。
+
+:::caution[实验 API]
+创建实验资源前，先安装所需 CRD 并启用对应 feature flags。这些资源的 schema 和运行时行为可能在后续版本变化。
+:::
+
+使用这些 API 前先读 [实验功能](/zh/configuration/experimental-features/)，再看 [自定义和实验资源](/zh/api-reference/crds/) 获取当前字段参考。
+
+## 下一步
+
+- [AI 网关](/zh/features/ai-gateway/)：provider/model 目标、token 配额和 AI 可观测性。
+- [Wasm 插件](/zh/features/wasm-plugins/)：沙箱化 request、response 和 stream hook。
+- [流量治理](/zh/features/traffic-management/)：Gateway API 路由、流量拆分和后端负载均衡策略。
+- [安全与可观测性](/zh/features/security-observability/)：TLS、跨 namespace 控制、Admin API、metrics、Grafana 和故障排查。

@@ -1,0 +1,95 @@
+---
+title: 流量治理
+description: "路由 HTTP、gRPC、TCP、UDP 和 TLS 流量，并应用实验性后端负载均衡策略。"
+---
+
+Nantian Gateway 使用 Kubernetes Gateway API 资源作为主要流量治理接口。同一套模型可以覆盖边缘入口、内部服务路由、gRPC、原始 TCP 或 UDP 流，以及 TLS 透传。
+
+## 路由类型
+
+| 流量 | Resource | 场景 |
+| --- | --- | --- |
+| HTTP 和 HTTPS | `HTTPRoute` | REST API、Web 应用、header/path/query matching、redirect、rewrite 和流量拆分。 |
+| gRPC | `GRPCRoute` | gRPC 工作负载的 service 和 method 路由。 |
+| TCP | `TCPRoute` | 数据库、队列和自定义 TCP 协议。 |
+| UDP | `UDPRoute` | DNS、遥测、媒体和自定义 UDP 协议。 |
+| TLS 透传 | `TLSRoute` | 后端自己终止 TLS 时，基于 SNI 转发。 |
+
+最小 HTTP 路径从 [第一个路由](/zh/getting-started/first-route/) 开始；字段细节见 [Gateway API 资源](/zh/api-reference/gateway-api/)。
+
+## 加权流量拆分
+
+Gateway API 的 `backendRefs.weight` 支持金丝雀和 A/B rollout：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: api-v1
+          port: 8080
+          weight: 90
+        - name: api-v2
+          port: 8080
+          weight: 10
+```
+
+使用权重切流时，应结合可观测性比较延迟、错误率和后端行为。
+
+## 后端负载均衡策略
+
+`BackendLBPolicy` 是一个实验性 Gateway API policy，用于配置某个 backend target 的均衡方式。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: echo-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: echo
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+```
+
+支持的 strategy 值：
+
+- `RoundRobin`
+- `ConsistentHash`
+- `LeastRequest`
+- `Random`
+
+`ConsistentHash` 支持的 key type：
+
+- `SourceIP`
+- `Header`
+- `Hostname`
+
+使用 `keyType: Header` 时需要设置 `headerName`。
+
+## 生产建议
+
+- 按 namespace 和应用团队明确 route ownership。
+- 跨 namespace backend 引用必须通过 `ReferenceGrant` 显式授权。
+- 健康信号可见前，金丝雀比例应从小流量开始。
+- `BackendLBPolicy` 是实验能力，依赖前先验证生成的数据面行为。
+- 高可用部署模式见 [生产安装](/zh/installation/production/)。
+
+## 相关页面
+
+- [Gateway API 资源](/zh/api-reference/gateway-api/)
+- [自定义和实验资源](/zh/api-reference/crds/)
+- [安全与可观测性](/zh/features/security-observability/)
+- [生产安装](/zh/installation/production/)

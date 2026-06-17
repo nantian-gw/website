@@ -1,0 +1,38 @@
+---
+title: Features
+description: "A guided map of Nantian Gateway 1.5 routing, AI Gateway, Wasm extension, security, and observability capabilities."
+slug: 1.5/features
+---
+
+Nantian Gateway 1.5 combines standard Kubernetes Gateway API routing with experimental extension APIs for AI traffic, token-aware policy, Wasm plugins, and backend load-balancing policy.
+
+## Feature Map
+
+| Area | Primary APIs | Stability | Start here |
+| --- | --- | --- | --- |
+| Traffic routing | `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute` | Gateway API standard or alpha, depending on resource | [Traffic Management](/1.5/features/traffic-management/) |
+| AI traffic | `AIService`, `TokenPolicy` | Experimental Nantian API | [AI Gateway](/1.5/features/ai-gateway/) |
+| Custom proxy logic | `WasmPlugin` | Experimental Nantian API | [Wasm Plugins](/1.5/features/wasm-plugins/) |
+| Backend policy | `BackendLBPolicy` | Experimental Gateway API policy | [Traffic Management](/1.5/features/traffic-management/) |
+| Security and operations | `BackendTLSPolicy`, `ReferenceGrant`, Admin API, metrics | Mixed stable and extended APIs | [Security And Observability](/1.5/features/security-observability/) |
+
+## Stable Gateway API Capabilities
+
+Use `GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute`, `BackendTLSPolicy`, and `ReferenceGrant` for portable Kubernetes-native routing. For field-level details, see [Gateway API Resources](/1.5/api-reference/gateway-api/).
+
+## Experimental Extension Capabilities
+
+Nantian Gateway 1.5 also includes experimental `AIService`, `TokenPolicy`, `WasmPlugin`, and `BackendLBPolicy` resources.
+
+:::caution[Experimental APIs]
+Install the required CRDs and enable the documented feature flags before creating experimental resources. Their schemas and runtime behavior can change between releases.
+:::
+
+Read [Experimental Features](/1.5/configuration/experimental-features/) before using these APIs, then use [Custom And Experimental Resources](/1.5/api-reference/crds/) for field references.
+
+## Where To Go Next
+
+- [AI Gateway](/1.5/features/ai-gateway/)
+- [Wasm Plugins](/1.5/features/wasm-plugins/)
+- [Traffic Management](/1.5/features/traffic-management/)
+- [Security And Observability](/1.5/features/security-observability/)
