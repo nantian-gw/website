@@ -96,8 +96,8 @@ const orgJsonLd = {
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content="https://nantian.dev/og-image.png" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
-    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
-    <script type="application/ld+json" set:html={JSON.stringify(orgJsonLd)} />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(orgJsonLd)} />
     <slot name="head" />
   </head>
   <body class="bg-[var(--color-bg-base)] text-[var(--color-text-primary)] antialiased">

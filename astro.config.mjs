@@ -1,4 +1,5 @@
 import { defineConfig } from 'astro/config';
+import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 import starlightVersions from 'starlight-versions';
@@ -8,8 +9,9 @@ import { docsSidebar } from './src/config/docsSidebar.js';
 export default defineConfig({
   site: 'https://nantian.dev',
   markdown: {
-    gfm: true,
-    rehypePlugins: [rehypeMermaid],
+    processor: unified({
+      rehypePlugins: [rehypeMermaid],
+    }),
   },
   integrations: [
     starlight({
@@ -36,7 +38,6 @@ export default defineConfig({
       },
       sidebar: docsSidebar,
       components: {
-        Banner: './src/components/docs/Banner.astro',
         Footer: './src/components/docs/Footer.astro',
         Head: './src/components/docs/Head.astro',
       },

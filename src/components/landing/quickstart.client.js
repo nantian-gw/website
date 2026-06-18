@@ -1,17 +1,9 @@
 const copyText = async (value) => {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
+  if (!window.isSecureContext || !navigator.clipboard?.writeText) {
+    throw new Error('Clipboard API unavailable in this context');
   }
 
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  document.body.removeChild(textarea);
+  await navigator.clipboard.writeText(value);
 };
 
 const buttons = document.querySelectorAll('.code-copy-btn');
