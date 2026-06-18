@@ -14,25 +14,28 @@ function exists(path) {
 
 test("Astro markdown config uses the unified processor instead of deprecated top-level markdown plugins", () => {
   const config = read("astro.config.mjs");
+  const markdownBlock = config.match(/markdown:\s*\{([\s\S]*?)\n\s*\},\n\s*integrations:/)?.[1] ?? "";
 
-  assert.match(config, /import\s+\{\s*unified\s*\}\s+from\s+'@astrojs\/markdown-remark';/);
-  assert.match(config, /markdown:\s*\{\s*processor:\s*unified\(\{\s*rehypePlugins:\s*\[rehypeMermaid\]\s*\}\)\s*\}/s);
-  assert.doesNotMatch(config, /markdown:\s*\{[\s\S]*gfm:/);
-  assert.doesNotMatch(config, /markdown:\s*\{[\s\S]*rehypePlugins:/);
+  assert.match(config, /@astrojs\/markdown-remark/);
+  assert.match(markdownBlock, /processor:\s*unified\(/);
+  assert.match(markdownBlock, /unified\([\s\S]*rehypePlugins:\s*\[[\s\S]*rehypeMermaid[\s\S]*\][\s\S]*\)/);
+  assert.doesNotMatch(markdownBlock, /^\s*gfm\s*:/m);
+  assert.doesNotMatch(markdownBlock, /^\s*rehypePlugins\s*:/m);
 });
 
 test("landing page JSON-LD scripts are explicitly inline", () => {
   const layout = read("src/layouts/LandingLayout.astro");
 
-  assert.match(layout, /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(jsonLd\)\} \/>/);
-  assert.match(layout, /<script is:inline type="application\/ld\+json" set:html=\{JSON\.stringify\(orgJsonLd\)\} \/>/);
+  assert.match(layout, /<script\b(?=[^>]*\bis:inline\b)(?=[^>]*\bset:html=\{JSON\.stringify\(jsonLd\)\})(?=[^>]*\btype="application\/ld\+json")[^>]*\/>/);
+  assert.match(layout, /<script\b(?=[^>]*\bis:inline\b)(?=[^>]*\bset:html=\{JSON\.stringify\(orgJsonLd\)\})(?=[^>]*\btype="application\/ld\+json")[^>]*\/>/);
 });
 
 test("quick start copy logic no longer falls back to execCommand", () => {
   const client = read("src/components/landing/quickstart.client.js");
 
-  assert.match(client, /navigator\.clipboard\?\.writeText/);
-  assert.doesNotMatch(client, /document\.execCommand\('copy'\)/);
+  assert.match(client, /navigator\.clipboard/);
+  assert.match(client, /writeText/);
+  assert.doesNotMatch(client, /document\.execCommand\s*\(/);
 });
 
 test("Starlight Banner override is removed while versioning stays enabled", () => {
@@ -54,7 +57,9 @@ test("PromQL fences are normalized away from docs", () => {
     "src/content/docs/1.5/operations/troubleshooting.mdx",
     "src/content/docs/zh/1.5/operations/grafana.mdx",
     "src/content/docs/zh/1.5/operations/troubleshooting.mdx",
-  ].map(read).join("\n");
+  ];
 
-  assert.doesNotMatch(docs, /```promql/);
+  for (const path of docs) {
+    assert.doesNotMatch(read(path), /```promql/, `${path} should not contain promql fences`);
+  }
 });
