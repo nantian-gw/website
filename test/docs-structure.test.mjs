@@ -94,6 +94,22 @@ function assertSidebarDocs(entries) {
   }
 }
 
+function assertIntentionalDrift(currentPaths, archivedPaths, expectedCurrentOnly, expectedArchivedOnly, currentLabel, archivedLabel) {
+  const currentOnly = currentPaths.filter((path) => !archivedPaths.includes(path)).sort();
+  const archivedOnly = archivedPaths.filter((path) => !currentPaths.includes(path)).sort();
+
+  assert.deepEqual(
+    currentOnly,
+    expectedCurrentOnly,
+    `${currentLabel} differs from ${archivedLabel} beyond the approved current-only set`,
+  );
+  assert.deepEqual(
+    archivedOnly,
+    expectedArchivedOnly,
+    `${archivedLabel} differs from ${currentLabel} beyond the approved archived-only set`,
+  );
+}
+
 test('current English and Chinese docs stay path-mirrored', () => {
   assertMirroredDocs(currentEnglishDocs(), currentChineseDocs(), 'current English docs', 'current Chinese docs');
 });
@@ -103,11 +119,25 @@ test('versioned English and Chinese docs stay path-mirrored', () => {
 });
 
 test('current docs intentionally keep pages that archived docs do not need', () => {
-  const currentDocs = currentEnglishDocs();
-  const versionedDocs = collectMdxFiles(versionRoot);
+  const expectedCurrentOnly = ['configuration/helm-values.mdx'];
+  const expectedArchivedOnly = [];
 
-  assert.ok(currentDocs.includes('configuration/helm-values.mdx'));
-  assert.ok(!versionedDocs.includes('configuration/helm-values.mdx'));
+  assertIntentionalDrift(
+    currentEnglishDocs(),
+    collectMdxFiles(versionRoot),
+    expectedCurrentOnly,
+    expectedArchivedOnly,
+    'current English docs',
+    'versioned English docs',
+  );
+  assertIntentionalDrift(
+    currentChineseDocs(),
+    collectMdxFiles(zhVersionRoot),
+    expectedCurrentOnly,
+    expectedArchivedOnly,
+    'current Chinese docs',
+    'versioned Chinese docs',
+  );
 });
 
 test('sidebar links resolve to real docs files and keep zh-CN translations', () => {

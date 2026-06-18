@@ -3,6 +3,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { docsSidebar } from "../src/config/docsSidebar.js";
+
 const root = new URL("../", import.meta.url);
 
 function read(path) {
@@ -38,10 +40,20 @@ test("feature docs exist for current, localized, and versioned routes", () => {
 });
 
 test("feature sidebar exposes the new feature section", () => {
-  const config = read("astro.config.mjs");
+  const featureSection = docsSidebar.find(({ label }) => label === "Features");
 
-  assert.match(config, /label:\s*'Features'/);
-  assert.match(config, /translations:\s*\{\s*'zh-CN':\s*'功能'\s*\}/);
+  assert.ok(featureSection, "missing Features sidebar section");
+  assert.equal(featureSection.translations?.["zh-CN"], "功能");
+  assert.deepEqual(
+    featureSection.items?.map(({ link }) => link),
+    [
+      "features/",
+      "features/ai-gateway",
+      "features/wasm-plugins",
+      "features/traffic-management",
+      "features/security-observability",
+    ],
+  );
 
   for (const link of [
     "features/",
@@ -50,7 +62,7 @@ test("feature sidebar exposes the new feature section", () => {
     "features/traffic-management",
     "features/security-observability",
   ]) {
-    assert.ok(config.includes(`link: '${link}'`), `missing sidebar link ${link}`);
+    assert.ok(featureSection.items?.some((item) => item.link === link), `missing sidebar link ${link}`);
   }
 });
 
