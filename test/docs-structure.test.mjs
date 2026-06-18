@@ -1,0 +1,115 @@
+import assert from 'node:assert/strict';
+import { existsSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, posix } from 'node:path';
+import test from 'node:test';
+
+import { docsSidebar } from '../src/config/docsSidebar.js';
+
+const docsRoot = fileURLToPath(new URL('../src/content/docs', import.meta.url));
+const zhRoot = fileURLToPath(new URL('../src/content/docs/zh', import.meta.url));
+const versionRoot = fileURLToPath(new URL('../src/content/docs/1.5', import.meta.url));
+const zhVersionRoot = fileURLToPath(new URL('../src/content/docs/zh/1.5', import.meta.url));
+
+function collectMdxFiles(dir, base = dir) {
+  const files = [];
+
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...collectMdxFiles(entryPath, base));
+      continue;
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith('.mdx')) {
+      continue;
+    }
+
+    files.push(entryPath.slice(base.length + 1).split('\\').join(posix.sep));
+  }
+
+  return files.sort();
+}
+
+function flattenSidebar(items, parents = []) {
+  return items.flatMap((item) => {
+    const labelTrail = [...parents, item.label];
+    const entry = {
+      labelPath: labelTrail.join(' > '),
+      label: item.label,
+      translations: item.translations ?? {},
+      link: item.link,
+    };
+
+    if (!item.items) {
+      return [entry];
+    }
+
+    return [entry, ...flattenSidebar(item.items, labelTrail)];
+  });
+}
+
+function linkToDocPath(link) {
+  return link.endsWith('/') ? `${link}index.mdx` : `${link}.mdx`;
+}
+
+function currentEnglishDocs() {
+  return collectMdxFiles(docsRoot).filter((path) => !path.startsWith('1.5/') && !path.startsWith('zh/'));
+}
+
+function currentChineseDocs() {
+  return collectMdxFiles(zhRoot).filter((path) => !path.startsWith('1.5/'));
+}
+
+function assertMirroredDocs(sourcePaths, mirrorPaths, sourceLabel, mirrorLabel) {
+  const mirrorSet = new Set(mirrorPaths);
+  const sourceSet = new Set(sourcePaths);
+  const missing = sourcePaths.filter((path) => !mirrorSet.has(path));
+  const extra = mirrorPaths.filter((path) => !sourceSet.has(path));
+
+  assert.equal(
+    missing.length,
+    0,
+    `${mirrorLabel} is missing mirrored docs from ${sourceLabel}: ${missing.join(', ')}`,
+  );
+  assert.equal(
+    extra.length,
+    0,
+    `${mirrorLabel} has docs not present in ${sourceLabel}: ${extra.join(', ')}`,
+  );
+}
+
+function assertSidebarDocs(entries) {
+  for (const entry of entries) {
+    assert.ok(entry.translations['zh-CN'], `${entry.labelPath} is missing a zh-CN translation`);
+
+    if (!entry.link) {
+      continue;
+    }
+
+    const docPath = linkToDocPath(entry.link);
+    assert.ok(existsSync(join(docsRoot, docPath)), `${entry.labelPath} is missing English doc ${docPath}`);
+    assert.ok(existsSync(join(zhRoot, docPath)), `${entry.labelPath} is missing Chinese doc ${docPath}`);
+  }
+}
+
+test('current English and Chinese docs stay path-mirrored', () => {
+  assertMirroredDocs(currentEnglishDocs(), currentChineseDocs(), 'current English docs', 'current Chinese docs');
+});
+
+test('versioned English and Chinese docs stay path-mirrored', () => {
+  assertMirroredDocs(collectMdxFiles(versionRoot), collectMdxFiles(zhVersionRoot), 'versioned English docs', 'versioned Chinese docs');
+});
+
+test('current docs intentionally keep pages that archived docs do not need', () => {
+  const currentDocs = currentEnglishDocs();
+  const versionedDocs = collectMdxFiles(versionRoot);
+
+  assert.ok(currentDocs.includes('configuration/helm-values.mdx'));
+  assert.ok(!versionedDocs.includes('configuration/helm-values.mdx'));
+});
+
+test('sidebar links resolve to real docs files and keep zh-CN translations', () => {
+  assertSidebarDocs(flattenSidebar(docsSidebar));
+});
