@@ -58,6 +58,15 @@ The chart defaults are intentionally conservative:
 - The data plane has `accessLogVolume.enabled: true`, mounted at `/var/log/nantian-gw` with `sizeLimit: 256Mi`.
 - Experimental Gateway and AI features are disabled by default in both planes.
 
+## Helm Operator Path
+
+Use this reading order when you plan to run Nantian Gateway with Helm in a real cluster:
+
+1. Start with [Helm Installation](/installation/helm/) for repository setup, render/install commands, release verification, and `helm test`.
+2. Use [Helm Values Guide](/configuration/helm-values/) to organize environment-specific values files and choose the right value groups.
+3. Apply the hardening checklist in [Production Deployment](/installation/production/) before exposing production traffic.
+4. Follow [Upgrade Guide](/installation/upgrade/) when chart versions, values schemas, or CRD expectations change.
+
 ## Post-Install Checks
 
 After installation, verify the workloads and GatewayClass:
@@ -79,6 +88,7 @@ Then create a demo `Gateway` and `HTTPRoute` as shown in the [Quick Start](/gett
 
 ## Choosing The Next Page
 
-- Use [Helm Installation](/installation/helm/) for repository setup, default values, common overrides, and uninstall commands.
+- Use [Helm Installation](/installation/helm/) for repository setup, default values, render/install commands, `helm test`, and uninstall commands.
+- Use [Helm Values Guide](/configuration/helm-values/) for layered values files, major chart value groups, and production guardrails.
 - Use [Experimental Features](/configuration/experimental-features/) before creating `AIService`, `TokenPolicy`, `WasmPlugin`, or experimental `BackendLBPolicy` resources.
 - Use [Operations](/operations/) for first checks after install, service names, logs, metrics, and admin access.

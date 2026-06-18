@@ -33,10 +33,29 @@ helm repo update
 helm search repo nantian-gw/nantian-gw --versions --devel
 ```
 
+## 推荐 Helm 工作流
+
+在可重复的环境里，更推荐先渲染、再安装的工作流，并把长期配置收敛到 values 文件：
+
+```bash
+helm show values nantian-gw/nantian-gw > values-reference.yaml
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f my-values.yaml > rendered.yaml
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f my-values.yaml
+```
+
+即使是第一次部署，也建议直接使用 `helm upgrade --install`，这样首装和后续升级可以复用同一条命令。对于要长期保留的修改，优先使用分层 values 文件，而不是堆很长的 `--set` 参数链。
+
+当你调整 CRD 归属、TLS、admin 鉴权或 NetworkPolicy 时，先渲染清单再上线更稳妥。关于 values 文件的组织方式，请继续阅读 [Helm Values 指南](/zh/configuration/helm-values/)。
+
 ## 使用默认值安装
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   --create-namespace
 ```
@@ -48,7 +67,7 @@ helm install nantian-gw nantian-gw/nantian-gw \
 ```bash
 helm template nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw > rendered.yaml
-helm install nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   --create-namespace \
   --dry-run
@@ -218,7 +237,44 @@ dataplane:
   replicas: 4
 ```
 
-## 实验功能
+## 常见安装场景
+
+### 平台统一管理 Gateway API CRD
+
+当平台已经在集群引导阶段统一安装 CRD 时，使用：
+
+```yaml
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+```
+
+这样应用 release 就不会再次碰集群级 CRD，职责边界更清晰。
+
+### Chart 管理 Standard Gateway API CRD
+
+当你希望由 chart 负责安装 standard Gateway API CRD bundle 时，使用：
+
+```yaml
+gatewayAPI:
+  installCRDs: true
+  channel: standard
+```
+
+这对一次性测试集群和小型环境很方便，但要记住 CRD 属于集群级资源。
+
+### 关闭 Dashboard
+
+如果你只需要控制面和数据面，可以关闭 dashboard 工作负载：
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --set dashboard.enabled=false
+```
+
+### Experimental Gateway Runtime 与 AI Gateway
 
 实验性 Gateway runtime 行为由 `featureMode` 控制。AI Gateway 仍是显式的控制面功能，并且需要 experimental 模式：
 
@@ -237,6 +293,29 @@ controlplane:
 
 完整的启动、CRD 和验证流程见[实验功能](/zh/configuration/experimental-features/)。
 
+## Helm Test 与清理行为
+
+chart 默认会渲染 Helm test hook：
+
+```yaml
+tests:
+  enabled: true
+  image:
+    repository: "public.ecr.aws/docker/library/busybox"
+    tag: "1.36.1"
+    pullPolicy: IfNotPresent
+```
+
+在安装或升级后执行：
+
+```bash
+helm test nantian-gw --namespace nantian-gw
+```
+
+这个 hook 会使用托管在 Amazon ECR Public 上的轻量 BusyBox 镜像去检查网关健康端点。如果你的集群不能直接拉这个公共镜像源，请通过 `tests.image.repository`、`tests.image.tag` 和 `tests.image.pullPolicy` 覆盖到内网镜像源或其他兼容镜像。
+
+chart 的 hook 策略会在重新创建前删除旧测试 Pod，并在测试成功或失败后自动清理。因此重复执行 `helm test`、卸载 release 或重新尝试时，不应遗留陈旧的失败 hook Pod。
+
 ## 验证 Release
 
 ```bash
@@ -244,16 +323,17 @@ kubectl get pods -n nantian-gw
 kubectl get gatewayclass nantian-gw
 kubectl get svc -n nantian-gw
 helm status nantian-gw -n nantian-gw
+helm test nantian-gw --namespace nantian-gw
 ```
 
-如果数据面没有就绪，请检查它是否能连接 `nantian-gw-controlplane-grpc:18080`，并查看控制面和数据面日志。
+如果数据面没有就绪，请检查它是否能连接 `nantian-gw-controlplane-grpc:18080`；如果启用了 xDS TLS，还要确认相关 TLS 配置一致；然后再查看控制面和数据面日志。
 
 ## 升级与卸载
 
 升级已有 release：
 
 ```bash
-helm upgrade nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   -f my-values.yaml
 ```

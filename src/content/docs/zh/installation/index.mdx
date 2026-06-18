@@ -58,6 +58,15 @@ Chart 默认值偏保守：
 - 数据面默认开启 `accessLogVolume.enabled: true`，挂载到 `/var/log/nantian-gw`，`sizeLimit: 256Mi`。
 - 实验性 Gateway 和 AI 功能在两个平面里都默认关闭。
 
+## Helm 运维阅读路径
+
+如果你准备在真实集群里通过 Helm 运行 Nantian Gateway，建议按这个顺序阅读：
+
+1. 先看 [Helm 安装](/zh/installation/helm/)，了解仓库配置、渲染/安装命令、release 校验和 `helm test`。
+2. 再看 [Helm Values 指南](/zh/configuration/helm-values/)，组织环境化 values 文件并挑出关键配置组。
+3. 然后套用 [生产环境部署](/zh/installation/production/) 里的硬化建议，再暴露生产流量。
+4. 最后参考 [升级指南](/zh/installation/upgrade/) 规划 chart 版本、values schema 或 CRD 变更时的升级路径。
+
 ## 安装后检查
 
 安装后先检查 workload 和 GatewayClass：
@@ -79,6 +88,7 @@ kubectl logs -n nantian-gw deploy/nantian-gw-dataplane --tail=100
 
 ## 下一步读哪一页
 
-- 阅读 [Helm 安装](/zh/installation/helm/)了解仓库配置、默认值、常见覆盖和卸载命令。
+- 阅读 [Helm 安装](/zh/installation/helm/)了解仓库配置、默认值、渲染/安装命令、`helm test` 和卸载命令。
+- 阅读 [Helm Values 指南](/zh/configuration/helm-values/) 了解 values 分层方式、主要 chart 配置组和生产环境护栏。
 - 创建 `AIService`、`TokenPolicy`、`WasmPlugin` 或实验性 `BackendLBPolicy` 前，先阅读[实验功能](/zh/configuration/experimental-features/)。
 - 阅读[运维](/zh/operations/)查看安装后的首次检查、Service 名称、日志、metrics 和 admin 访问方式。

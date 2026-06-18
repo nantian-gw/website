@@ -60,6 +60,7 @@ const sidebar = [
     translations: { 'zh-CN': '配置' },
     items: [
       { label: 'Overview', link: 'configuration/', translations: { 'zh-CN': '概述' } },
+      { label: 'Helm Values', link: 'configuration/helm-values', translations: { 'zh-CN': 'Helm Values 指南' } },
       { label: 'Experimental Features', link: 'configuration/experimental-features', translations: { 'zh-CN': '实验功能' } },
       { label: 'Control Plane', link: 'configuration/controlplane', translations: { 'zh-CN': '控制面' } },
       { label: 'Data Plane', link: 'configuration/dataplane', translations: { 'zh-CN': '数据面' } },

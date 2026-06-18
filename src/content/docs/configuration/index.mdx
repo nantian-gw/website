@@ -29,10 +29,17 @@ You can override any field by including it in your configuration file. Helm user
 The gateway performs basic validation at startup. Malformed durations, missing required fields, or conflicting options will cause a fatal error before the process starts accepting connections. Always validate your config with a dry-run before rolling it out to production.
 :::
 
+## Helm Deployments: Values First
+
+When Nantian Gateway is deployed with Helm, the operational source of truth is your Helm values files. The chart renders those values into ConfigMaps, Secrets, pod specs, and services. Edit the values files and run `helm upgrade`; do not treat the rendered ConfigMap as the place to maintain long-term configuration.
+
+Use the [Helm Values Guide](/configuration/helm-values/) for recommended file layering, major chart value groups, and production validation workflow.
+
 ## Chapter structure
 
 | Page | Covers |
 |------|--------|
+| [Helm Values Guide](/configuration/helm-values) | Layered values files, major chart value groups, and production validation workflow |
 | [Control Plane](/configuration/controlplane) | Server addresses, reconciler tuning, leader election, node drift detection, admin API |
 | [Data Plane](/configuration/dataplane) | Proxy runtime, upstream connections, health checks, rate limiting, circuit breaking |
 | [TLS / mTLS](/configuration/tls) | Admin TLS, gRPC TLS with mTLS, xDS transport security |

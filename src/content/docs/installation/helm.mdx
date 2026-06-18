@@ -33,10 +33,29 @@ Stable chart versions are shown by default. Per-commit snapshot charts are publi
 helm search repo nantian-gw/nantian-gw --versions --devel
 ```
 
+## Recommended Helm Workflow
+
+For repeatable environments, prefer a render-first workflow with persistent values files:
+
+```bash
+helm show values nantian-gw/nantian-gw > values-reference.yaml
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f my-values.yaml > rendered.yaml
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f my-values.yaml
+```
+
+Use `helm upgrade --install` even for the first deployment so the same command works for both initial rollout and subsequent updates. Prefer layered values files over long `--set` chains when the change needs to live beyond one terminal session.
+
+When you change CRD ownership, TLS, admin auth, or network policies, render manifests before rollout and review the diff with your normal change process. For recommended values file structure, see [Helm Values Guide](/configuration/helm-values/).
+
 ## Install With Defaults
 
 ```bash
-helm install nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   --create-namespace
 ```
@@ -48,7 +67,7 @@ Preview the rendered manifests before installing:
 ```bash
 helm template nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw > rendered.yaml
-helm install nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   --create-namespace \
   --dry-run
@@ -218,7 +237,44 @@ dataplane:
   replicas: 4
 ```
 
-## Experimental Features
+## Common Install Scenarios
+
+### Platform-Managed Gateway API CRDs
+
+Use this when your platform already installs CRDs once at cluster bootstrap time:
+
+```yaml
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+```
+
+This keeps the application release scoped to namespaced resources plus the optional `GatewayClass`.
+
+### Chart-Managed Standard Gateway API CRDs
+
+Use this when the chart should install the standard Gateway API CRD bundle for the cluster:
+
+```yaml
+gatewayAPI:
+  installCRDs: true
+  channel: standard
+```
+
+This is convenient for disposable clusters and smaller environments, but remember that CRDs are cluster-scoped resources.
+
+### Dashboard Disabled
+
+Disable the dashboard workload when you only want the control plane and data plane:
+
+```bash
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  --set dashboard.enabled=false
+```
+
+### Experimental Gateway Runtime And AI Gateway
 
 Experimental Gateway runtime behavior is controlled by `featureMode`. AI Gateway remains an explicit control plane feature and requires experimental mode:
 
@@ -237,6 +293,29 @@ controlplane:
 
 See [Experimental Features](/configuration/experimental-features/) for the complete startup, CRD, and verification flow.
 
+## Helm Test And Cleanup
+
+The chart renders a Helm test hook by default:
+
+```yaml
+tests:
+  enabled: true
+  image:
+    repository: "public.ecr.aws/docker/library/busybox"
+    tag: "1.36.1"
+    pullPolicy: IfNotPresent
+```
+
+Run it after install or upgrade:
+
+```bash
+helm test nantian-gw --namespace nantian-gw
+```
+
+The hook checks the gateway health endpoints using a small BusyBox image hosted on Amazon ECR Public. If your cluster cannot pull that public image source, override `tests.image.repository`, `tests.image.tag`, and `tests.image.pullPolicy` to point at an internal mirror or another compatible image.
+
+The chart hook policy deletes the test Pod before recreation and after both successful and failed runs. Repeated `helm test`, uninstall, or retry flows should not leave stale failed hook Pods behind.
+
 ## Verify The Release
 
 ```bash
@@ -244,16 +323,17 @@ kubectl get pods -n nantian-gw
 kubectl get gatewayclass nantian-gw
 kubectl get svc -n nantian-gw
 helm status nantian-gw -n nantian-gw
+helm test nantian-gw --namespace nantian-gw
 ```
 
-If the data plane does not become ready, check whether it can connect to `nantian-gw-controlplane-grpc:18080` and read the control plane and data plane logs.
+If the data plane does not become ready, check whether it can connect to `nantian-gw-controlplane-grpc:18080`, confirm your xDS TLS settings if enabled, and read the control plane and data plane logs.
 
 ## Upgrade And Uninstall
 
 Upgrade an existing release:
 
 ```bash
-helm upgrade nantian-gw nantian-gw/nantian-gw \
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
   --namespace nantian-gw \
   -f my-values.yaml
 ```
