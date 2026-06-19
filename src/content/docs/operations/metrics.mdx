@@ -67,6 +67,7 @@ Metrics for the node status persistence system, which stores data plane node sta
 | `nantian_gateway_controlplane_node_status_persist_immediate_total` | Counter | | Immediate node status updates accepted into the backlog |
 | `nantian_gateway_controlplane_node_status_persist_debounced_total` | Counter | | Debounced node status updates accepted into the backlog |
 | `nantian_gateway_controlplane_node_status_persist_flush_duration_seconds` | Histogram | | Duration of flushing debounced node status persistence batches |
+
 ### Reconciler runner
 
 Metrics for the custom reconciler runner that schedules infrastructure and status reconciliation.
@@ -95,6 +96,7 @@ The `scope` label on `reconciler_runner_duration_seconds` can be `infra`, `statu
 |--------|------|--------|-------------|
 | `nantian_gateway_dataplane_ready` | Gauge | `namespace`, `pod`, `job` | 1 if the data plane is ready to serve traffic |
 | `nantian_gateway_dataplane_runtime_supervisor_http_states` | Gauge | `namespace`, `pod`, `job` | HTTP supervisor state (1 = active) |
+
 ### Request processing
 
 | Metric | Type | Labels | Description |
@@ -102,6 +104,7 @@ The `scope` label on `reconciler_runner_duration_seconds` can be `infra`, `statu
 | `nantian_gateway_dataplane_http_requests_total` | Counter | `listener`, `route`, `status_class` | HTTP requests processed by listener and route |
 | `nantian_gateway_dataplane_http_request_duration_seconds` | Histogram | `listener`, `route` | Request duration from arrival to response |
 | `nantian_gateway_dataplane_http_responses_total` | Counter | `listener`, `route`, `status_code` | HTTP responses sent |
+
 ### Backend connections
 
 | Metric | Type | Labels | Description |
@@ -110,11 +113,13 @@ The `scope` label on `reconciler_runner_duration_seconds` can be `infra`, `statu
 | `nantian_gateway_dataplane_backend_connections_total` | Counter | `backend` | Total connections established to backends |
 | `nantian_gateway_dataplane_backend_connection_errors_total` | Counter | `backend`, `reason` | Connection errors by backend and reason |
 | `nantian_gateway_dataplane_backend_health_status` | Gauge | `backend`, `endpoint` | 1 if backend endpoint is healthy, 0 otherwise |
+
 ### Admin API
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
 | `nantian_gateway_dataplane_admin_requests_total` | Counter | `method`, `route`, `status_class` | Data plane admin API requests |
+
 ## Scraping configuration
 
 ### Control plane scrape config
@@ -173,6 +178,7 @@ The project ships recording rules in `deploy/observability/prometheus/native/pro
 | `nantian_gateway_dataplane_container_memory_working_set_bytes` | Memory working set (requires cAdvisor) |
 | `nantian_gateway_dataplane_container_memory_limit_bytes` | Memory limit (requires kube-state-metrics) |
 | `nantian_gateway_dataplane_container_memory_request_bytes` | Memory request (requires kube-state-metrics) |
+
 :::note
 Container resource recording rules require cAdvisor and kube-state-metrics to be running in your cluster. These are included by default in kube-prometheus-stack and most managed Kubernetes offerings.
 :::

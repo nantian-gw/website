@@ -70,7 +70,7 @@ export function runAudit() {
     }
 
     const stderr = typeof error?.stderr === "string" ? error.stderr : error?.stderr?.toString?.() ?? "";
-    throw new Error(`npm audit failed before producing JSON output.\n${stderr || stdout}`.trim());
+    throw new Error(`npm audit failed before producing JSON output.\n${stderr || stdout}`.trim(), { cause: error });
   }
 }
 

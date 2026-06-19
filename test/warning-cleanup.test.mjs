@@ -129,6 +129,28 @@ test("Starlight Banner override is removed while versioning stays enabled", () =
   assert.equal(exists("src/components/docs/StarlightOverrides.astro"), false);
 });
 
+test("custom 404 routes disable Starlight's built-in 404 and versioned Helm values docs keep explicit version slugs", () => {
+  const config = read("astro.config.mjs");
+  const versionedHelmValues = read("src/content/docs/1.5/configuration/helm-values.mdx");
+  const zhVersionedHelmValues = read("src/content/docs/zh/1.5/configuration/helm-values.mdx");
+  const versionConfig = JSON.parse(read("src/content/versions/1.5.json"));
+  const configurationGroup = versionConfig.sidebar.find((group) => group.label === "Configuration");
+  const helmValuesItem = configurationGroup?.items.find((item) => item.link === "configuration/helm-values");
+
+  assert.match(config, /disable404Route:\s*true/);
+  assert.equal(exists("src/pages/404.astro"), true);
+  assert.equal(exists("src/pages/zh/404.astro"), true);
+  assert.match(versionedHelmValues, /^slug:\s*1\.5\/configuration\/helm-values$/m);
+  assert.match(zhVersionedHelmValues, /^slug:\s*zh\/1\.5\/configuration\/helm-values$/m);
+  assert.deepEqual(helmValuesItem, {
+    label: "Helm Values",
+    link: "configuration/helm-values",
+    translations: {
+      "zh-CN": "Helm Values 指南",
+    },
+  });
+});
+
 test("PromQL fences are normalized away from docs", () => {
   const docs = [
     "src/content/docs/operations/grafana.mdx",

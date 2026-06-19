@@ -157,6 +157,7 @@ Key metrics to watch:
 | `xds_snapshot_version` | Configuration snapshot version applied to each data plane |
 
 Alert on:
+
 - Zero leaders for more than 30 seconds (control plane HA failure)
 - `control_plane_connected` dropping below expected replicas (data plane disconnect)
 - `xds_snapshot_version` diverging across data planes (stale configuration)

@@ -116,11 +116,14 @@ If you lose the entire cluster, recover in this order:
 
 1. **Restore the Kubernetes cluster** (new cluster or recovered cluster)
 2. **Install Gateway API CRDs**:
+
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
    ```
+
 3. **Install Nantian Gateway CRDs** (AIService, TokenPolicy, WasmPlugin, BackendLBPolicy)
 4. **Install Nantian Gateway** via Helm:
+
    ```bash
    ```
 
@@ -134,25 +137,29 @@ helm install nantian-gw nantian-gw/nantian-gw \
 kubectl wait --for=condition=ready pod -l app=nantian-gw-controlplane -n nantian-gw --timeout=120s
 ````
 
-6. **Restore Gateway API resources**:
+1. **Restore Gateway API resources**:
+
    ```bash
    kubectl apply -f gateways.yaml
    kubectl apply -f httproutes.yaml
    kubectl apply -f grpcroutes.yaml
    # ... apply all resource files
    ```
-7. **Restore TLS secrets**:
+2. **Restore TLS secrets**:
+
    ```bash
    kubectl apply -f nantian-gw-secrets.yaml
    ```
-8. **Restore custom CRD resources**:
+3. **Restore custom CRD resources**:
+
    ```bash
    kubectl apply -f aiservices.yaml
    kubectl apply -f tokenpolicies.yaml
    kubectl apply -f wasmplugins.yaml
    kubectl apply -f backendlbpolicies.yaml
    ```
-9. **Verify the gateway is operational**:
+4. **Verify the gateway is operational**:
+
    ```bash
    kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
      curl -s http://localhost:18081/v1/summary | jq .

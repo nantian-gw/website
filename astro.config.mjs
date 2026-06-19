@@ -26,6 +26,7 @@ export default defineConfig({
           versions: [{ slug: '1.5' }],
         }),
       ],
+      disable404Route: true,
       defaultLocale: 'root',
       locales: {
         root: {

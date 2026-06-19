@@ -1,0 +1,252 @@
+---
+title: Helm Values Guide
+description: "How to structure Nantian Gateway 1.5 Helm values files, which value groups matter most, and how to validate changes before rollout."
+slug: 1.5/configuration/helm-values
+---
+
+Helm values are the operator-facing control surface for Nantian Gateway in Kubernetes. Use them to express platform ownership, workload sizing, TLS, observability, and release policy. Do not treat the rendered ConfigMaps or Deployment manifests as the place to maintain long-term configuration.
+
+This guide focuses on how to organize values files and which value groups matter most. For the full install workflow, use [Helm Installation](/installation/helm/). For production hardening, continue with [Production Deployment](/installation/production/).
+
+## Why Use Layered Values Files
+
+Layered values files help you keep chart defaults, environment defaults, cluster-specific overrides, and secret references separate.
+
+That separation matters because different teams usually own different concerns:
+
+- platform teams often own CRDs, namespaces, RBAC, registry policy, and certificate issuance
+- application or traffic teams often own control-plane and data-plane sizing
+- security teams often own TLS secrets, bearer tokens, and network exposure policy
+
+Instead of maintaining one very long values file per cluster, keep a small base file and layer targeted overrides during `helm template` and `helm upgrade --install`.
+
+## Recommended File Layout
+
+One workable structure looks like this:
+
+```text
+helm-values/
+  values-base.yaml
+  values-staging.yaml
+  values-production.yaml
+  values-cluster-a.yaml
+```
+
+Use those files like this:
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+```
+
+A common ownership split is:
+
+- `values-base.yaml`: chart-wide defaults you want everywhere
+- `values-staging.yaml` or `values-production.yaml`: environment policy
+- `values-cluster-a.yaml`: one cluster's ingress class, DNS names, or certificate issuer references
+
+Keep secrets in Kubernetes Secrets referenced by values, not inline in values files committed to source control.
+
+## Platform-Level Values
+
+Start with the values that define cluster ownership boundaries:
+
+```yaml
+global:
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+
+namespace:
+  create: true
+  name: "nantian-gw"
+
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+
+rbac:
+  create: true
+```
+
+Use these values to answer platform questions first:
+
+- Does the application release create its own namespace, or does the platform team provide one?
+- Does the chart install Gateway API CRDs, or are CRDs managed once at cluster bootstrap time?
+- Are images pulled from the public registry, or from an internal mirror?
+- Does the release create its own RBAC, or does the cluster provide equivalent permissions separately?
+
+In multi-tenant clusters, `gatewayAPI.installCRDs: false` is usually the safer choice. Manage CRDs once at the platform layer and keep application releases scoped to namespaced resources.
+
+If the platform team owns registry policy, prefer a shared global registry override:
+
+```yaml
+global:
+  imageRegistry: "registry.example.com"
+  imagePullSecrets:
+    - nantian-registry
+```
+
+## Control Plane Values
+
+Control plane values usually define availability, release policy, and control-path security:
+
+```yaml
+controlplane:
+  replicas: 2
+  image:
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "sha-8737dc3"
+    pullPolicy: IfNotPresent
+  grpcTLS:
+    enabled: true
+    existingSecret: "nantian-controlplane-grpc-tls"
+    requireClientCert: true
+  adminAuth:
+    existingSecret: "nantian-controlplane-admin-auth"
+    secretKey: token
+  config:
+    dashboard:
+      enabled: true
+      capabilities:
+        wasmPlugins: false
+        chatbot: false
+```
+
+Prioritize these values when reviewing a control-plane rollout:
+
+- `replicas`: use at least two replicas for availability
+- `image.tag`: pin an immutable tag or digest in non-disposable environments
+- `grpcTLS.*`: secure the xDS server side when data planes connect over TLS or mTLS
+- `adminAuth.*`: require a bearer token when operators or integrations use the admin API
+- `config.dashboard.*`: control what the UI is allowed to expose when the dashboard is enabled
+
+If you deploy the dashboard workload but want to limit UI features, use the nested dashboard capability policy instead of patching the dashboard image or front-end code.
+
+## Data Plane Values
+
+Data plane values define traffic capacity, xDS client security, session behavior, and local runtime surfaces:
+
+```yaml
+dataplane:
+  replicas: 3
+  image:
+    repository: "nantian-gw/dataplane"
+    tag: "sha-9670107"
+    pullPolicy: IfNotPresent
+  xdsTLS:
+    enabled: true
+    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
+  sessionPersistence:
+    existingSecret: "nantian-gw-dataplane-session-persistence"
+    secretKey: session-persistence
+  accessLogVolume:
+    enabled: true
+    mountPath: /var/log/nantian-gw
+    sizeLimit: 256Mi
+  resources:
+    requests:
+      cpu: "2"
+      memory: "512Mi"
+    limits:
+      memory: "2Gi"
+```
+
+These are the values most likely to change as traffic grows:
+
+- `replicas`: scale with request volume and failure-domain targets
+- `xdsTLS.*`: align with the control plane's gRPC TLS policy
+- `sessionPersistence.*`: use a stable secret for multi-replica deployments instead of relying on runtime-generated keys
+- `accessLogVolume.*`: decide whether local file-based access logs are part of your operational model
+- `resources`: match request and memory budgets to real traffic instead of keeping development-sized defaults
+
+When multiple replicas share sticky-session behavior, prefer `existingSecret` over inline `sharedSecret` so the secret material stays in Kubernetes rather than in a committed values file.
+
+## Observability And Security Values
+
+The next group of values decides how the chart integrates with the rest of the cluster:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  fromNamespaces:
+    - monitoring
+
+networkPolicies:
+  enabled: true
+
+certs:
+  generate: false
+  certManager:
+    enabled: true
+    issuerRef:
+      name: nantian-ca
+      kind: ClusterIssuer
+      group: cert-manager.io
+```
+
+Use these values to answer operational integration questions:
+
+- Will Prometheus Operator discover metrics through `ServiceMonitor` resources?
+- Which namespaces are allowed to scrape metrics when NetworkPolicies are enabled?
+- Are certificates generated for local development, or provided through cert-manager or existing Secrets?
+
+Prefer cert-manager or pre-created Secrets for production gRPC/xDS TLS. The chart's self-signed certificate path is useful for development, but it should not be your long-term certificate management strategy.
+
+## Production Guardrails
+
+Before promoting a values change, work through these checks:
+
+- Pin `controlplane.image.tag`, `dataplane.image.tag`, and `dashboard.image.tag` to immutable tags or digests. Avoid `latest` outside quick validation paths.
+- Keep values files in source control, but keep secret material in Kubernetes Secrets referenced by values.
+- Do not edit Helm-rendered ConfigMaps directly. Helm will overwrite them on the next upgrade.
+- Treat CRD ownership explicitly. Decide whether CRDs come from the chart or from a platform bootstrap workflow.
+- Prefer `helm upgrade --install` with layered `-f` files over ad-hoc `--set` chains for long-lived environments.
+- If you rely on `helm test`, mirror the test image with `tests.image.repository`, `tests.image.tag`, and `tests.image.pullPolicy` when your cluster cannot pull the default public image source.
+
+The chart's current Helm test hook defaults use:
+
+```yaml
+tests:
+  enabled: true
+  image:
+    repository: "public.ecr.aws/docker/library/busybox"
+    tag: "1.36.1"
+    pullPolicy: IfNotPresent
+```
+
+The hook policy deletes the test Pod before recreation and after both successful and failed runs, so repeated `helm test` or cleanup flows do not accumulate stale hook Pods.
+
+## Suggested Validation Workflow
+
+Validate chart changes before rollout:
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml > rendered.yaml
+
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+helm status nantian-gw -n nantian-gw
+helm test nantian-gw --namespace nantian-gw
+```
+
+Use [Upgrade Guide](/installation/upgrade/) when you change chart versions, and keep [Production Deployment](/installation/production/) open when values changes affect TLS, resources, or high-availability behavior.

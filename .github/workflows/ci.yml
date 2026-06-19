@@ -54,5 +54,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run setup:browser:ci
-      - run: npm run build:astro
+      - run: npm run build:ci

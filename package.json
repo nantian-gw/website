@@ -7,11 +7,15 @@
     "audit:ci": "node ./scripts/check-npm-audit.mjs",
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "npm run setup:browser && astro build",
+    "build": "npm run setup:browser && astro build && npm run build:llms",
+    "build:ci": "npm run setup:browser:ci && npm run build:astro && npm run build:llms",
     "build:astro": "astro build",
+    "build:llms": "node scripts/generate-llms-txt.mjs",
     "preview": "astro preview",
     "check": "astro check",
-    "lint": "astro check",
+    "lint": "npm run lint:js && npm run lint:md && astro check",
+    "lint:js": "eslint .",
+    "lint:md": "markdownlint-cli2 'src/content/docs/**/*.mdx' 'src/pages/**/*.astro' 'README.md'",
     "setup:browser": "npx playwright install chromium",
     "setup:browser:ci": "npx playwright install --with-deps chromium",
     "test": "node --test test/*.test.mjs"
@@ -31,6 +35,12 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.61.1",
+    "@typescript-eslint/parser": "^8.61.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-astro": "^1.7.0",
+    "markdownlint-cli2": "^0.22.1",
     "playwright": "^1.60.0",
     "typescript": "^5.9.0"
   }

@@ -38,6 +38,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 **Symptoms**: Pod is in `CrashLoopBackOff` or `Error` state.
 
 **Diagnostic commands**:
+
 ```bash
 kubectl describe pod -n nantian-gw -l app=nantian-gw-controlplane
 kubectl logs -n nantian-gw -l app=nantian-gw-controlplane --tail=50
@@ -57,6 +58,7 @@ kubectl logs -n nantian-gw -l app=nantian-gw-controlplane --tail=50
 **Symptoms**: The `nantian_gateway_snapshot_last_build_success` metric is 0. Data planes are serving stale configuration. New routes or backends are not being picked up.
 
 **Diagnostic commands**:
+
 ```bash
 # Check build success
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -83,6 +85,7 @@ kubectl logs -n nantian-gw -l app=nantian-gw-controlplane | grep -i "error\|fail
 **Symptoms**: `GET /v1/nodes` shows zero connected nodes. Data plane pods are running but not connecting to the control plane.
 
 **Diagnostic commands**:
+
 ```bash
 # Check connected nodes
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -110,6 +113,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 **Symptoms**: Data plane logs repeatedly show `xds stream superseded by newer connection`, while control plane logs alternate between `dataplane connected` and draining the older stream for the same node.
 
 **Diagnostic commands**:
+
 ```bash
 kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --since=10m | \
   grep -E 'dataplane connected|draining superseded dataplane stream|node_id'
@@ -136,6 +140,7 @@ kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/
 **Symptoms**: Frequent leader transitions visible in control plane logs. Metrics show gaps or inconsistent values.
 
 **Diagnostic commands**:
+
 ```bash
 # Check leader election status
 kubectl get leases -n nantian-gw
@@ -159,6 +164,7 @@ kubectl logs -n nantian-gw -l app=nantian-gw-controlplane | grep -i "leader\|ele
 **Symptoms**: Requests to the data plane fail with connection refused or timeout. The data plane pod is running but not ready.
 
 **Diagnostic commands**:
+
 ```bash
 # Check data plane readiness
 kubectl get pods -n nantian-gw -l app=nantian-gw-dataplane
@@ -185,6 +191,7 @@ kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
 **Symptoms**: The P99 latency metric is elevated. Clients report slow responses.
 
 **Diagnostic commands**:
+
 ```bash
 # Check request latency
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -212,6 +219,7 @@ kubectl top pods -n nantian-gw -l app=nantian-gw-dataplane
 **Symptoms**: Backend endpoints are marked unhealthy. Requests to those backends fail.
 
 **Diagnostic commands**:
+
 ```bash
 # Check backend health
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -237,6 +245,7 @@ kubectl get endpoints -n <your-namespace>
 **Symptoms**: A configured HTTPRoute is not matching requests. Requests return 404 or are routed to the wrong backend.
 
 **Diagnostic commands**:
+
 ```bash
 # Check routes in the snapshot
 kubectl exec -n nantian-gw deployment/nantian-gw-controlplane -- \
@@ -260,6 +269,7 @@ kubectl get gateway -A -o yaml | grep -A 20 "status:"
 **Symptoms**: TLS listeners fail with certificate errors. Clients see TLS handshake failures.
 
 **Diagnostic commands**:
+
 ```bash
 # Check listener status
 kubectl get gateway -A -o yaml | grep -A 30 "listeners:"

@@ -11,7 +11,7 @@ Nantian Gateway 提供了一个预构建的 Grafana 仪表盘模板，位于 `de
 1. 导航到 **Dashboards > New > Import**
 2. 上传 `pingora-gateway-observability-dashboard.json` 文件
 3. 选择 Prometheus 数据源
- 4. 点击 **Import**
+4. 点击 **Import**
 
 或者通过 Grafana Provisioning 自动导入：
 
@@ -65,7 +65,7 @@ serviceMonitor:
 仪表盘使用以下模板变量，允许按命名空间、Pod 和实例筛选：
 
 | 变量 | 类型 | 说明 |
-|---|---|---|
+| --- | --- |---|
 | `datasource` | 数据源 | Prometheus 数据源选择 |
 | `namespace` | 查询 | 按命名空间筛选（默认 `nantian-gw`） |
 | `pod_dp` | 查询 | 数据面 Pod 多选（默认全部） |
@@ -83,7 +83,7 @@ serviceMonitor:
 顶部统计卡片，提供集群健康状态的一目了然视图：
 
 | 面板 | 指标 | 说明 |
-|---|---|---|
+| --- | --- |---|
 | Ready Pods | `sum(count(nantian_gateway_dataplane_ready))` | 就绪的数据面 Pod 数量 |
 | QPS | `sum(rate(nantian_gateway_dataplane_traffic_request_events_total[5m]))` | 每秒请求数 |
 | Success Rate | 成功请求占比 | 无错误标志的请求比例 |
@@ -92,6 +92,7 @@ serviceMonitor:
 | xDS ACK p95 | xDS 确认延迟 P95 | 快照分发的确认延迟 |
 | CPU Throttle | CPU 限流比例 | 数据面容器 CPU 限流 |
 | Memory Working Set | 内存工作集 | 数据面内存使用 |
+
 ### 流量 SLO
 
 展示流量服务等级目标的详细时序图：

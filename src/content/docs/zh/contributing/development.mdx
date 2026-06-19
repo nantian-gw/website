@@ -17,6 +17,7 @@ Nantian Gateway 的控制面用 Go 编写，数据面用 Rust 编写，管理界
 | [Helm](https://helm.sh/docs/intro/install/) | ≥ 3.12 | Chart 打包和部署 |
 | [protoc](https://grpc.io/docs/protoc-installation/) | ≥ 3.21 | Protobuf 编译 |
 | [Node.js](https://nodejs.org/) | ≥ 18 | 管理界面和文档站 |
+
 ### 推荐工具
 
 | 工具 | 用途 |
@@ -25,6 +26,7 @@ Nantian Gateway 的控制面用 Go 编写，数据面用 Rust 编写，管理界
 | [just](https://github.com/casey/just) | 命令运行器（CI 和任务自动化） |
 | [golangci-lint](https://golangci-lint.run/) | Go 代码 Lint |
 | [cargo-watch](https://github.com/watchexec/cargo-watch) | Rust 热重载开发 |
+
 ### 快速验证环境
 
 ```bash
@@ -116,6 +118,7 @@ kubectl apply -f deploy/crds/
 | `--leader-elect` | `true` | 是否启用主从选举 |
 | `--leader-elect-namespace` | 当前命名空间 | 选举所在的命名空间 |
 | `--gateway-class-name` | `nantian-gw` | 认领的 GatewayClass 名称 |
+
 :::tip[本地开发技巧]
 本地开发时设置 `--leader-elect=false` 避免主从选举，这样可以直接运行单个控制面实例。生产环境请保持默认值 `true`。
 :::
@@ -152,6 +155,7 @@ cargo run -- \
 | `--cluster` | `kind` | 集群名称 |
 | `--admin-bind-address` | `0.0.0.0:8082` | Admin API 地址 |
 | `--metrics-bind-address` | `0.0.0.0:9091` | Prometheus 指标端口 |
+
 ## 编译 Protobuf
 
 修改 `proto/` 目录下的 `.proto` 文件后，需要重新生成 Go 和 Rust 代码：
@@ -208,6 +212,7 @@ docker compose up -d
 ```
 
 这会启动：
+
 - 控制面实例
 - 数据面实例
 - 管理界面

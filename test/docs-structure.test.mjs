@@ -119,7 +119,7 @@ test('versioned English and Chinese docs stay path-mirrored', () => {
 });
 
 test('current and versioned docs only differ by the approved drift set', () => {
-  const expectedCurrentOnly = [];
+  const expectedCurrentOnly = ['concepts/gateway-api-support.mdx', 'operations/scaling.mdx'];
   const expectedArchivedOnly = [];
 
   assertIntentionalDrift(

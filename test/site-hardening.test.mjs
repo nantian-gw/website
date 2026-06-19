@@ -20,6 +20,10 @@ function buildArtifacts() {
     cwd: rootPath,
     stdio: "pipe",
   });
+  execFileSync(process.execPath, ["./scripts/generate-llms-txt.mjs"], {
+    cwd: rootPath,
+    stdio: "pipe",
+  });
   buildArtifactsReady = true;
 }
 
@@ -31,7 +35,7 @@ function readArtifact(path) {
 test("default build command installs the browser before the Astro build", () => {
   const pkg = JSON.parse(read("package.json"));
 
-  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build");
+  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build && npm run build:llms");
   assert.equal(pkg.scripts["build:astro"], "astro build");
   assert.equal(pkg.scripts["setup:browser"], "npx playwright install chromium");
   assert.equal(pkg.scripts["setup:browser:ci"], "npx playwright install --with-deps chromium");
@@ -51,13 +55,13 @@ test("CI installs the browser before running hardening tests and builds", () => 
 
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run setup:browser:ci/);
-  assert.match(ci, /npm run build:astro/);
+  assert.match(ci, /npm run build:ci/);
   assert.ok(
     ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm test"),
     "CI must install the browser before running the hardening test suite",
   );
   assert.ok(
-    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:astro"),
+    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:ci"),
     "CI must install the browser before running the build",
   );
 });
@@ -83,7 +87,7 @@ test("Cloudflare Pages config declares the static output directory", () => {
 
 test("Cloudflare Pages headers include wildcard security headers", () => {
   const headers = read("public/_headers");
-  const wildcardBlock = headers.match(/^\/\*\n(?:(?:  .+\n?)+)/m)?.[0] ?? "";
+  const wildcardBlock = headers.match(/^\/\*\n(?:(?: {2}.+\n?)+)/m)?.[0] ?? "";
   const expectedHeaders = [
     "X-Frame-Options: DENY",
     "X-Content-Type-Options: nosniff",
@@ -98,7 +102,7 @@ test("Cloudflare Pages headers include wildcard security headers", () => {
     assert.ok(wildcardBlock.includes(`  ${header}`), `missing wildcard header: ${header}`);
   }
 
-  assert.match(wildcardBlock, /  Content-Security-Policy:\s+[^\n]+/);
+  assert.match(wildcardBlock, / {2}Content-Security-Policy:\s+[^\n]+/);
   for (const directive of [
     "default-src 'self'",
     "base-uri 'self'",
@@ -191,8 +195,6 @@ const chartDocPaths = [
   "src/content/docs/zh/1.5/contributing/release.mdx",
   "src/components/landing/QuickStart.astro",
   "src/components/landing/Features.astro",
-  "public/llms.txt",
-  "public/llms-full.txt",
 ];
 
 const defaultInstallDocPaths = [
@@ -247,7 +249,9 @@ test("default-install docs describe current default image tag semantics", () => 
 });
 
 test("LLM reference files describe current Helm image defaults", () => {
-  const docs = readMany(["public/llms.txt", "public/llms-full.txt"]);
+  const llmsTxt = readArtifact("dist/llms.txt");
+  const llmsFullTxt = readArtifact("dist/llms-full.txt");
+  const docs = `\n--- llms.txt ---\n${llmsTxt}\n--- llms-full.txt ---\n${llmsFullTxt}`;
 
   assert.match(docs, /uses the latest tag/i);
   assert.doesNotMatch(docs, /sha-b3b9649/);
@@ -257,8 +261,8 @@ test("LLM reference files describe current Helm image defaults", () => {
 
 test("English surfaced docs links no longer publish /en prefixes", () => {
   const surfacedPages = {
-    "public/llms.txt": read("public/llms.txt"),
-    "public/llms-full.txt": read("public/llms-full.txt"),
+    "dist/llms.txt": readArtifact("dist/llms.txt"),
+    "dist/llms-full.txt": readArtifact("dist/llms-full.txt"),
     "dist/index.html": readArtifact("dist/index.html"),
     "dist/about/index.html": readArtifact("dist/about/index.html"),
     "dist/overview/index.html": readArtifact("dist/overview/index.html"),
@@ -357,7 +361,7 @@ test("landing layouts derive canonical metadata and navbar links from route cont
 
   assert.doesNotMatch(landingLayout, /canonical\s*=\s*'https:\/\/nantian\.dev\/'/);
   assert.match(landingLayout, /Astro\.url\.pathname/);
-  assert.doesNotMatch(navbar, /<a\s+href=\"\/\"/);
+  assert.doesNotMatch(navbar, /<a\s+href='"\/"'/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
   assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });

@@ -5,6 +5,7 @@ export const docsSidebar = [
     items: [
       { label: 'Core Concepts', link: 'concepts/', translations: { 'zh-CN': '核心概念' } },
       { label: 'Gateway API', link: 'concepts/gateway-api', translations: { 'zh-CN': 'Gateway API' } },
+      { label: 'Gateway API Support', link: 'concepts/gateway-api-support', translations: { 'zh-CN': 'Gateway API 支持矩阵' } },
       { label: 'Split-Plane Architecture', link: 'concepts/split-plane', translations: { 'zh-CN': '分离式平面架构' } },
     ],
   },
@@ -84,6 +85,7 @@ export const docsSidebar = [
       { label: 'Alerting Rules', link: 'operations/alerting', translations: { 'zh-CN': '告警规则' } },
       { label: 'Troubleshooting', link: 'operations/troubleshooting', translations: { 'zh-CN': '故障排查' } },
       { label: 'Backup & Recovery', link: 'operations/backup', translations: { 'zh-CN': '备份与恢复' } },
+      { label: 'Scaling & Autoscaling', link: 'operations/scaling', translations: { 'zh-CN': '扩缩容' } },
     ],
   },
   {

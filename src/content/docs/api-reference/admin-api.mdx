@@ -2,230 +2,181 @@
 title: Admin API
 ---
 
-The Nantian Gateway control plane and data plane each expose an HTTP REST Admin API for runtime diagnostics, configuration inspection, and health probes. The Admin API is the most commonly used entry point for operators troubleshooting issues.
+The Nantian Gateway control plane exposes an HTTP REST Admin API for runtime diagnostics, configuration inspection, and operational queries. All endpoints live under the control plane's HTTP listener (default port `8081`).
 
-## Control Plane Admin API
+## Auth Model
 
-The control plane Admin API is exposed on the control plane pod's HTTP port (default `8081`) and provides a cluster-level configuration view as well as xDS client management.
+| Auth Level | Behavior |
+|------------|----------|
+| `none` | No authentication required. Used by health probes and Kubernetes liveness/readiness checks. |
+| `bearer-when-configured` | If an admin API token is set in the control plane configuration, the request must include an `Authorization: Bearer <token>` header. If no token is configured, the endpoint is open. |
 
-### Endpoint List
+## Endpoint Reference
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/healthz` | Health check |
-| `GET` | `/readyz` | Readiness check |
-| `GET` | `/api/v1/config/snapshot` | Get the current configuration snapshot |
-| `GET` | `/api/v1/config/snapshot/version` | Get the current configuration snapshot version |
-| `GET` | `/api/v1/gateways` | List all Gateways |
-| `GET` | `/api/v1/gateways/{namespace}/{name}` | Get details for a specific Gateway |
-| `GET` | `/api/v1/routes` | List all routes (HTTP/gRPC/TCP/UDP/TLS) |
-| `GET` | `/api/v1/routes/{namespace}/{name}` | Get details for a specific route |
-| `GET` | `/api/v1/backends` | List all backend clusters |
-| `GET` | `/api/v1/backends/{namespace}/{name}` | Get details for a specific backend cluster |
-| `GET` | `/api/v1/clients` | List all connected xDS clients |
-| `GET` | `/api/v1/clients/{node_id}` | Get connection status for a specific xDS client |
-| `GET` | `/api/v1/metrics` | Prometheus metrics endpoint |
+### Health Probes
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/livez` | `none` | Liveness check. Returns `200 OK` if the process is alive. |
+| `GET` | `/readyz` | `none` | Readiness check. Returns `200 OK` when the control plane has finished initial resource sync; `503` otherwise. |
+
+### Diagnostic Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/v1/summary` | `bearer-when-configured` | Cluster configuration overview: listener, route, backend, and node counts |
+| `GET` | `/v1/dashboard/capabilities` | `bearer-when-configured` | Feature flags exposed to the dashboard UI |
+| `GET` | `/v1/snapshot-sync` | `bearer-when-configured` | Snapshot synchronization status across all data plane nodes |
+| `GET` | `/v1/snapshot` | `bearer-when-configured` | Full IR snapshot content currently pushed to data planes |
+| `GET` | `/v1/listeners` | `bearer-when-configured` | List all listeners |
+| `GET` | `/v1/listeners/{name}` | `bearer-when-configured` | Detail for a specific listener |
+| `GET` | `/v1/routes` | `bearer-when-configured` | List all routes (HTTP, gRPC, TCP, UDP, TLS) |
+| `GET` | `/v1/routes/{kind}/{namespace}/{name}` | `bearer-when-configured` | Detail for a specific route |
+| `GET` | `/v1/backends` | `bearer-when-configured` | List all backend clusters |
+| `GET` | `/v1/backends/{namespace}/{name}` | `bearer-when-configured` | Detail for a specific backend cluster |
+| `GET` | `/v1/nodes` | `bearer-when-configured` | List all connected data plane nodes |
+| `GET` | `/v1/nodes/{nodeId}` | `bearer-when-configured` | Detail for a specific data plane node |
+| `GET` | `/v1/infrastructure` | `bearer-when-configured` | Infrastructure status (deployment, service, pod info) |
+| `GET` | `/v1/service-catalog` | `bearer-when-configured` | Service catalog listing |
+| `GET` | `/v1/namespaces` | `bearer-when-configured` | List known namespaces |
+| `GET` | `/v1/resource-kinds` | `bearer-when-configured` | List available resource types |
+| `GET` | `/v1/topology` | `bearer-when-configured` | Topology view of gateways, routes, and backends |
+| `GET` | `/v1/dataplanes` | `bearer-when-configured` | List data plane instances |
+| `GET` | `/v1/dataplanes/{nodeId}/summary` | `bearer-when-configured` | Summary for a specific data plane instance |
+
+### Resource CRUD
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/v1/resources` | `bearer-when-configured` | List all managed resources |
+| `POST` | `/v1/resources` | `bearer-when-configured` | Create or update a managed resource |
+| `GET` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | Get a specific resource by kind, namespace, and name |
+| `PUT` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | Update a specific resource |
+| `DELETE` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | Delete a specific resource |
+
+### Chatbot
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/v1/chatbot/config` | `bearer-when-configured` | Get chatbot configuration |
+| `PUT` | `/v1/chatbot/config` | `bearer-when-configured` | Update chatbot configuration |
+| `POST` | `/v1/chatbot/chat` | `bearer-when-configured` | Send a chat message. Response is `text/event-stream` (SSE). |
+
+### Metrics Proxy
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/v1/metrics/config` | `bearer-when-configured` | Get metrics backend configuration |
+| `PUT` | `/v1/metrics/config` | `bearer-when-configured` | Update metrics backend configuration |
+| `POST` | `/v1/metrics/query` | `bearer-when-configured` | Execute an instant PromQL query |
+| `POST` | `/v1/metrics/query_range` | `bearer-when-configured` | Execute a range PromQL query |
+
+### AI Gateway
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/v1/ai/overview` | `bearer-when-configured` | AI Gateway overview (models, providers, request volume) |
+| `GET` | `/v1/ai/services` | `bearer-when-configured` | List configured AI backend services |
+| `GET` | `/v1/ai/token-usage` | `bearer-when-configured` | Token usage statistics |
+| `GET` | `/v1/ai/traces` | `bearer-when-configured` | AI request traces |
+| `GET` | `/v1/ai/cost` | `bearer-when-configured` | Cost analysis across AI providers |
+
+## Usage Examples
 
 ### Health Checks
 
 ```bash
-# Control plane liveness check
-curl http://<controlplane-pod>:8081/healthz
-# Returns: 200 OK (body: "ok")
+# Liveness
+curl -s -o /dev/null -w "%{http_code}" http://controlplane:8081/livez
+# → 200
 
-# Control plane readiness check
-curl http://<controlplane-pod>:8081/readyz
-# Returns: 200 OK (body: "ready") or 503 Service Unavailable
+# Readiness (may return 503 before initial sync completes)
+curl -s http://controlplane:8081/readyz
+# → 200 OK (or 503 if not yet ready)
 ```
 
-`/healthz` only checks whether the process is alive. `/readyz` additionally checks whether the control plane has completed initial resource synchronization and is ready to accept configuration changes.
-
-### Configuration Snapshot
+### Configuration Inspection
 
 ```bash
-# Get the current configuration snapshot version
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
-# Example response:
-# {
-#   "id": "snap-20240601-120000-abc123",
-#   "generated_at": "2024-06-01T12:00:00Z",
-#   "gateways": 2,
-#   "routes": 15,
-#   "backends": 8,
-#   "clients_connected": 3
-# }
+# Cluster overview
+curl http://controlplane:8081/v1/summary
 
-# Get the full configuration snapshot
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot
-# Returns the full IR snapshot content currently being pushed to all data planes
+# All routes across all gateways
+curl http://controlplane:8081/v1/routes
+
+# Specific HTTPRoute detail
+curl http://controlplane:8081/v1/routes/httproute/default/my-app-route
+
+# Backend cluster detail
+curl http://controlplane:8081/v1/backends/default/backend-svc
+
+# Data plane node status
+curl http://controlplane:8081/v1/nodes
 ```
 
-The configuration snapshot endpoints return the control plane's translated internal representation (IR), not the original Kubernetes resources. This helps troubleshoot whether configuration translation is correct and confirm what configuration the data plane has received.
-
-### xDS Client Status
+### Snapshot Sync Check
 
 ```bash
-# List all connected xDS clients
-curl http://<controlplane-pod>:8081/api/v1/clients
-
-# Example response:
-# [
-#   {
-#     "node_id": "dataplane-7f8a9b-0",
-#     "cluster": "default",
-#     "version": "v1.2.3",
-#     "connected_since": "2024-06-01T11:55:00Z",
-#     "last_config_version": "snap-20240601-120000-abc123",
-#     "last_config_nonce": "nonce-xyz789",
-#     "last_config_status": "ACK",
-#     "subscriptions": ["http_routes", "backends", "listeners"]
-#   }
-# ]
-
-# Get details for a specific client
-curl http://<controlplane-pod>:8081/api/v1/clients/dataplane-7f8a9b-0
+# See which nodes are current vs. drifted
+curl http://controlplane:8081/v1/snapshot-sync
 ```
 
-The `clients` endpoint helps confirm whether data planes have connected successfully, which configurations they have received, and their last acknowledged status. If a data plane shows a `NACK` status for an extended period, it indicates there may be a problem with configuration delivery.
-
-## Data Plane Admin API
-
-The data plane Admin API is exposed on each data plane pod's HTTP port (default `8082`) and provides the runtime state of a single proxy instance.
-
-### Endpoint List
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/healthz` | Health check |
-| `GET` | `/readyz` | Readiness check |
-| `GET` | `/api/v1/status` | Proxy runtime status |
-| `GET` | `/api/v1/config` | Currently applied configuration |
-| `GET` | `/api/v1/config/version` | Current configuration version |
-| `GET` | `/api/v1/stats` | Runtime statistics |
-| `GET` | `/api/v1/stats/connections` | Active connection statistics |
-| `GET` | `/api/v1/stats/backends` | Backend health status |
-| `GET` | `/api/v1/xds/status` | xDS connection status |
-| `GET` | `/api/v1/metrics` | Prometheus metrics endpoint |
-
-### Proxy Status
+### Resource Management
 
 ```bash
-# Get proxy runtime status
-curl http://<dataplane-pod>:8082/api/v1/status
+# List all managed resources
+curl http://controlplane:8081/v1/resources
 
-# Example response:
-# {
-#   "node_id": "dataplane-7f8a9b-0",
-#   "version": "v1.2.3",
-#   "uptime_seconds": 86400,
-#   "ready": true,
-#   "config_version": "snap-20240601-120000-abc123",
-#   "config_applied_at": "2024-06-01T12:00:01Z",
-#   "listeners": [
-#     {"name": "http-80", "address": "0.0.0.0:80", "protocol": "HTTP", "active": true},
-#     {"name": "https-443", "address": "0.0.0.0:443", "protocol": "HTTPS", "active": true}
-#   ]
-# }
+# Get a specific resource
+curl http://controlplane:8081/v1/resources/httproute/default/my-app-route
+
+# Create or update a resource
+curl -X POST http://controlplane:8081/v1/resources \
+  -H "Content-Type: application/json" \
+  -d '{"apiVersion":"gateway.networking.k8s.io/v1","kind":"HTTPRoute",...}'
+
+# Delete a resource
+curl -X DELETE http://controlplane:8081/v1/resources/httproute/default/my-app-route
 ```
 
-### Runtime Statistics
+### Metrics Querying
 
 ```bash
-# Get active connection statistics
-curl http://<dataplane-pod>:8082/api/v1/stats/connections
+# Instant query
+curl -X POST http://controlplane:8081/v1/metrics/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"up"}'
 
-# Example response:
-# {
-#   "active_connections": 1250,
-#   "connections_per_second": 45.2,
-#   "total_connections": 3892000,
-#   "connection_errors": 12
-# }
-
-# Get backend health status
-curl http://<dataplane-pod>:8082/api/v1/stats/backends
-
-# Example response:
-# [
-#   {
-#     "name": "backend-v1",
-#     "namespace": "default",
-#     "endpoints": [
-#       {"address": "10.0.1.5:8080", "healthy": true, "zone": "us-east-1a"},
-#       {"address": "10.0.1.6:8080", "healthy": true, "zone": "us-east-1b"},
-#       {"address": "10.0.1.7:8080", "healthy": false, "zone": "us-east-1a"}
-#     ]
-#   }
-# ]
+# Range query over last hour
+curl -X POST http://controlplane:8081/v1/metrics/query_range \
+  -H "Content-Type: application/json" \
+  -d '{"query":"rate(http_requests_total[5m])","start":"2025-01-01T00:00:00Z","end":"2025-01-01T01:00:00Z","step":"30s"}'
 ```
 
-### xDS Connection Status
+### AI Gateway
 
 ```bash
-# Get the xDS connection status with the control plane
-curl http://<dataplane-pod>:8082/api/v1/xds/status
+# Overview
+curl http://controlplane:8081/v1/ai/overview
 
-# Example response:
-# {
-#   "connected": true,
-#   "controlplane_address": "nantian-gw-controlplane:9090",
-#   "connected_since": "2024-06-01T11:55:00Z",
-#   "last_config_version": "snap-20240601-120000-abc123",
-#   "last_config_nonce": "nonce-xyz789",
-#   "last_config_status": "ACK",
-#   "stream_reconnects": 0
-# }
+# Token usage
+curl http://controlplane:8081/v1/ai/token-usage
 ```
 
-## Common Diagnostic Scenarios
+### Authenticated Requests
 
-### Scenario 1: Verify Configuration Has Taken Effect
-
-When you modify a routing configuration in Kubernetes but don't see the expected behavior, first confirm whether the configuration has been pushed to and applied by the data plane:
+When the admin token is configured, include it in the `Authorization` header:
 
 ```bash
-# 1. Check the control plane configuration snapshot version
-curl http://<controlplane>:8081/api/v1/config/snapshot/version
-
-# 2. Check whether the data plane has received the same version
-curl http://<dataplane>:8082/api/v1/config/version
-
-# 3. If versions don't match, check xDS client status
-curl http://<controlplane>:8081/api/v1/clients
+curl -H "Authorization: Bearer ${ADMIN_TOKEN}" http://controlplane:8081/v1/summary
 ```
 
-If the control plane snapshot version has been updated but the data plane version has not, check whether the xDS client is in `NACK` status and whether the error details contain configuration parsing failure information.
-
-### Scenario 2: Diagnose Backend Unavailability
-
-```bash
-# 1. Check the endpoint list for the backend cluster in the control plane
-curl http://<controlplane>:8081/api/v1/backends/default/backend-v1
-
-# 2. Check the health status of backend endpoints in the data plane
-curl http://<dataplane>:8082/api/v1/stats/backends
-```
-
-The control plane returns the configuration translated from Kubernetes EndpointSlice. The data plane returns the actual health check results. If the control plane lists endpoints but the data plane shows `healthy: false`, it means health checks are failing. You need to check whether the backend service itself is healthy.
-
-### Scenario 3: Check Data Plane to Control Plane Connectivity
-
-```bash
-# View connection status for all data planes
-curl http://<controlplane>:8081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
-
-# View xDS status for a specific data plane
-curl http://<dataplane>:8082/api/v1/xds/status
-```
-
-If a data plane's `stream_reconnects` is continuously increasing, it means the gRPC connection between the control plane and data plane is unstable. Check your network and firewall configuration.
-
-:::tip[jq Tool]
-The Admin API returns JSON format. Using the `jq` tool is recommended for formatting output. If `jq` is not available in your environment, you can use `python3 -m json.tool` as an alternative.
+:::tip[jq]
+All diagnostic and CRUD endpoints return JSON. Pipe through `jq` for readable output: `curl ... | jq .`
 :::
 
 ## Next Steps
 
-- See [xDS Protocol](/api-reference/xds-proto) for communication protocol details between the control plane and data plane
-- See [Troubleshooting](/operations/troubleshooting) for diagnostic methods for common issues
-- See [Metrics Reference](/operations/metrics) for Prometheus metric definitions
+- [Gateway API Resources](/api-reference/gateway-api) for the Kubernetes resources that drive configuration
+- [xDS Protocol](/api-reference/xds-proto) for control plane to data plane communication
+- [Troubleshooting](/operations/troubleshooting) for common diagnostic workflows

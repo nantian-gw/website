@@ -55,6 +55,7 @@ The upgrade process depends on your deployment method:
 - **Kustomize**: Update image tags in your Kustomization, then `kubectl apply -k .`.
 
 Upgrade considerations:
+
 1. Upgrade the control plane first, then the data plane. There may be brief configuration push delays during control plane upgrade, but existing traffic is unaffected.
 2. Read the release notes for upgrade guidance and breaking changes.
 3. Validate the upgrade process in a non-production environment first.
@@ -113,6 +114,7 @@ Plugins run in a sandboxed environment with no network or filesystem access by d
 Wasm plugins can be written in any language that compiles to the `wasm32-wasi` target, with Rust being the most commonly used. The project provides a plugin development SDK and examples.
 
 Development workflow:
+
 1. Write plugin logic in Rust, implementing the specified trait interface
 2. Compile to `wasm32-wasi` target: `cargo build --target wasm32-wasi --release`
 3. Push the `.wasm` file as an OCI image or to an accessible URL
@@ -178,6 +180,7 @@ For per-route access log control, use route annotations with the prefix `gateway
 ### How much memory does the data plane need?
 
 A typical data plane instance uses approximately 50-100MB at idle. Memory scales with:
+
 - Number of active connections (roughly 5-10KB per connection)
 - Wasm plugin memory allocation
 - Configuration snapshot size (depends on route/backend count)

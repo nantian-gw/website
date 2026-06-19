@@ -1,0 +1,128 @@
+---
+title: Gateway API Support Matrix
+---
+
+Nantian Gateway targets the Kubernetes Gateway API v1.5.1 specification. This page summarizes current support for every upstream feature, including experimental and extended features.
+
+## How to Read This Matrix
+
+- **Default Support** — feature is advertised when `enableExperimentalGateway=false`.
+- **Experimental Runtime Support** — feature is advertised when `enableExperimentalGateway=true`.
+- **Current Position** — Nantian's runtime-gated support position, derived from `internal/gatewayapi/supported_features.go` and conformance workflows.
+
+:::note
+Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `BackendTLSPolicy`, `TLSRoute`) are fully supported and not repeated here.
+:::
+
+## Support Matrix
+
+### Gateway Extended Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| GatewayPort8080 | standard | Yes | Yes | Supported |
+| GatewayStaticAddresses | standard | Yes | Yes | Supported |
+| GatewayHTTPListenerIsolation | standard | Yes | Yes | Supported |
+| GatewayHTTPSListenerDetectMisdirectedRequests | standard | Yes | Yes | Supported |
+| GatewayInfrastructurePropagation | standard | Yes | Yes | Supported |
+| GatewayAddressEmpty | standard | Yes | Yes | Supported |
+| ListenerSet | standard | No | Yes | Experimental runtime only |
+| GatewayBackendClientCertificate | standard | Yes | Yes | Supported |
+| GatewayFrontendClientCertificateValidation | standard | No | No | Not supported |
+| GatewayFrontendClientCertificateValidationInsecureFallback | standard | No | No | Not supported |
+
+### HTTPRoute Extended Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| HTTPRouteDestinationPortMatching | experimental | Yes | Yes | Supported |
+| HTTPRouteBackendRequestHeaderModification | standard | Yes | Yes | Supported |
+| HTTPRouteQueryParamMatching | standard | Yes | Yes | Supported |
+| HTTPRouteMethodMatching | standard | Yes | Yes | Supported |
+| HTTPRouteResponseHeaderModification | standard | Yes | Yes | Supported |
+| HTTPRoutePortRedirect | standard | Yes | Yes | Supported |
+| HTTPRouteSchemeRedirect | standard | Yes | Yes | Supported |
+| HTTPRoutePathRedirect | standard | Yes | Yes | Supported |
+| HTTPRouteHostRewrite | standard | Yes | Yes | Supported |
+| HTTPRoutePathRewrite | standard | Yes | Yes | Supported |
+| HTTPRouteRequestMirror | standard | Yes | Yes | Supported |
+| HTTPRouteRequestMultipleMirrors | experimental | Yes | No | Default runtime only |
+| HTTPRouteRequestPercentageMirror | experimental | Yes | No | Default runtime only |
+| HTTPRouteRequestTimeout | standard | Yes | Yes | Supported |
+| HTTPRouteBackendTimeout | standard | Yes | Yes | Supported |
+| HTTPRouteParentRefPort | standard | Yes | Yes | Supported |
+| HTTPRouteNamedRouteRule | standard | Yes | Yes | Supported |
+| HTTPRouteCORS | experimental | Yes | Yes | Supported |
+| HTTPRoute303RedirectStatusCode | experimental | Yes | No | Default runtime only |
+| HTTPRoute307RedirectStatusCode | experimental | Yes | No | Default runtime only |
+| HTTPRoute308RedirectStatusCode | experimental | Yes | No | Default runtime only |
+| HTTPRouteBackendProtocolH2C | experimental | Yes | Yes | Supported |
+| HTTPRouteBackendProtocolWebSocket | experimental | Yes | Yes | Supported |
+| HTTPRouteBackendProtocolGRPC | experimental | No | No | Not supported |
+
+### GRPCRoute Extended Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| GRPCRouteNamedRouteRule | standard | Yes | Yes | Supported |
+
+### TLSRoute Extended Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| TLSRouteBackendTimeout | standard | Yes | Yes | Supported |
+| TLSRouteModeTerminate | experimental | No | Yes | Experimental runtime only |
+| TLSRouteModeMixed | experimental | No | Yes | Experimental runtime only |
+
+### Mesh Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| MeshFrontend | experimental | Yes | No | Default runtime only |
+| MeshConsumerRoute | experimental | Yes | No | Default runtime only |
+| MeshClusterIPMatching | experimental | Yes | No | Default runtime only |
+| MeshConsumerNamespaceMatching | experimental | No | No | Not supported |
+
+### BackendLBPolicy Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| BackendLBPolicy | standard | Yes | Yes | Supported |
+
+### BackendTLSPolicy Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| BackendTLSPolicySANValidation | experimental | Yes | Yes | Supported |
+| BackendTLSPolicyCACertificate | experimental | Yes | Yes | Supported |
+
+## Nantian-Specific Declarations
+
+In addition to the upstream Gateway API feature set, Nantian Gateway declares:
+
+| Feature | Description |
+|---------|-------------|
+| `TCPRoute` | TCP routing support |
+| `BackendLBSessionPersistence` | Session persistence for backend load balancing |
+| `UDPRoute` | UDP routing support |
+
+## Enabling Experimental Features
+
+To enable experimental runtime features, set the Helm value:
+
+```yaml
+gatewayAPI:
+  enableExperimentalGateway: true
+```
+
+For conformance testing with experimental features:
+
+```bash
+CONFORMANCE_EXPERIMENTAL=true ALL_FEATURES=true make conformance
+```
+
+## Source of Truth
+
+- Supported feature declarations: `gateway/internal/gatewayapi/supported_features.go`
+- All-features conformance: `gateway/conformance/conformance_test.go`
+- CI workflow: `gateway/.github/workflows/conformance.yml`

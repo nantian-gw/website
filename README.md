@@ -28,6 +28,7 @@ The dev server runs at `http://localhost:4321`.
 
 ```bash
 npm run check            # Type check
+npm run lint             # ESLint + markdownlint + type check
 npm test                 # Repository hardening checks
 npm run setup:browser    # Install Chromium for Mermaid rendering in clean environments
 npm run build            # Production build
@@ -35,13 +36,14 @@ npm run build            # Production build
 
 `npm run build` installs the Playwright Chromium browser before running `astro build`
 because Mermaid rendering in MDX uses Playwright during static generation. CI can
-run `npm run setup:browser:ci` followed by `npm run build:astro` to install browser
-system dependencies separately and avoid duplicate browser setup.
+run `npm run build:ci` to install browser system dependencies separately and avoid
+duplicate browser setup.
 
 ## Translation
 
 Documentation is available in:
-- **English** (`src/content/docs/en/`)
+
+- **English** (`src/content/docs/`)
 - **中文（简体）** (`src/content/docs/zh/`)
 
 ## License

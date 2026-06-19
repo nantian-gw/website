@@ -1,0 +1,128 @@
+---
+title: Gateway API 支持矩阵
+---
+
+Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总当前对所有上游功能的支持情况，包括实验性功能与扩展功能。
+
+## 阅读指南
+
+- **默认支持** — 当 `enableExperimentalGateway=false` 时声明的功能。
+- **实验性运行时支持** — 当 `enableExperimentalGateway=true` 时声明的功能。
+- **当前状态** — Nantian Gateway 在运行时按条件启用的支持状态，数据来源为 `internal/gatewayapi/supported_features.go` 和一致性工作流。
+
+:::note
+核心功能（`Gateway`、`HTTPRoute`、`GRPCRoute`、`Mesh`、`ReferenceGrant`、`BackendTLSPolicy`、`TLSRoute`）已完整支持，此处不再重复列出。
+:::
+
+## 支持矩阵
+
+### Gateway 扩展功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| GatewayPort8080 | standard | Yes | Yes | 已支持 |
+| GatewayStaticAddresses | standard | Yes | Yes | 已支持 |
+| GatewayHTTPListenerIsolation | standard | Yes | Yes | 已支持 |
+| GatewayHTTPSListenerDetectMisdirectedRequests | standard | Yes | Yes | 已支持 |
+| GatewayInfrastructurePropagation | standard | Yes | Yes | 已支持 |
+| GatewayAddressEmpty | standard | Yes | Yes | 已支持 |
+| ListenerSet | standard | No | Yes | 仅实验性运行时 |
+| GatewayBackendClientCertificate | standard | Yes | Yes | 已支持 |
+| GatewayFrontendClientCertificateValidation | standard | No | No | 不支持 |
+| GatewayFrontendClientCertificateValidationInsecureFallback | standard | No | No | 不支持 |
+
+### HTTPRoute 扩展功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| HTTPRouteDestinationPortMatching | experimental | Yes | Yes | 已支持 |
+| HTTPRouteBackendRequestHeaderModification | standard | Yes | Yes | 已支持 |
+| HTTPRouteQueryParamMatching | standard | Yes | Yes | 已支持 |
+| HTTPRouteMethodMatching | standard | Yes | Yes | 已支持 |
+| HTTPRouteResponseHeaderModification | standard | Yes | Yes | 已支持 |
+| HTTPRoutePortRedirect | standard | Yes | Yes | 已支持 |
+| HTTPRouteSchemeRedirect | standard | Yes | Yes | 已支持 |
+| HTTPRoutePathRedirect | standard | Yes | Yes | 已支持 |
+| HTTPRouteHostRewrite | standard | Yes | Yes | 已支持 |
+| HTTPRoutePathRewrite | standard | Yes | Yes | 已支持 |
+| HTTPRouteRequestMirror | standard | Yes | Yes | 已支持 |
+| HTTPRouteRequestMultipleMirrors | experimental | Yes | No | 仅默认运行时 |
+| HTTPRouteRequestPercentageMirror | experimental | Yes | No | 仅默认运行时 |
+| HTTPRouteRequestTimeout | standard | Yes | Yes | 已支持 |
+| HTTPRouteBackendTimeout | standard | Yes | Yes | 已支持 |
+| HTTPRouteParentRefPort | standard | Yes | Yes | 已支持 |
+| HTTPRouteNamedRouteRule | standard | Yes | Yes | 已支持 |
+| HTTPRouteCORS | experimental | Yes | Yes | 已支持 |
+| HTTPRoute303RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
+| HTTPRoute307RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
+| HTTPRoute308RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
+| HTTPRouteBackendProtocolH2C | experimental | Yes | Yes | 已支持 |
+| HTTPRouteBackendProtocolWebSocket | experimental | Yes | Yes | 已支持 |
+| HTTPRouteBackendProtocolGRPC | experimental | No | No | 不支持 |
+
+### GRPCRoute 扩展功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| GRPCRouteNamedRouteRule | standard | Yes | Yes | 已支持 |
+
+### TLSRoute 扩展功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| TLSRouteBackendTimeout | standard | Yes | Yes | 已支持 |
+| TLSRouteModeTerminate | experimental | No | Yes | 仅实验性运行时 |
+| TLSRouteModeMixed | experimental | No | Yes | 仅实验性运行时 |
+
+### Mesh 功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| MeshFrontend | experimental | Yes | No | 仅默认运行时 |
+| MeshConsumerRoute | experimental | Yes | No | 仅默认运行时 |
+| MeshClusterIPMatching | experimental | Yes | No | 仅默认运行时 |
+| MeshConsumerNamespaceMatching | experimental | No | No | 不支持 |
+
+### BackendLBPolicy 功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| BackendLBPolicy | standard | Yes | Yes | 已支持 |
+
+### BackendTLSPolicy 功能
+
+| 功能 | 通道 | 默认 | 实验性 | 状态 |
+|------|------|------|--------|------|
+| BackendTLSPolicySANValidation | experimental | Yes | Yes | 已支持 |
+| BackendTLSPolicyCACertificate | experimental | Yes | Yes | 已支持 |
+
+## Nantian Gateway 自有声明
+
+除上游 Gateway API 功能集外，Nantian Gateway 额外声明：
+
+| 功能 | 描述 |
+|------|------|
+| `TCPRoute` | TCP 路由支持 |
+| `BackendLBSessionPersistence` | 后端负载均衡的会话保持 |
+| `UDPRoute` | UDP 路由支持 |
+
+## 启用实验性功能
+
+要启用实验性运行时功能，设置以下 Helm 值：
+
+```yaml
+gatewayAPI:
+  enableExperimentalGateway: true
+```
+
+进行含实验性功能的一致性测试：
+
+```bash
+CONFORMANCE_EXPERIMENTAL=true ALL_FEATURES=true make conformance
+```
+
+## 源头文件
+
+- 功能支持声明：`gateway/internal/gatewayapi/supported_features.go`
+- 全功能一致性测试：`gateway/conformance/conformance_test.go`
+- CI 工作流：`gateway/.github/workflows/conformance.yml`

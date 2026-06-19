@@ -106,6 +106,7 @@ Lists all listeners from the current snapshot. Each listener includes its name, 
 **Response**: `application/json`
 
 **Query parameters**:
+
 - `namespace` -- filter by namespace
 - `hostname` -- filter by hostname (substring match)
 
@@ -126,6 +127,7 @@ Lists all routes from the current snapshot. Returns routes of all types: HTTP, g
 **Response**: `application/json`
 
 **Query parameters**:
+
 - `namespace` -- filter by namespace
 - `kind` -- filter by route kind (`HTTPRoute`, `GRPCRoute`, `TCPRoute`, `UDPRoute`, `TLSRoute`)
 - `listener` -- filter by parent listener name
@@ -147,6 +149,7 @@ Lists all backends from the current snapshot. Returns Service backends, AIServic
 **Response**: `application/json`
 
 **Query parameters**:
+
 - `namespace` -- filter by namespace
 
 #### `GET /v1/backends/{namespace}/{name}`
@@ -191,6 +194,7 @@ Lists Kubernetes resources managed by the gateway. Supports filtering by namespa
 **Response**: `application/json`
 
 **Query parameters**:
+
 - `namespace` -- filter by namespace
 - `kind` -- filter by resource kind (e.g., `Gateway`, `HTTPRoute`, `Secret`)
 - `labels` -- filter by label selector
@@ -251,6 +255,7 @@ The Admin API server applies these limits:
 | `readTimeout` | 30s | Maximum time to read the full request |
 | `writeTimeout` | 30s | Maximum time to write the response |
 | `idleTimeout` | 2m | Maximum idle time for keep-alive connections |
+
 ## Metrics
 
 The Admin API emits request-level metrics through the `nantian_gateway_controlplane_admin_requests_total` and `nantian_gateway_controlplane_admin_request_duration_seconds` metrics, partitioned by HTTP method, normalized route, and status class. These are scraped by Prometheus through the main metrics endpoint on `:18082`.

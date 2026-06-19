@@ -66,7 +66,7 @@ serviceMonitor:
 仪表盘使用以下模板变量，允许按命名空间、Pod 和实例筛选：
 
 | 变量 | 类型 | 说明 |
-|---|---|---|
+| --- | --- |---|
 | `datasource` | 数据源 | Prometheus 数据源选择 |
 | `namespace` | 查询 | 按命名空间筛选（默认 `nantian-gw`） |
 | `pod_dp` | 查询 | 数据面 Pod 多选（默认全部） |
@@ -84,7 +84,7 @@ serviceMonitor:
 顶部统计卡片，提供集群健康状态的一目了然视图：
 
 | 面板 | 指标 | 说明 |
-|---|---|---|
+| --- | --- |---|
 | Ready Pods | `sum(count(nantian_gateway_dataplane_ready))` | 就绪的数据面 Pod 数量 |
 | QPS | `sum(rate(nantian_gateway_dataplane_traffic_request_events_total[5m]))` | 每秒请求数 |
 | Success Rate | 成功请求占比 | 无错误标志的请求比例 |

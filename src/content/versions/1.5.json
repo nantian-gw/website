@@ -151,6 +151,13 @@
           }
         },
         {
+          "label": "Helm Values",
+          "link": "configuration/helm-values",
+          "translations": {
+            "zh-CN": "Helm Values 指南"
+          }
+        },
+        {
           "label": "Experimental Features",
           "link": "configuration/experimental-features",
           "translations": {
