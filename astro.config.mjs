@@ -10,6 +10,7 @@ export default defineConfig({
   site: 'https://nantian.dev',
   markdown: {
     processor: unified({
+      gfm: true,
       rehypePlugins: [rehypeMermaid],
     }),
   },

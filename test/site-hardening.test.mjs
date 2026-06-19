@@ -382,6 +382,16 @@ test("docs pages keep required Starlight inline scripts and CSP allows them", ()
   assert.match(landingHome, /<script[^>]*src="\/_astro\/navbar\.client\.[^"]+\.js"[^>]*><\/script>/i);
 });
 
+test("configuration overview renders GFM tables as HTML tables in the build artifact", () => {
+  const configurationOverview = readArtifact("dist/configuration/index.html");
+
+  assert.match(configurationOverview, /<table[\s>]/);
+  assert.match(configurationOverview, />Page<\/th>/);
+  assert.match(configurationOverview, />Covers<\/th>/);
+  assert.match(configurationOverview, />Performance Tuning</);
+  assert.doesNotMatch(configurationOverview, /<p>\| Page \| Covers \|/);
+});
+
 test("English docs build at root locale with root-path metadata", () => {
   const production = readArtifact("dist/installation/production/index.html");
 
