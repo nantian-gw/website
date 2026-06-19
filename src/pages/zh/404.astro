@@ -26,6 +26,6 @@ import ContentLayout from '../../layouts/ContentLayout.astro';
       pf.init();
       const container = document.getElementById('search');
       if (container) new pf.PagefindUI({ element: container });
-    } catch {}
+    } catch { /* pagefind unavailable, search skipped */ }
   })();
 </script>

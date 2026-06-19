@@ -8,27 +8,11 @@
  * Usage: node scripts/generate-llms-txt.mjs [dist-dir]
  */
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const distDir = process.argv[2] || "dist";
 const siteUrl = "https://nantian.dev";
-
-// Pages to exclude from llms output
-const excludePaths = new Set([
-  "404.html",
-  "index.html",        // landing page
-  "zh/index.html",
-  "about/index.html",
-  "zh/about/index.html",
-  "contact/index.html",
-  "zh/contact/index.html",
-  "privacy/index.html",
-  "zh/privacy/index.html",
-  "terms/index.html",
-  "zh/terms/index.html",
-]);
 
 // Page structure from sidebar — section labels and their pages
 const sidebarSections = [
