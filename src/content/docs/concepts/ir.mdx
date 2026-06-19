@@ -1,0 +1,115 @@
+---
+title: Intermediate Representation (IR)
+---
+
+Nantian Gateway's control plane watches Kubernetes resources and translates them into something the data plane can consume. That something is called the Intermediate Representation, or IR.
+
+The IR is a normalized, versioned snapshot of the entire gateway configuration: every listener, every route rule, every backend, every endpoint, every Wasm plugin, and every AI service definition, all flattened into a format the data plane understands directly. The control plane builds a new IR snapshot whenever Kubernetes resources change, then pushes it to connected data planes over gRPC.
+
+## Why an IR?
+
+Kubernetes Gateway API resources are expressive and hierarchical. A single HTTPRoute can match a path, filter headers, rewrite URLs, and fan out to five backends with independent weights. The data plane doesn't need all that structure: it needs a flat, resolved configuration it can load into its runtime routing table efficiently.
+
+The IR acts as a decoupling layer:
+
+- The **translator** (in the control plane) converts Gateway API resources into IR form, resolving references, collapsing inheritance, and applying defaults.
+- The **data plane** receives the IR and loads it directly into its routing engine, with no Kubernetes awareness at all.
+
+This split means the control plane can evolve its translation logic (new Gateway API features, new CRDs, policy changes) without changing the data plane. It also means the data plane stays small and focused.
+
+## How IR Is Built
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     Kubernetes API                           │
+│                                                              │
+│  Gateways  Routes  Services  EndpointSlices  AIServices ... │
+└────────────────────────┬────────────────────────────────────┘
+                         │  Watch & reconcile
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Translator                              │
+│                                                              │
+│  Resolve references  •  Collapse hierarchies                 │
+│  Apply defaults     •  Normalize configurations              │
+│  Validate rules     •  Reject invalid combinations           │
+└────────────────────────┬────────────────────────────────────┘
+                         │  IR Snapshot
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    IR (versioned)                             │
+│                                                              │
+│  listeners  routes  backends  endpoints  AI services  Wasm   │
+└────────────────────────┬────────────────────────────────────┘
+                         │  xDS (gRPC bidirectional stream)
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      Data Planes                              │
+│                                                              │
+│  Receive snapshot  •  Apply to runtime  •  Ack to control    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The translator runs whenever a watched Kubernetes resource changes. It collects all relevant resources, resolves cross-references, applies policy, and produces a single IR snapshot. If validation passes, the snapshot gets a version number and is published to data planes via xDS.
+
+A snapshot is atomic: either it's complete and valid, or the translator rejects it and the data planes keep running with the last good version.
+
+## What's in an IR Snapshot
+
+An IR snapshot contains these normalized resource types:
+
+| Component | Contains |
+|-----------|----------|
+| **Listeners** | Gateway listener definitions with protocol, port, TLS config, and attached filter chains. |
+| **Routes** | Flattened routing rules with match criteria (path, headers, query), actions, and backend references. |
+| **Backends** | Resolved backend services with load balancing policy, timeouts, retry config, and circuit breaker settings. |
+| **Endpoints** | Concrete IP addresses and ports for each backend, pulled from EndpointSlice resources. |
+| **AI Services** | AI provider connections: model names, auth tokens, endpoint URLs, and rate limit policies. |
+| **Wasm Plugins** | Plugin references and configuration payloads attached to listeners or routes. |
+
+An IR snapshot is versioned and immutable. Each new snapshot increments the version counter, and data planes know which version they're running. If the version they request from the control plane is stale or unknown, the control plane sends the latest.
+
+## Inspecting IR via the Admin API
+
+The control plane's [Admin API](/architecture/admin-api) exposes a snapshot endpoint for inspecting the current IR:
+
+```
+GET /v1/snapshot
+```
+
+The response includes:
+
+- The current snapshot version
+- Counts of each resource type in the IR
+- The timestamp of when the snapshot was built
+- A compressed representation of the full IR (for debugging)
+
+Example:
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-controlplane-admin 18081:18081
+curl -s http://localhost:18081/v1/snapshot | jq .
+```
+
+```json
+{
+  "version": 42,
+  "builtAt": "2026-06-19T10:15:30Z",
+  "resourceCounts": {
+    "listeners": 3,
+    "routes": 12,
+    "backends": 8,
+    "endpoints": 24,
+    "aiServices": 2,
+    "wasmPlugins": 1
+  }
+}
+```
+
+Use this endpoint to verify that your Kubernetes configuration produced the expected IR, and to check which version the control plane considers current.
+
+## Relationship to xDS
+
+The IR is what flows through the gRPC xDS channel. Each data plane opens a bidirectional stream to the control plane, requests the latest snapshot, and the control plane sends the IR as a typed protobuf message. The data plane then diffs the new IR against its current runtime state and applies only the changes: adding new listeners, updating route tables, or draining removed backends.
+
+This is why the IR exists: to give the data plane something it can diff and apply efficiently, without any understanding of Kubernetes itself.

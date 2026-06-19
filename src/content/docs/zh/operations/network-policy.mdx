@@ -1,0 +1,82 @@
+---
+title: 网络策略
+---
+
+Nantian Gateway 默认创建 Kubernetes NetworkPolicy 来限制访问其 Pod 的入站流量。仅允许的流量可以到达控制面、数据面和仪表盘组件。
+
+NetworkPolicy 默认启用。如果你的集群已经在其他层面强制执行了策略，或者运行在没有 NetworkPolicy 控制器的环境中，可以将其关闭。
+
+## 启用和关闭
+
+通过一个值来切换 NetworkPolicy：
+
+```yaml
+networkPolicies:
+  enabled: true
+```
+
+设置 `enabled: false` 会移除所有 NetworkPolicy 资源。Chart 在安装或升级时不会渲染它们。
+
+## 哪些组件会创建 NetworkPolicy
+
+Chart 为三个组件创建策略：
+
+| 组件 | 模板 | 保护内容 |
+|-----------|----------|-------------------|
+| 控制面 | `templates/controlplane/networkpolicy.yaml` | gRPC 端口 (18080)、Admin API (18081)、指标 (18082) |
+| 数据面 | `templates/dataplane/networkpolicy.yaml` | Admin API 和指标 (19080)、数据面健康探测 |
+| 仪表盘 | `templates/dashboard/networkpolicy.yaml` | 仪表盘 Web UI (3000) |
+
+每个策略遵循相同的模式：允许来自网关命名空间内 Pod 的入站流量，以及 `serviceMonitor.fromNamespaces` 中列出的命名空间访问指标端口。
+
+## 允许的流量
+
+### 控制面
+
+控制面的 NetworkPolicy 允许以下流量：
+
+- **端口 18080 (gRPC)**：来自同一命名空间的流量，以便数据面 Pod 可以连接接收 xDS 快照
+- **端口 18081 (Admin)**：来自同一命名空间的流量，用于 Admin API
+- **端口 18082 (指标)**：来自同一命名空间的流量，以及 `serviceMonitor.fromNamespaces` 中的命名空间，用于 Prometheus 抓取
+- **端口 18083 (健康检查)**：无限制访问（`0.0.0.0/0` 和 `::/0`），确保 Kubernetes 就绪和存活探针始终可用
+
+### 数据面
+
+数据面的 NetworkPolicy 允许以下流量：
+
+- **端口 19080 (Admin/指标)**：来自同一命名空间的流量用于 Admin API，以及 `serviceMonitor.fromNamespaces` 中的命名空间用于 Prometheus 抓取
+
+### 仪表盘
+
+仪表盘的 NetworkPolicy 允许以下流量：
+
+- **端口 3000 (Web UI)**：来自同一命名空间的流量
+
+## 添加自定义规则
+
+Chart 的 NetworkPolicy 模板覆盖了标准的端口。如果你需要额外的入站规则，比如允许特定外部 IP 访问控制面的 Admin API，可以应用一个单独的 NetworkPolicy 资源：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nantian-gw-controlplane-custom
+  namespace: nantian-gw
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: controlplane
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 18081
+```
+
+多个 NetworkPolicy 针对同一组 Pod 时是叠加的，所以你自定义的规则会与 Chart 的默认规则合并。
+
+关于跨命名空间 Prometheus 抓取的详细信息见 [Prometheus 集成](/zh/operations/prometheus-setup/)。

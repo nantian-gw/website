@@ -1,0 +1,98 @@
+---
+title: Dashboard
+---
+
+The Nantian Gateway dashboard is a Next.js admin UI deployed alongside the control plane. It provides a web interface for inspecting gateway state, viewing route configurations, and monitoring data plane connections without needing `kubectl` or the admin API directly.
+
+The dashboard connects to the control plane's [Admin API](/architecture/admin-api) and reads configuration from it. It doesn't write anything back: it's a read-only observability tool for operators.
+
+## Enabling the Dashboard
+
+The dashboard is enabled by default in the Helm chart. These values control its deployment:
+
+```yaml
+dashboard:
+  enabled: true
+  replicas: 1
+  authSecret: ""
+  authExistingSecret: ""
+  serviceAccount:
+    name: ""
+    annotations: {}
+  image:
+    repository: nantian/dashboard
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  networkPolicy:
+    enabled: false
+  ingress:
+    enabled: false
+    className: ""
+    hosts: []
+    tls: []
+```
+
+### Core Values
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `dashboard.enabled` | `true` | Toggles the dashboard Deployment and Service. |
+| `dashboard.replicas` | `1` | Number of dashboard pod replicas. More than one is rarely useful since the dashboard is stateless and the admin API it queries runs on the control plane. |
+| `dashboard.serviceAccount.name` | `""` | Custom service account name. When empty, the chart generates one from the release name. |
+
+## Accessing the Dashboard
+
+Once deployed, the dashboard Service listens on port `3000` as `nantian-gw-dashboard` in the release namespace.
+
+**Port-forward for local access:**
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-dashboard 3000:3000
+```
+
+Then open `http://localhost:3000` in your browser.
+
+**Ingress for cluster access:**
+
+To expose the dashboard through an Ingress, set `dashboard.ingress.enabled: true` and configure `hosts` and `tls`:
+
+```yaml
+dashboard:
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - dashboard.nantian.example.com
+    tls:
+      - hosts:
+          - dashboard.nantian.example.com
+        secretName: dashboard-tls
+```
+
+The dashboard doesn't serve HTTPS on its own: terminate TLS at the Ingress layer.
+
+## Authentication
+
+The dashboard supports a shared secret for protecting access. Set one of these values:
+
+- **`authSecret`** — a plain string. Simple, but stored in the Helm values.
+- **`authExistingSecret`** — the name of an existing Kubernetes Secret the dashboard reads from at startup. Use this in production to avoid storing secrets in Helm values.
+
+When an auth secret is configured, the dashboard requires it on every page load. If both `authSecret` and `authExistingSecret` are set, `authExistingSecret` takes precedence.
+
+Leave both empty to run the dashboard without authentication. This is fine for local development and port-forward access behind a firewall, but don't do it on an internet-facing Ingress.
+
+## Dependencies
+
+The dashboard depends on the control plane's Admin API being reachable. The Admin API is served by the control plane Deployment on port `18081` (Service: `nantian-gw-controlplane-admin`). If the control plane pod isn't running or the admin API isn't healthy, the dashboard will show connection errors.
+
+See the [Admin API](/architecture/admin-api) reference for the endpoints the dashboard queries.
+
+## NetworkPolicy
+
+When `dashboard.networkPolicy.enabled` is `true`, the chart creates a Kubernetes NetworkPolicy that allows the dashboard pod to reach the control plane admin API. Customize this if your cluster has additional network restrictions.

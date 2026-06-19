@@ -262,3 +262,62 @@ Nantian Gateway is an open-source project under the Apache 2.0 license. The proj
 - **GitHub Discussions**: [github.com/nantian-gw/gateway/issues](https://github.com/nantian-gw/gateway/issues)
 - **GitHub Issues**: [github.com/nantian-gw/gateway/issues](https://github.com/nantian-gw/gateway/issues) — for bug reports and feature requests
 - **Community**: Join the discussion to share your use cases, ask questions, and help others
+
+## Operations & Monitoring
+
+### How do I monitor Nantian Gateway in production?
+
+Nantian Gateway exposes Prometheus metrics from both planes. The control plane exposes cluster-level metrics (reconciliation latency, resource count, error rates) on the configured metrics port. The data plane exposes per-instance proxy metrics (request rate, latency distribution, connection counts, error rates) on each data plane Pod.
+
+Enable metrics scraping by setting `metrics.enabled: true` and `metrics.serviceMonitor.enabled: true` in your Helm values. A sample Grafana dashboard is included in the Helm chart — import it from the `dashboards/` directory. We recommend alerting on:
+
+- **Data plane error rate** exceeding 1% over 5 minutes
+- **Control plane reconciliation latency** exceeding 30 seconds
+- **Data plane Pod count** dropping below the configured replica minimum
+- **Certificate expiry** within 30 days (if using cert-manager)
+
+See the [Monitoring](/operations/monitoring) page for full setup instructions.
+
+### Can I use cert-manager for TLS certificates?
+
+Yes. Set `certManager.enabled: true` in your Helm values. The chart creates a `Certificate` resource for the gateway's TLS listener when cert-manager is available. You can customize the issuer, duration, and renewal window:
+
+```yaml
+certManager:
+  enabled: true
+  issuer:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  duration: 2160h    # 90 days
+  renewBefore: 720h  # 30 days before expiry
+```
+
+If cert-manager is not installed, the gateway falls back to the TLS certificate specified in `tls.cert` and `tls.key`. See the [cert-manager](/configuration/cert-manager) page for details.
+
+### How does autoscaling work?
+
+**Data plane** autoscaling uses Kubernetes HorizontalPodAutoscaler (HPA). Enable it with `autoscaling.enabled: true` in your Helm values. The HPA scales data plane Pods based on CPU utilization (default target: 70%) or custom metrics if a Prometheus adapter is installed. Configure `autoscaling.minReplicas` and `autoscaling.maxReplicas` to set bounds.
+
+**Control plane** does not use HPA. Instead, it runs a single active controller via Kubernetes leader election — a second replica stands by as a passive standby. The lease is held by the active controller and automatically transfers if it becomes unhealthy. To increase control plane availability, set `controlPlane.replicas` to 2 or more in environments with multiple availability zones.
+
+## Project & Governance
+
+### What's the difference between the control plane and data plane Admin APIs?
+
+The two Admin APIs serve different scopes:
+
+**Control plane Admin API** provides a cluster-wide view. You can query the status of all Gateways, HTTPRoutes, Services, and backend references across the cluster. Use it for centralized troubleshooting: "which routes are unhealthy cluster-wide?" or "what's the aggregate backend health?"
+
+**Data plane Admin API** provides per-instance diagnostics. Each data plane Pod exposes its own Admin endpoint showing local routing table state, active connection counts, per-backend latency statistics, and configuration version. Use it for instance-level debugging: "is this specific proxy instance seeing a connection leak?" or "did configuration version X actually land on this proxy?"
+
+Both APIs are read-only by design. You can't push configuration through them — the control plane owns configuration via Kubernetes CRDs and pushes it to data planes through xDS.
+
+### How do I contribute to Nantian Gateway?
+
+The project is built across multiple repositories (`gateway`, `dataplane`, `dashboard`, `website`, `proto`). Start with the [Contributing Overview](/contributing/) page, which covers local setup, testing commands, and PR workflow. Look for issues labeled `good first issue` on [GitHub](https://github.com/nantian-gw/gateway/issues) — these are entry-level tasks suitable for new contributors.
+
+For larger proposals, open a [GitHub Discussion](https://github.com/nantian-gw/gateway/issues) first to align with maintainers before writing code.
+
+### Is there a changelog I can follow?
+
+Yes. Each release includes a detailed changelog with breaking changes, new features, and resolved issues. Find them on the [GitHub Releases](https://github.com/nantian-gw/gateway/releases) page. We follow semantic versioning: patch releases are safe upgrades, minor releases may add features but avoid breaking APIs, and major releases include breaking changes with migration guides.

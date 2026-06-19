@@ -1,0 +1,98 @@
+---
+title: 仪表盘
+---
+
+Nantian Gateway 仪表盘是一个随控制面一起部署的 Next.js 管理界面。它提供了用于查看网关状态、路由配置和监控数据面连接的 Web 界面，无需直接使用 `kubectl` 或 Admin API。
+
+仪表盘连接到控制面的 [Admin API](/zh/architecture/admin-api) 并从中读取配置。它不写入任何内容：它是一个仅供运维人员使用的只读可观测性工具。
+
+## 启用仪表盘
+
+Helm Chart 中仪表盘默认启用。以下配置项控制其部署：
+
+```yaml
+dashboard:
+  enabled: true
+  replicas: 1
+  authSecret: ""
+  authExistingSecret: ""
+  serviceAccount:
+    name: ""
+    annotations: {}
+  image:
+    repository: nantian/dashboard
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  networkPolicy:
+    enabled: false
+  ingress:
+    enabled: false
+    className: ""
+    hosts: []
+    tls: []
+```
+
+### 核心配置项
+
+| 配置项 | 默认值 | 说明 |
+|-------|---------|-------------|
+| `dashboard.enabled` | `true` | 开关仪表盘的 Deployment 和 Service。 |
+| `dashboard.replicas` | `1` | 仪表盘 Pod 副本数。由于仪表盘是无状态的，且它查询的 Admin API 运行在控制面上，多副本通常没什么用。 |
+| `dashboard.serviceAccount.name` | `""` | 自定义 ServiceAccount 名称。为空时，Chart 根据 release 名称自动生成。 |
+
+## 访问仪表盘
+
+部署后，仪表盘 Service 在 release 命名空间中监听端口 `3000`，Service 名称为 `nantian-gw-dashboard`。
+
+**通过端口转发本地访问：**
+
+```bash
+kubectl port-forward -n nantian-gw svc/nantian-gw-dashboard 3000:3000
+```
+
+然后在浏览器中打开 `http://localhost:3000`。
+
+**通过 Ingress 集群内访问：**
+
+要通过 Ingress 暴露仪表盘，设置 `dashboard.ingress.enabled: true` 并配置 `hosts` 和 `tls`：
+
+```yaml
+dashboard:
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - dashboard.nantian.example.com
+    tls:
+      - hosts:
+          - dashboard.nantian.example.com
+        secretName: dashboard-tls
+```
+
+仪表盘自身不提供 HTTPS：在 Ingress 层终止 TLS。
+
+## 认证
+
+仪表盘支持使用共享密钥来保护访问。设置以下配置项之一：
+
+- **`authSecret`**：一个明文字符串。使用简单，但存储在 Helm 配置值中。
+- **`authExistingSecret`**：一个已有的 Kubernetes Secret 名称，仪表盘启动时从中读取。在生产环境中使用这个来避免将密钥存储在 Helm 配置值中。
+
+配置认证密钥后，仪表盘要求每次页面加载时都提供该密钥。如果同时设置了 `authSecret` 和 `authExistingSecret`，会优先使用 `authExistingSecret`。
+
+两者都留空则运行无认证的仪表盘。这适用于本地开发和防火墙后面的端口转发访问，但不要在有公网访问的 Ingress 上这样做。
+
+## 依赖关系
+
+仪表盘依赖控制面的 Admin API 可达。Admin API 由控制面的 Deployment 在端口 `18081` 上提供服务（Service：`nantian-gw-controlplane-admin`）。如果控制面 Pod 未运行或 Admin API 不健康，仪表盘会显示连接错误。
+
+仪表盘查询的端点见 [Admin API](/zh/architecture/admin-api) 参考。
+
+## NetworkPolicy
+
+当 `dashboard.networkPolicy.enabled` 为 `true` 时，Chart 会创建一个 Kubernetes NetworkPolicy，允许仪表盘 Pod 访问控制面的 Admin API。如果你的集群有额外的网络限制，可以在此基础上自定义。

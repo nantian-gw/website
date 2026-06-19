@@ -1,0 +1,110 @@
+---
+title: Certificate Management
+---
+
+Nantian Gateway's gRPC control plane can use TLS or mutual TLS to secure the xDS stream between control plane and data plane. The Helm chart provides two certificate generation strategies: self-signed certificates for development and testing, or cert-manager integration for production.
+
+For the TLS and mTLS settings that consume these certificates, see [TLS / mTLS](/configuration/tls/).
+
+## How certificate generation works
+
+The chart can generate the three certificates needed for gRPC mTLS: a CA certificate, a server certificate for the control plane, and a client certificate for each data plane. Generation happens once at install time and the results are stored in Kubernetes Secrets. On upgrades, the chart reuses the existing Secrets.
+
+Certificate management is configured under the `certs` key:
+
+```yaml
+certs:
+  generate: false
+  domain: ""
+  selfSigned:
+    caDurationDays: 365
+    serverDurationDays: 90
+    clientDurationDays: 90
+  certManager:
+    enabled: false
+    issuerRef:
+      name: ""
+      kind: ClusterIssuer
+      group: cert-manager.io
+    duration: 2160h
+    renewBefore: 360h
+```
+
+## certs values
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `certs.generate` | bool | `false` | Generate self-signed certificates at install time |
+| `certs.domain` | string | `""` | Namespace-scoped domain for the gRPC server certificate SAN. Auto-computed from release name and namespace when left empty |
+| `certs.selfSigned.caDurationDays` | int | `365` | Validity period in days for the self-signed CA certificate |
+| `certs.selfSigned.serverDurationDays` | int | `90` | Validity period in days for the self-signed server certificate |
+| `certs.selfSigned.clientDurationDays` | int | `90` | Validity period in days for the self-signed client certificate |
+| `certs.certManager.enabled` | bool | `false` | Use cert-manager to issue certificates instead of self-signed generation |
+| `certs.certManager.issuerRef.name` | string | `""` | Name of the cert-manager Issuer or ClusterIssuer |
+| `certs.certManager.issuerRef.kind` | string | `"ClusterIssuer"` | Kind of the cert-manager issuer (`Issuer` or `ClusterIssuer`) |
+| `certs.certManager.issuerRef.group` | string | `"cert-manager.io"` | API group of the cert-manager issuer |
+| `certs.certManager.duration` | string | `"2160h"` | Requested certificate duration (90 days) |
+| `certs.certManager.renewBefore` | string | `"360h"` | Renew certificate this far before expiry (15 days) |
+
+## Self-signed certificates (development)
+
+Set `certs.generate: true` to create self-signed certificates. This mode is suitable for development, testing, and non-production environments where you don't have cert-manager running.
+
+```yaml
+certs:
+  generate: true
+  selfSigned:
+    caDurationDays: 365
+    serverDurationDays: 90
+    clientDurationDays: 90
+```
+
+The chart creates three Secrets in the release namespace:
+
+- `nantian-gw-ca-tls`: CA certificate and key
+- `nantian-gw-server-tls`: gRPC server certificate and key
+- `nantian-gw-client-tls`: gRPC client certificate and key
+
+The domain for the server certificate's SAN field is auto-computed as `<release-name>.<namespace>.svc` unless you set `certs.domain` explicitly. This ensures the data plane can verify the server's identity when connecting to the cluster-internal gRPC service.
+
+After enabling certificate generation, enable gRPC TLS in the control plane configuration so the certificates are actually used. The [TLS / mTLS page](/configuration/tls/) covers those settings.
+
+## cert-manager integration (production)
+
+For production environments with cert-manager installed, use `certs.certManager.enabled: true`. This delegates certificate lifecycle management to cert-manager, which handles issuance, rotation, and renewal automatically.
+
+```yaml
+certs:
+  certManager:
+    enabled: true
+    issuerRef:
+      name: nantian-gw-ca-issuer
+      kind: ClusterIssuer
+      group: cert-manager.io
+    duration: 2160h
+    renewBefore: 360h
+```
+
+You must create the issuer before installing or upgrading the chart. A `ClusterIssuer` works across all namespaces, while an `Issuer` is scoped to a single namespace:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: nantian-gw-ca-issuer
+spec:
+  ca:
+    secretName: nantian-gw-root-ca
+```
+
+The chart creates three Certificate resources (CA, server, client) referencing your issuer. cert-manager handles the rest: it generates keys, requests certificates from the issuer, stores them in Secrets, and rotates them before they expire.
+
+## Choosing between modes
+
+| Mode | Use case | Rotation |
+|------|----------|----------|
+| `certs.generate: false` (default) | You provide your own Secrets or don't use gRPC TLS | Manual |
+| `certs.generate: true` (self-signed) | Development, testing, ephemeral clusters | Manual (reinstall or rotate by hand) |
+| `certs.certManager.enabled: true` | Production clusters with cert-manager | Automatic via cert-manager |
+
+When neither self-signed generation nor cert-manager is enabled, the chart expects you to have created the three TLS Secrets (`nantian-gw-ca-tls`, `nantian-gw-server-tls`, `nantian-gw-client-tls`) yourself. This gives you full control over the certificate lifecycle using your own PKI or tooling.

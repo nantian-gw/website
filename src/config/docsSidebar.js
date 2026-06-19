@@ -7,6 +7,7 @@ export const docsSidebar = [
       { label: 'Gateway API', link: 'concepts/gateway-api', translations: { 'zh-CN': 'Gateway API' } },
       { label: 'Gateway API Support', link: 'concepts/gateway-api-support', translations: { 'zh-CN': 'Gateway API 支持矩阵' } },
       { label: 'Split-Plane Architecture', link: 'concepts/split-plane', translations: { 'zh-CN': '分离式平面架构' } },
+      { label: 'Intermediate Representation (IR)', link: 'concepts/ir', translations: { 'zh-CN': '中间表示 (IR)' } },
     ],
   },
   {
@@ -14,8 +15,8 @@ export const docsSidebar = [
     translations: { 'zh-CN': '概述' },
     items: [
       { label: 'What is Nantian Gateway', link: 'overview/', translations: { 'zh-CN': '什么是 Nantian Gateway' } },
-      { label: 'Comparison', link: 'comparison', translations: { 'zh-CN': '项目对比' } },
-      { label: 'Use Cases', link: 'use-cases', translations: { 'zh-CN': '适用场景' } },
+      { label: 'Comparison', link: 'overview/comparison', translations: { 'zh-CN': '项目对比' } },
+      { label: 'Use Cases', link: 'overview/use-cases', translations: { 'zh-CN': '适用场景' } },
     ],
   },
   {
@@ -60,6 +61,7 @@ export const docsSidebar = [
       { label: 'Control Plane', link: 'configuration/controlplane', translations: { 'zh-CN': '控制面' } },
       { label: 'Data Plane', link: 'configuration/dataplane', translations: { 'zh-CN': '数据面' } },
       { label: 'TLS / mTLS', link: 'configuration/tls', translations: { 'zh-CN': 'TLS / mTLS' } },
+      { label: 'Certificate Management', link: 'configuration/cert-manager', translations: { 'zh-CN': '证书管理' } },
       { label: 'gRPC xDS', link: 'configuration/xds', translations: { 'zh-CN': 'gRPC xDS' } },
       { label: 'Observability', link: 'configuration/observability', translations: { 'zh-CN': '可观测性' } },
       { label: 'Tuning', link: 'configuration/tuning', translations: { 'zh-CN': '性能调优' } },
@@ -86,6 +88,9 @@ export const docsSidebar = [
       { label: 'Troubleshooting', link: 'operations/troubleshooting', translations: { 'zh-CN': '故障排查' } },
       { label: 'Backup & Recovery', link: 'operations/backup', translations: { 'zh-CN': '备份与恢复' } },
       { label: 'Scaling & Autoscaling', link: 'operations/scaling', translations: { 'zh-CN': '扩缩容' } },
+      { label: 'Prometheus Integration', link: 'operations/prometheus-setup', translations: { 'zh-CN': 'Prometheus 集成' } },
+      { label: 'Network Policies', link: 'operations/network-policy', translations: { 'zh-CN': '网络策略' } },
+      { label: 'Dashboard', link: 'operations/dashboard', translations: { 'zh-CN': '仪表盘' } },
     ],
   },
   {

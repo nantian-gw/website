@@ -1,0 +1,82 @@
+---
+title: Prometheus 集成
+---
+
+Nantian Gateway 在控制面和数据面上暴露 Prometheus 指标。Helm Chart 可以为 Prometheus Operator 创建 ServiceMonitor 和 PodMonitor 资源，让 Prometheus 自动发现并抓取你的网关指标。
+
+完整的可用指标列表见[指标参考](/zh/operations/metrics/)。
+
+## 启用 ServiceMonitor
+
+`serviceMonitor` 配置块控制 Prometheus Operator 的集成。默认是关闭的，需要显式开启：
+
+```yaml
+serviceMonitor:
+  enabled: true
+```
+
+启用后，Chart 会创建两个资源：
+
+- 用于控制面的 **ServiceMonitor**，目标为 `metrics` 端口（默认 `18082`）的 `/metrics` 路径。
+- 用于数据面的 **PodMonitor**，目标为 `admin` 端口（默认 `19080`）的 `/metrics` 路径。
+
+两个资源都带有 Chart 的标准组件标签，以及你添加的任何自定义标签。
+
+## ServiceMonitor 配置项
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `serviceMonitor.enabled` | bool | `false` | 是否为 Prometheus Operator 创建 ServiceMonitor 和 PodMonitor 资源 |
+| `serviceMonitor.labels` | object | `{}` | 应用于 ServiceMonitor 和 PodMonitor 资源的额外标签 |
+| `serviceMonitor.interval` | string | `"30s"` | 指标端点的抓取间隔 |
+| `serviceMonitor.scrapeTimeout` | string | `"10s"` | 指标端点的抓取超时 |
+| `serviceMonitor.fromNamespaces` | list | `[]` | 启用 NetworkPolicy 时允许访问指标端点的其他命名空间 |
+
+### 标签
+
+Prometheus Operator 使用标签选择器来发现 ServiceMonitor。如果你的 Prometheus 实例要求特定的标签（例如 `kube-prometheus-stack` 需要 `release: kube-prometheus-stack`），在这里添加：
+
+```yaml
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+```
+
+### 抓取间隔和超时
+
+默认 30s 的间隔和 10s 的超时适用于大多数部署。如果你的集群运行了多个网关，或者需要更高的告警精度，可以缩小间隔。注意超时时间要小于间隔，以免抓取堆积：
+
+```yaml
+serviceMonitor:
+  enabled: true
+  interval: "15s"
+  scrapeTimeout: "10s"
+```
+
+### 跨命名空间抓取与 NetworkPolicy
+
+当启用 NetworkPolicy（默认开启）时，只有来自网关自身命名空间的流量才能访问指标端口。如果你的 Prometheus 运行在其他命名空间，需要将其添加到 `fromNamespaces`：
+
+```yaml
+serviceMonitor:
+  enabled: true
+  fromNamespaces:
+    - monitoring
+    - prometheus-operator
+```
+
+这会在控制面的 NetworkPolicy 中追加入站规则，允许这些命名空间中的 Prometheus Pod 抓取指标。数据面的 `admin` 端口同时用于 Admin API 和指标，所以只对你信任的命名空间开放访问。
+
+关于 NetworkPolicy 管理的更多信息见[网络策略](/zh/operations/network-policy/)。
+
+## 验证集成
+
+应用配置后，检查资源是否已创建，以及 Prometheus 是否发现了它们：
+
+```bash
+kubectl get servicemonitor -n nantian-gw
+kubectl get podmonitor -n nantian-gw
+```
+
+在 Prometheus UI 中，确认 `nantian-gw-controlplane` 和 `nantian-gw-dataplane` 这两个目标都出现在 **Status > Targets** 下，且状态为 `UP`。

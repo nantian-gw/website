@@ -1,6 +1,5 @@
 ---
 title: Comparison
-slug: 1.5/comparison
 ---
 
 Choosing a Kubernetes gateway involves tradeoffs in architecture, performance, feature coverage, and operational complexity. This page compares Nantian Gateway with four well-known alternatives to help you understand where each fits.
@@ -82,12 +81,12 @@ Nantian Gateway's AI gateway, Wasm plugin system, and dashboard have no NGINX Ga
 
 Nantian Gateway is a strong fit when:
 
-* You need **comprehensive Gateway API coverage** (v1.5.1, 55 features) and want to stay close to the upstream spec
-* You're running **AI workloads** and want a single proxy that handles both API traffic and AI provider routing/rate limiting
-* You want **custom proxy logic** through Wasm plugins managed via Kubernetes CRDs
-* You prefer a **Rust data plane** for memory safety and concurrency
-* You need a **built-in admin dashboard** for gateway operations
-* You want **mesh features without sidecars**, using the Gateway API mesh model
+- You need **comprehensive Gateway API coverage** (v1.5.1, 55 features) and want to stay close to the upstream spec
+- You're running **AI workloads** and want a single proxy that handles both API traffic and AI provider routing/rate limiting
+- You want **custom proxy logic** through Wasm plugins managed via Kubernetes CRDs
+- You prefer a **Rust data plane** for memory safety and concurrency
+- You need a **built-in admin dashboard** for gateway operations
+- You want **mesh features without sidecars**, using the Gateway API mesh model
 
 :::tip
 Nantian Gateway works well alongside existing infrastructure. You can deploy it as an ingress gateway while keeping your current mesh solution, or use it as a dedicated AI gateway in front of your model serving infrastructure.
@@ -97,10 +96,10 @@ Nantian Gateway works well alongside existing infrastructure. You can deploy it 
 
 Other gateways may be a better fit when:
 
-* You need a **full service mesh** with mTLS, SPIFFE identities, and deep tracing (Istio)
-* You want the most **battle-tested proxy** with the largest operational knowledge base (Envoy Gateway, NGINX Gateway)
-* You need **CNCF incubation or graduation** status for compliance requirements (Envoy Gateway, Istio, Contour)
-* You're running a **simple deployment** with minimal routing needs and want the smallest operational footprint (NGINX Gateway Fabric)
+- You need a **full service mesh** with mTLS, SPIFFE identities, and deep tracing (Istio)
+- You want the most **battle-tested proxy** with the largest operational knowledge base (Envoy Gateway, NGINX Gateway)
+- You need **CNCF incubation or graduation** status for compliance requirements (Envoy Gateway, Istio, Contour)
+- You're running a **simple deployment** with minimal routing needs and want the smallest operational footprint (NGINX Gateway Fabric)
 
 :::note
 Nantian Gateway is a newer project and is not yet an officially recognized Gateway API implementation. It's suitable for evaluation, controlled trials, and contributor review. The [project status page](https://github.com/nantian-gw/gateway) tracks current maturity.

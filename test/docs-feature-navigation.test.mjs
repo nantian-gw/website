@@ -106,10 +106,10 @@ test("landing feature cards link to feature documentation", () => {
 
 test("use-case next steps point AI and Wasm readers to feature pages", () => {
   const docs = [
-    read("src/content/docs/use-cases.mdx"),
-    read("src/content/docs/zh/use-cases.mdx"),
-    read("src/content/docs/1.5/use-cases.mdx"),
-    read("src/content/docs/zh/1.5/use-cases.mdx"),
+    read("src/content/docs/overview/use-cases.mdx"),
+    read("src/content/docs/zh/overview/use-cases.mdx"),
+    read("src/content/docs/1.5/overview/use-cases.mdx"),
+    read("src/content/docs/zh/1.5/overview/use-cases.mdx"),
   ].join("\n");
 
   assert.match(docs, /features\/ai-gateway/);

@@ -1,6 +1,5 @@
 ---
 title: Use Cases
-slug: 1.5/use-cases
 ---
 
 Nantian Gateway's architecture makes it suitable for several distinct deployment patterns. This page walks through real-world scenarios where the gateway provides particular value.
@@ -275,10 +274,10 @@ spec:
 
 The sidecar-free mesh model works well when:
 
-* You're running in resource-constrained environments where per-pod proxies would consume too much CPU and memory
-* You have a large number of short-lived pods (batch jobs, serverless functions) where sidecar injection adds unacceptable startup latency
-* You want mesh features (header modification, traffic splitting, redirects) without the full complexity of a mesh control plane
-* You're already using Nantian Gateway as an ingress gateway and want to extend it for east-west traffic
+- You're running in resource-constrained environments where per-pod proxies would consume too much CPU and memory
+- You have a large number of short-lived pods (batch jobs, serverless functions) where sidecar injection adds unacceptable startup latency
+- You want mesh features (header modification, traffic splitting, redirects) without the full complexity of a mesh control plane
+- You're already using Nantian Gateway as an ingress gateway and want to extend it for east-west traffic
 
 :::caution
 The sidecar-free mesh model doesn't provide per-pod mTLS or SPIFFE-based identity. If you need those features, consider Istio or Linkerd for the mesh layer and Nantian Gateway for ingress.
@@ -332,22 +331,22 @@ For latency-sensitive workloads, Nantian Gateway's Rust data plane provides pred
 
 The gateway exposes Prometheus metrics covering:
 
-* Request rate, latency (p50/p90/p99), and error rate per route and backend
-* TLS handshake duration and certificate expiry
-* xDS configuration staleness and update latency
-* AI gateway token usage and rate limit status
-* Wasm plugin execution time and error counts
+- Request rate, latency (p50/p90/p99), and error rate per route and backend
+- TLS handshake duration and certificate expiry
+- xDS configuration staleness and update latency
+- AI gateway token usage and rate limit status
+- Wasm plugin execution time and error counts
 
 ### Production Deployment Pattern
 
 A typical production deployment runs:
 
-* **Two or more control plane replicas** with leader election for high availability
-* **Multiple data plane replicas** behind a Kubernetes Service of type LoadBalancer
-* **Horizontal Pod Autoscaling** on the data plane based on CPU and memory
-* **Prometheus** scraping both control plane and data plane metrics endpoints
-* **Grafana** dashboards for cluster-level visibility
-* **Alertmanager** rules for gateway health, TLS expiry, and error rate thresholds
+- **Two or more control plane replicas** with leader election for high availability
+- **Multiple data plane replicas** behind a Kubernetes Service of type LoadBalancer
+- **Horizontal Pod Autoscaling** on the data plane based on CPU and memory
+- **Prometheus** scraping both control plane and data plane metrics endpoints
+- **Grafana** dashboards for cluster-level visibility
+- **Alertmanager** rules for gateway health, TLS expiry, and error rate thresholds
 
 See the [Production Installation](../installation/production/) guide for a complete walkthrough.
 
@@ -355,17 +354,17 @@ See the [Production Installation](../installation/production/) guide for a compl
 
 Nantian Gateway's strength is that these use cases compose. A single deployment can:
 
-* Serve as your primary Kubernetes ingress gateway
-* Route AI traffic to multiple providers with token-based rate limiting
-* Proxy TCP connections to databases and message queues
-* Run Wasm plugins for custom authentication and request transformation
-* Expose Prometheus metrics to your existing observability stack
+- Serve as your primary Kubernetes ingress gateway
+- Route AI traffic to multiple providers with token-based rate limiting
+- Proxy TCP connections to databases and message queues
+- Run Wasm plugins for custom authentication and request transformation
+- Expose Prometheus metrics to your existing observability stack
 
 You don't need separate gateways for HTTP, AI, and TCP traffic. One Nantian Gateway deployment handles all of them, configured through the same Gateway API resources and managed through the same dashboard.
 
 ## Next Steps
 
-* [Quick Start: deploy in 5 minutes](../getting-started/quick-start/)
-* [AI Gateway feature guide](../features/ai-gateway/)
-* [Wasm plugin feature guide](../features/wasm-plugins/)
-* [Production deployment guide](../installation/production/)
+- [Quick Start: deploy in 5 minutes](../getting-started/quick-start/)
+- [AI Gateway feature guide](../features/ai-gateway/)
+- [Wasm plugin feature guide](../features/wasm-plugins/)
+- [Production deployment guide](../installation/production/)

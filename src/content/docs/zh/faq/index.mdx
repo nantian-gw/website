@@ -260,6 +260,65 @@ Admin API 提供网关配置的完整读取权限。保护措施：
 2. 7 天内发布修复版本
 3. 发布安全公告，分配 CVE 编号
 
+## 运维与监控
+
+### 如何在生产环境中监控 Nantian Gateway？
+
+Nantian Gateway 在两个平面上都暴露了 Prometheus 指标。控制面暴露集群级指标（调和延迟、资源数量、错误率），通过配置的指标端口提供。数据面在每个数据面 Pod 上暴露实例级代理指标（请求速率、延迟分布、连接数、错误率）。
+
+在 Helm 配置中设置 `metrics.enabled: true` 和 `metrics.serviceMonitor.enabled: true` 来启用指标抓取。Helm Chart 中包含了一个 Grafana 仪表盘示例，从 `dashboards/` 目录导入即可。建议对以下情况设置告警：
+
+- **数据面错误率** 在 5 分钟内超过 1%
+- **控制面调和延迟** 超过 30 秒
+- **数据面 Pod 数量** 低于配置的最小副本数
+- **证书即将到期** 距到期不足 30 天（如果使用 cert-manager）
+
+完整的设置说明见[监控](/zh/operations/monitoring)页面。
+
+### 可以使用 cert-manager 管理 TLS 证书吗？
+
+可以。在 Helm 配置中设置 `certManager.enabled: true`。当 cert-manager 可用时，Chart 会为网关的 TLS 监听器创建 `Certificate` 资源。你可以自定义颁发者、有效期和续期窗口：
+
+```yaml
+certManager:
+  enabled: true
+  issuer:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  duration: 2160h    # 90 天
+  renewBefore: 720h  # 到期前 30 天续期
+```
+
+如果未安装 cert-manager，网关会回退到 `tls.cert` 和 `tls.key` 中指定的 TLS 证书。详见 [cert-manager](/zh/configuration/cert-manager) 页面。
+
+### 自动伸缩如何工作？
+
+**数据面**的自动伸缩使用 Kubernetes HorizontalPodAutoscaler (HPA)。在 Helm 配置中通过 `autoscaling.enabled: true` 启用。HPA 根据 CPU 使用率（默认目标 70%）或自定义指标（如果安装了 Prometheus adapter）来伸缩数据面 Pod。通过 `autoscaling.minReplicas` 和 `autoscaling.maxReplicas` 设置上下限。
+
+**控制面**不使用 HPA。它通过 Kubernetes leader election 运行单个活跃控制器，第二个副本以被动待命方式运行。租约由活跃控制器持有，一旦它变得不健康，租约自动转移。要提高控制面的可用性，在跨可用区的环境中将 `controlPlane.replicas` 设置为 2 或更多。
+
+## 项目与治理
+
+### 控制面和数据面的 Admin API 有什么区别？
+
+两个 Admin API 的服务范围不同：
+
+**控制面 Admin API** 提供集群级视图。你可以查询整个集群中所有 Gateway、HTTPRoute、Service 和后端引用的状态。用于集中式排障："哪些路由集群范围内不健康？"或"后端健康状态的汇总情况是怎样的？"
+
+**数据面 Admin API** 提供实例级诊断。每个数据面 Pod 暴露自己的 Admin 端点，显示本地路由表状态、活跃连接数、每个后端的延迟统计和配置版本。用于实例级调试："这个特定的代理实例是否存在连接泄漏？"或"配置版本 X 实际上是否到达了这个代理？"
+
+两个 API 都设计为只读。你不能通过它们推送配置——控制面通过 Kubernetes CRD 持有配置，并通过 xDS 推送到数据面。
+
+### 如何参与 Nantian Gateway 的贡献？
+
+项目分布在多个仓库中（`gateway`、`dataplane`、`dashboard`、`website`、`proto`）。从[贡献概述](/zh/contributing/)页面开始，其中涵盖本地设置、测试命令和 PR 流程。在 [GitHub](https://github.com/nantian-gw/gateway/issues) 上寻找标签为 `good first issue` 的 Issue——这些是适合新贡献者的入门级任务。
+
+对于较大的提案，先开启 [GitHub Discussion](https://github.com/nantian-gw/gateway/issues) 与维护者对齐，再开始编码。
+
+### 有更新日志可以关注吗？
+
+有的。每个版本都包含详细的更新日志，涵盖破坏性变更、新特性和已解决的问题。可以在 [GitHub Releases](https://github.com/nantian-gw/gateway/releases) 页面查看。我们遵循语义化版本：patch 版本可以安全升级，minor 版本可能增加功能但避免破坏 API，major 版本包含破坏性变更并附带迁移指南。
+
 ## 下一步
 
 - 查看 [快速开始](/zh/getting-started/quick-start) 部署你的第一个 Nantian Gateway

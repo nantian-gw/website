@@ -1,0 +1,82 @@
+---
+title: Prometheus Integration
+---
+
+Nantian Gateway exposes Prometheus metrics on the control plane and data plane. The Helm chart can create ServiceMonitor and PodMonitor resources for the Prometheus Operator, so Prometheus discovers and scrapes your gateway automatically.
+
+For a complete list of available metrics, see [Metrics Reference](/operations/metrics/).
+
+## Enabling ServiceMonitor
+
+The `serviceMonitor` block controls Prometheus Operator integration. It's disabled by default so enabling it is explicit:
+
+```yaml
+serviceMonitor:
+  enabled: true
+```
+
+When enabled, the chart creates two resources:
+
+- A **ServiceMonitor** for the control plane, targeting the `metrics` port (default `18082`) at `/metrics`.
+- A **PodMonitor** for the data plane, targeting the `admin` port (default `19080`) at `/metrics`.
+
+Both resources carry the chart's standard component labels, plus any custom labels you add.
+
+## ServiceMonitor values
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `serviceMonitor.enabled` | bool | `false` | Create ServiceMonitor and PodMonitor resources for Prometheus Operator |
+| `serviceMonitor.labels` | object | `{}` | Extra labels applied to both ServiceMonitor and PodMonitor resources |
+| `serviceMonitor.interval` | string | `"30s"` | Scrape interval for metrics endpoints |
+| `serviceMonitor.scrapeTimeout` | string | `"10s"` | Scrape timeout for metrics endpoints |
+| `serviceMonitor.fromNamespaces` | list | `[]` | Additional namespaces permitted to reach metrics endpoints when NetworkPolicies are enabled |
+
+### Labels
+
+Prometheus Operator uses label selectors to discover ServiceMonitors. If your Prometheus instance requires a specific label (for example, the `kube-prometheus-stack` looks for `release: kube-prometheus-stack`), add it here:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+```
+
+### Scrape interval and timeout
+
+The default interval of `30s` and timeout of `10s` work well for most deployments. If your cluster runs many gateways or you want higher resolution for alerting, you can tighten the interval. Keep the timeout shorter than the interval so scrapes don't pile up:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  interval: "15s"
+  scrapeTimeout: "10s"
+```
+
+### Cross-namespace scraping with NetworkPolicies
+
+When NetworkPolicies are enabled (the default), only traffic from the gateway's own namespace can reach the metrics port. If your Prometheus runs in a different namespace, add it to `fromNamespaces`:
+
+```yaml
+serviceMonitor:
+  enabled: true
+  fromNamespaces:
+    - monitoring
+    - prometheus-operator
+```
+
+This appends ingress rules to the control plane NetworkPolicy so Prometheus pods in those namespaces can scrape metrics. The data plane shares the `admin` port for both the admin API and metrics, so only grant access to namespaces you trust.
+
+See [Network Policies](/operations/network-policy/) for more on how NetworkPolicies are managed.
+
+## Verifying the integration
+
+After applying the values, check that the resources are created and Prometheus discovers them:
+
+```bash
+kubectl get servicemonitor -n nantian-gw
+kubectl get podmonitor -n nantian-gw
+```
+
+From the Prometheus UI, confirm that both the `nantian-gw-controlplane` and `nantian-gw-dataplane` targets appear under **Status > Targets** with state `UP`.

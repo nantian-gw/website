@@ -1,0 +1,82 @@
+---
+title: Network Policies
+---
+
+Nantian Gateway creates Kubernetes NetworkPolicies by default to restrict ingress traffic to its pods. Only permitted traffic reaches the control plane, data plane, and dashboard components.
+
+NetworkPolicies are enabled by default. You can disable them if your cluster already enforces policies at a different layer, or if you're running in an environment without a NetworkPolicy controller.
+
+## Enabling and disabling
+
+Toggle NetworkPolicies with a single value:
+
+```yaml
+networkPolicies:
+  enabled: true
+```
+
+Setting `enabled: false` removes all NetworkPolicy resources. The chart won't render them on install or upgrade.
+
+## Which components get NetworkPolicies
+
+The chart creates policies for three components:
+
+| Component | Template | What it protects |
+|-----------|----------|-------------------|
+| Control plane | `templates/controlplane/networkpolicy.yaml` | gRPC port (18080), admin API (18081), metrics (18082) |
+| Data plane | `templates/dataplane/networkpolicy.yaml` | Admin API and metrics (19080), data plane health probes |
+| Dashboard | `templates/dashboard/networkpolicy.yaml` | Dashboard web UI (3000) |
+
+Each policy follows the same pattern: it allows ingress from pods within the gateway's namespace, plus any namespaces listed in `serviceMonitor.fromNamespaces` for the metrics port.
+
+## Allowed traffic
+
+### Control plane
+
+The control plane NetworkPolicy permits:
+
+- **Port 18080 (gRPC)**: traffic from the same namespace, so data plane pods can connect to receive xDS snapshots
+- **Port 18081 (admin)**: traffic from the same namespace for the admin API
+- **Port 18082 (metrics)**: traffic from the same namespace, plus namespaces in `serviceMonitor.fromNamespaces` for Prometheus scraping
+- **Port 18083 (health)**: unrestricted access (`0.0.0.0/0` and `::/0`) so Kubernetes readiness and liveness probes always work
+
+### Data plane
+
+The data plane NetworkPolicy permits:
+
+- **Port 19080 (admin/metrics)**: traffic from the same namespace for the admin API, plus namespaces in `serviceMonitor.fromNamespaces` for Prometheus scraping
+
+### Dashboard
+
+The dashboard NetworkPolicy permits:
+
+- **Port 3000 (web UI)**: traffic from the same namespace
+
+## Adding custom rules
+
+The chart's NetworkPolicy templates cover the standard ports. If you need additional ingress rules, for example to allow a specific external IP to reach the control plane admin API, apply a separate NetworkPolicy resource:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nantian-gw-controlplane-custom
+  namespace: nantian-gw
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: controlplane
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 18081
+```
+
+Multiple NetworkPolicies targeting the same pods are additive, so your custom rules merge with the chart's defaults.
+
+For cross-namespace Prometheus scraping details, see [Prometheus Integration](/operations/prometheus-setup/).
