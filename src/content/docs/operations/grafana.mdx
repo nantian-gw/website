@@ -62,6 +62,7 @@ Top-level metrics in a single row for at-a-glance monitoring.
 | QPS | `nantian_gateway_dataplane_traffic_request_events_total` | Requests per second across all data planes |
 | Success Rate | Response flags ratio | Percentage of requests with no error flags |
 | P99 Latency | `nantian_gateway_dataplane_traffic_request_latency_ms` | 99th percentile request latency |
+
 ### Control Plane
 
 Panels monitoring the control plane's internal operations:
@@ -75,6 +76,7 @@ Panels monitoring the control plane's internal operations:
 | xDS publish lag | `nantian_gateway_controlplane_xds_publish_ack_lag_seconds` |
 | Admin API requests | `nantian_gateway_controlplane_admin_requests_total` |
 | Reconciler runner | `nantian_gateway_controlplane_reconciler_runner_runs_total`, queue depth, settle state |
+
 ### Data Plane
 
 Panels covering proxy performance and backend health:
@@ -87,6 +89,7 @@ Panels covering proxy performance and backend health:
 | Backend health | `nantian_gateway_dataplane_backend_health_status` |
 | Connection errors | `nantian_gateway_dataplane_backend_connection_errors_total` |
 | Response status distribution | `nantian_gateway_dataplane_http_responses_total` by status code |
+
 ### Resources
 
 Container resource utilization panels (requires cAdvisor and kube-state-metrics):
@@ -97,6 +100,7 @@ Container resource utilization panels (requires cAdvisor and kube-state-metrics)
 | CPU throttle | `nantian_gateway_dataplane_container_cpu_throttle_ratio` |
 | Memory working set | `nantian_gateway_dataplane_container_memory_working_set_bytes` |
 | Memory vs limits | `nantian_gateway_dataplane_container_memory_limit_bytes` |
+
 ## Dashboard variables
 
 The dashboard defines these template variables for filtering:
@@ -110,6 +114,7 @@ The dashboard defines these template variables for filtering:
 | `instance_cp` | Query | `nantian_gateway_controlplane_admin_requests_total` | Control plane instance selector |
 | `job_dataplane` | Query | `nantian_gateway_dataplane_admin_requests_total` | Data plane job selector |
 | `instance_dp` | Query | `nantian_gateway_dataplane_admin_requests_total` | Data plane instance selector |
+
 ## Customizing the dashboard
 
 The dashboard is a standard Grafana JSON model. You can customize it through the Grafana UI or by editing the JSON directly.

@@ -167,6 +167,7 @@ leaderElection:
 | `xds_snapshot_version` | 各数据面已应用的配置快照版本号 |
 
 告警规则：
+
 - 超过 30 秒无 Leader（控制面 HA 故障）
 - `control_plane_connected` 低于预期副本数（数据面断连）
 - 各数据面 `xds_snapshot_version` 不一致（存在过期配置）

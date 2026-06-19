@@ -18,7 +18,7 @@ slug: zh/1.5/operations/troubleshooting
 每个端点提供不同层面的信息：
 
 | 端点 | 用途 |
-|---|---|
+| --- | --- |
 | `/livez` | 控制面进程是否存活 |
 | `/readyz` | 控制面是否准备好服务 |
 | `/v1/summary` | 集群配置概览（路由数、后端数、节点状态） |
@@ -57,20 +57,25 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查数据面 Pod 日志：
+
    ```bash
    kubectl logs -n nantian-gw <dataplane-pod> -c dataplane
    ```
 
 2. 检查数据面是否连接到控制面：
+
    ```bash
    curl http://<controlplane>:19080/v1/nodes
    ```
+
    查看目标节点的 `connected` 字段是否为 `true`。
 
 3. 检查数据面是否收到了快照：
+
    ```bash
    curl http://<dataplane-pod-ip>:19080/v1/summary
    ```
+
    查看 `snapshotVersion` 字段是否非空。
 
 4. 检查 xDS 连接：
@@ -92,32 +97,41 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 确认 Gateway 资源状态：
+
    ```bash
    kubectl get gateway -A
    ```
+
    检查 Gateway 是否被 Nantian Gateway 接受（`Programmed` 条件为 `True`）。
 
 2. 确认 HTTPRoute 是否附加到 Gateway：
+
    ```bash
    kubectl get httproute -A
    ```
+
    检查路由的 `Accepted` 条件。
 
 3. 通过 Admin API 检查快照中是否包含该路由：
+
    ```bash
    curl http://<controlplane>:19080/v1/routes
    ```
 
 4. 检查监听器是否就绪：
+
    ```bash
    curl http://<controlplane>:19080/v1/listeners
    ```
+
    查看目标监听器的状态。
 
 5. 检查后端端点是否健康：
+
    ```bash
    curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
    ```
+
    查看后端集群的端点列表和健康状态。
 
 **常见原因**：
@@ -135,14 +149,17 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查控制面日志：
+
    ```bash
    kubectl logs -n nantian-gw <controlplane-pod> | grep -i "build\|error\|fail"
    ```
 
 2. 检查是否有无效的 Gateway API 资源：
+
    ```bash
    kubectl get gateway,httproute,grpcroute,tcproute,udproute,tlsroute -A
    ```
+
    查看是否有资源处于错误状态。
 
 3. 检查 Translator 资源限制是否被触发：
@@ -163,9 +180,11 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查数据面指标中的响应标志：
+
    ```promql
    nantian_gateway_dataplane_traffic_response_flags_total{flag!="none"}
    ```
+
    常见的非 `none` 标志：
    * `upstream_connection_failure`：无法连接后端
    * `upstream_timeout`：后端响应超时
@@ -173,6 +192,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
    * `circuit_breaker_open`：熔断器打开
 
 2. 检查后端端点健康状态：
+
    ```bash
    curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
    ```
@@ -194,11 +214,13 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查控制面和数据面的网络连通性：
+
    ```bash
    kubectl exec -n nantian-gw <dataplane-pod> -- nc -zv <controlplane-svc> 18080
    ```
 
 2. 检查 TLS 证书是否过期：
+
    ```bash
    # 检查控制面 TLS 证书
    kubectl get secret -n nantian-gw <tls-secret> -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -dates
@@ -220,12 +242,14 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 查看控制面是否在反复替换同一个连接：
+
    ```bash
    kubectl logs -n nantian-gw deploy/nantian-gw-controlplane --since=10m | \
      grep -E 'dataplane connected|draining superseded dataplane stream|node_id'
    ```
 
 2. 检查数据面 Deployment 的环境变量注入：
+
    ```bash
    kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/args:/p'
    ```
@@ -253,6 +277,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查内存使用趋势：
+
    ```promql
    nantian_gateway_dataplane_container_memory_working_set_bytes
    / nantian_gateway_dataplane_container_memory_limit_bytes

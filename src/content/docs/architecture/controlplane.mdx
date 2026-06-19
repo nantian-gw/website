@@ -110,6 +110,7 @@ The server tracks why each stream ended and records it in the `nantian_gateway_c
 | `superseded` | A new stream from the same node replaced this one |
 | `invalid_request` | The initial request was malformed |
 | `other` | Any other reason |
+
 ### Status report handling
 
 The gRPC server receives `DataplaneStatusReport` messages from data planes and forwards them to the node status registry. Reports are validated before being applied. Rejected reports are counted in the `nantian_gateway_controlplane_xds_status_report_rejections_total` metric with rejection reasons like `shutdown`, `invalid_request`, `unknown_node`, or `other`.

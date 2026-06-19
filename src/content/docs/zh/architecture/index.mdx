@@ -84,6 +84,7 @@ sequenceDiagram
 IR 是控制面和数据面之间的契约，也是 Nantian Gateway 架构中最核心的抽象层。它不是 Kubernetes 资源的简单拷贝，而是一个经过翻译、去重和优化的配置视图。
 
 一个完整的 `ir.Snapshot` 包含以下字段：
+
 - **Listeners**：由 Gateway 资源生成，包含监听端口、协议（HTTP/HTTPS/TCP/UDP）、TLS 配置和关联的路由列表
 - **HTTPRoutes**：由 HTTPRoute/GRPCRoute 资源生成，包含路径匹配规则、Header 匹配规则、重写规则、超时配置、重试策略和关联的后端引用
 - **Backends**：由 Service 资源生成，包含负载均衡策略（轮询/最少连接/一致性哈希）、健康检查配置和熔断参数

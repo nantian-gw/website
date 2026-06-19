@@ -51,13 +51,13 @@ test("CI installs the browser before running hardening tests and builds", () => 
 
   assert.match(ci, /npm test/);
   assert.match(ci, /npm run setup:browser:ci/);
-  assert.match(ci, /npm run build:astro/);
+  assert.match(ci, /npm run build:ci/);
   assert.ok(
     ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm test"),
     "CI must install the browser before running the hardening test suite",
   );
   assert.ok(
-    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:astro"),
+    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:ci"),
     "CI must install the browser before running the build",
   );
 });
@@ -83,7 +83,7 @@ test("Cloudflare Pages config declares the static output directory", () => {
 
 test("Cloudflare Pages headers include wildcard security headers", () => {
   const headers = read("public/_headers");
-  const wildcardBlock = headers.match(/^\/\*\n(?:(?:  .+\n?)+)/m)?.[0] ?? "";
+  const wildcardBlock = headers.match(/^\/\*\n(?:(?: {2}.+\n?)+)/m)?.[0] ?? "";
   const expectedHeaders = [
     "X-Frame-Options: DENY",
     "X-Content-Type-Options: nosniff",
@@ -98,7 +98,7 @@ test("Cloudflare Pages headers include wildcard security headers", () => {
     assert.ok(wildcardBlock.includes(`  ${header}`), `missing wildcard header: ${header}`);
   }
 
-  assert.match(wildcardBlock, /  Content-Security-Policy:\s+[^\n]+/);
+  assert.match(wildcardBlock, / {2}Content-Security-Policy:\s+[^\n]+/);
   for (const directive of [
     "default-src 'self'",
     "base-uri 'self'",
@@ -357,7 +357,7 @@ test("landing layouts derive canonical metadata and navbar links from route cont
 
   assert.doesNotMatch(landingLayout, /canonical\s*=\s*'https:\/\/nantian\.dev\/'/);
   assert.match(landingLayout, /Astro\.url\.pathname/);
-  assert.doesNotMatch(navbar, /<a\s+href=\"\/\"/);
+  assert.doesNotMatch(navbar, /<a\s+href='"\/"'/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
   assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });
