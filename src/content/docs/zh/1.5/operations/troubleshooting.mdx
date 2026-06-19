@@ -163,7 +163,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查数据面指标中的响应标志：
-   ```promql
+   ```
    nantian_gateway_dataplane_traffic_response_flags_total{flag!="none"}
    ```
    常见的非 `none` 标志：
@@ -253,7 +253,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 **排查步骤**：
 
 1. 检查内存使用趋势：
-   ```promql
+   ```
    nantian_gateway_dataplane_container_memory_working_set_bytes
    / nantian_gateway_dataplane_container_memory_limit_bytes
    ```

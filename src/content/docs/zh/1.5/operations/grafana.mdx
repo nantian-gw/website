@@ -166,7 +166,7 @@ serviceMonitor:
 
 你可以基于这个模板创建自定义仪表盘。关键 PromQL 查询模式：
 
-```promql
+```
 # 就绪 Pod 数
 sum(count(nantian_gateway_dataplane_ready{namespace="$namespace"}))
 
