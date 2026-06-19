@@ -1,0 +1,94 @@
+---
+title: 扩缩容与自动扩缩
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
+Nantian Gateway 支持对数据面进行 Horizontal Pod Autoscaling（HPA）。控制面采用 Leader 选举，只有单个活跃实例，因此 HPA 不适用于控制面。
+
+## 工作原理
+
+启用 HPA 后，Helm Chart 会创建一个 `autoscaling/v2` HorizontalPodAutoscaler 资源，目标指向数据面 Deployment。HPA 持续监控 CPU 和内存利用率，并根据配置的目标值自动调整数据面 Pod 副本数。
+
+数据面本身是无状态的。增加副本数即可提升容量，无需各实例间协调。每个副本通过 gRPC/xDS 从控制面接收完整的路由快照。
+
+## 前提条件
+
+HPA 正常运行的前提是为数据面容器配置资源请求（resource requests）。Kubernetes 指标管线使用容器的资源请求来计算利用率百分比。未设置资源请求时，HPA 无法确定目标利用率。
+
+Chart 内置了默认的数据面资源请求：
+
+```yaml
+dataplane:
+  resources:
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
+```
+
+在启用 HPA 之前，请根据实际工作负载调整这些值。
+
+## 配置值
+
+| 值 | 默认值 | 描述 |
+|----|--------|------|
+| `hpa.enabled` | `false` | 为数据面启用 HPA |
+| `hpa.minReplicas` | `2` | 数据面最小副本数 |
+| `hpa.maxReplicas` | `10` | 数据面最大副本数 |
+| `hpa.targetCPUUtilization` | `70` | 目标 CPU 利用率百分比 |
+| `hpa.targetMemoryUtilization` | `75` | 目标内存利用率百分比 |
+
+## 启用 HPA
+
+在 values 覆盖文件中将 `hpa.enabled` 设置为 `true`。典型配置如下：
+
+```yaml
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilization: 70
+  targetMemoryUtilization: 75
+```
+
+使用覆盖文件部署 Chart：
+
+```bash
+helm upgrade nantian-gw nantian/nantian-gw \
+  --namespace nantian-gw \
+  --values hpa-values.yaml
+```
+
+## 控制面扩缩
+
+控制面以单个活跃副本运行，通过 Kubernetes Leader 选举机制保证。只有当选的 Leader 执行调和逻辑并发布 xDS 快照。备用实例等待 Leader 租约，在 Leader 故障时接管。
+
+由于 Leader 选举强制维持单个活跃实例，控制面 Deployment 增加副本数并不能提升处理能力。如果出于高可用目的需要运行备用副本，可直接设置 `controlplane.replicas`。HPA 不适用于该组件。
+
+## 检查 HPA 状态
+
+启用 HPA 后，确认 HPA 资源已创建并正在采集指标：
+
+```bash
+# 列出 HPA 资源
+kubectl get hpa -n nantian-gw
+
+# 查看 HPA 详情
+kubectl describe hpa nantian-gw-dataplane -n nantian-gw
+```
+
+在 describe 输出中关注以下信号：
+
+- **AbleToScale**：HPA 能够获取指标并做出扩缩决策。
+- **ScalingActive**：HPA 处于活跃状态并已选定目标。
+- **ScalingLimited**：当前副本数已到达最小或最大边界。
+
+如果 CPU 或内存指标显示 `<unknown>`，请检查集群中 metrics-server 是否正在运行，以及数据面 Pod 是否已配置资源请求。
+
+```bash
+# 确认 metrics-server 可用
+kubectl get deployment metrics-server -n kube-system
+
+# 确认数据面 Pod 上报资源用量
+kubectl top pods -n nantian-gw -l app.kubernetes.io/component=dataplane
+```

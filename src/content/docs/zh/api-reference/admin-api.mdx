@@ -2,230 +2,181 @@
 title: Admin API
 ---
 
-Nantian Gateway 的控制面和数据面各自暴露一个 HTTP REST Admin API，用于运行时诊断、配置检查和健康探查。Admin API 是运维人员排查问题最常用的入口。
+Nantian Gateway 控制面暴露一个 HTTP REST Admin API，用于运行时诊断、配置检查和运维查询。所有端点均通过控制面的 HTTP 监听器（默认端口 `8081`）提供。
 
-## 控制面 Admin API
+## 认证模型
 
-控制面 Admin API 暴露在控制面 Pod 的 HTTP 端口上（默认 `8081`），提供集群级别的配置视图和 xDS 客户端管理。
+| 认证级别 | 行为 |
+|----------|------|
+| `none` | 无需认证。供健康探针和 Kubernetes 存活/就绪检查使用。 |
+| `bearer-when-configured` | 如果在控制面配置中设置了 Admin API Token，请求必须包含 `Authorization: Bearer <token>` 头。如果未配置 Token，该端点即为开放状态。 |
 
-### 端点列表
+## 端点参考
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/healthz` | 健康检查 |
-| `GET` | `/readyz` | 就绪检查 |
-| `GET` | `/api/v1/config/snapshot` | 获取当前配置快照 |
-| `GET` | `/api/v1/config/snapshot/version` | 获取当前配置快照版本 |
-| `GET` | `/api/v1/gateways` | 列出所有 Gateway |
-| `GET` | `/api/v1/gateways/{namespace}/{name}` | 获取指定 Gateway 详情 |
-| `GET` | `/api/v1/routes` | 列出所有路由（HTTP/gRPC/TCP/UDP/TLS） |
-| `GET` | `/api/v1/routes/{namespace}/{name}` | 获取指定路由详情 |
-| `GET` | `/api/v1/backends` | 列出所有后端集群 |
-| `GET` | `/api/v1/backends/{namespace}/{name}` | 获取指定后端集群详情 |
-| `GET` | `/api/v1/clients` | 列出所有连接的 xDS 客户端 |
-| `GET` | `/api/v1/clients/{node_id}` | 获取指定 xDS 客户端的连接状态 |
-| `GET` | `/api/v1/metrics` | Prometheus 指标端点 |
+### 健康探针
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/livez` | `none` | 存活检查。进程存活时返回 `200 OK`。 |
+| `GET` | `/readyz` | `none` | 就绪检查。控制面完成初始资源同步后返回 `200 OK`，否则返回 `503`。 |
+
+### 诊断端点
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/v1/summary` | `bearer-when-configured` | 集群配置概览：Listener、Route、Backend 和 Node 数量统计 |
+| `GET` | `/v1/dashboard/capabilities` | `bearer-when-configured` | 向 Dashboard UI 暴露的功能特性开关 |
+| `GET` | `/v1/snapshot-sync` | `bearer-when-configured` | 所有数据面节点的快照同步状态 |
+| `GET` | `/v1/snapshot` | `bearer-when-configured` | 当前推送至各数据面的完整 IR 快照内容 |
+| `GET` | `/v1/listeners` | `bearer-when-configured` | 列举所有 Listener |
+| `GET` | `/v1/listeners/{name}` | `bearer-when-configured` | 查看指定 Listener 详情 |
+| `GET` | `/v1/routes` | `bearer-when-configured` | 列举所有 Route（HTTP、gRPC、TCP、UDP、TLS） |
+| `GET` | `/v1/routes/{kind}/{namespace}/{name}` | `bearer-when-configured` | 查看指定 Route 详情 |
+| `GET` | `/v1/backends` | `bearer-when-configured` | 列举所有 Backend 集群 |
+| `GET` | `/v1/backends/{namespace}/{name}` | `bearer-when-configured` | 查看指定 Backend 集群详情 |
+| `GET` | `/v1/nodes` | `bearer-when-configured` | 列举所有已连接的数据面节点 |
+| `GET` | `/v1/nodes/{nodeId}` | `bearer-when-configured` | 查看指定数据面节点详情 |
+| `GET` | `/v1/infrastructure` | `bearer-when-configured` | 基础设施状态（Deployment、Service、Pod 信息） |
+| `GET` | `/v1/service-catalog` | `bearer-when-configured` | 服务目录列表 |
+| `GET` | `/v1/namespaces` | `bearer-when-configured` | 列举已知命名空间 |
+| `GET` | `/v1/resource-kinds` | `bearer-when-configured` | 列举可用的资源类型 |
+| `GET` | `/v1/topology` | `bearer-when-configured` | Gateway、Route 和 Backend 的拓扑视图 |
+| `GET` | `/v1/dataplanes` | `bearer-when-configured` | 列举数据面实例 |
+| `GET` | `/v1/dataplanes/{nodeId}/summary` | `bearer-when-configured` | 查看指定数据面实例的摘要信息 |
+
+### 资源 CRUD
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/v1/resources` | `bearer-when-configured` | 列举所有受管理资源 |
+| `POST` | `/v1/resources` | `bearer-when-configured` | 创建或更新受管理资源 |
+| `GET` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | 按 kind、namespace 和 name 获取指定资源 |
+| `PUT` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | 更新指定资源 |
+| `DELETE` | `/v1/resources/{kind}/{namespace}/{name}` | `bearer-when-configured` | 删除指定资源 |
+
+### Chatbot
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/v1/chatbot/config` | `bearer-when-configured` | 获取 Chatbot 配置 |
+| `PUT` | `/v1/chatbot/config` | `bearer-when-configured` | 更新 Chatbot 配置 |
+| `POST` | `/v1/chatbot/chat` | `bearer-when-configured` | 发送聊天消息。响应格式为 `text/event-stream`（SSE）。 |
+
+### 指标代理
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/v1/metrics/config` | `bearer-when-configured` | 获取指标后端配置 |
+| `PUT` | `/v1/metrics/config` | `bearer-when-configured` | 更新指标后端配置 |
+| `POST` | `/v1/metrics/query` | `bearer-when-configured` | 执行即时 PromQL 查询 |
+| `POST` | `/v1/metrics/query_range` | `bearer-when-configured` | 执行范围 PromQL 查询 |
+
+### AI 网关
+
+| Method | Path | Auth | 描述 |
+|--------|------|------|------|
+| `GET` | `/v1/ai/overview` | `bearer-when-configured` | AI 网关概览（模型、提供商、请求量） |
+| `GET` | `/v1/ai/services` | `bearer-when-configured` | 列举已配置的 AI 后端服务 |
+| `GET` | `/v1/ai/token-usage` | `bearer-when-configured` | Token 用量统计 |
+| `GET` | `/v1/ai/traces` | `bearer-when-configured` | AI 请求追踪 |
+| `GET` | `/v1/ai/cost` | `bearer-when-configured` | 各 AI 提供商成本分析 |
+
+## 使用示例
 
 ### 健康检查
 
 ```bash
-# 控制面存活检查
-curl http://<controlplane-pod>:8081/healthz
-# 返回: 200 OK (body: "ok")
+# 存活检查
+curl -s -o /dev/null -w "%{http_code}" http://controlplane:8081/livez
+# → 200
 
-# 控制面就绪检查
-curl http://<controlplane-pod>:8081/readyz
-# 返回: 200 OK (body: "ready") 或 503 Service Unavailable
+# 就绪检查（初始同步完成前可能返回 503）
+curl -s http://controlplane:8081/readyz
+# → 200 OK（或 503，如果尚未就绪）
 ```
 
-`/healthz` 只检查进程是否存活，`/readyz` 额外检查控制面是否完成了初始资源同步，可以开始接受配置变更。
-
-### 配置快照
+### 配置查看
 
 ```bash
-# 获取当前配置快照版本
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
-# 返回示例:
-# {
-#   "id": "snap-20240601-120000-abc123",
-#   "generated_at": "2024-06-01T12:00:00Z",
-#   "gateways": 2,
-#   "routes": 15,
-#   "backends": 8,
-#   "clients_connected": 3
-# }
+# 集群概览
+curl http://controlplane:8081/v1/summary
 
-# 获取完整配置快照
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot
-# 返回当前推送给所有数据面的完整 IR 快照内容
+# 所有网关的所有 Route
+curl http://controlplane:8081/v1/routes
+
+# 指定 HTTPRoute 详情
+curl http://controlplane:8081/v1/routes/httproute/default/my-app-route
+
+# Backend 集群详情
+curl http://controlplane:8081/v1/backends/default/backend-svc
+
+# 数据面节点状态
+curl http://controlplane:8081/v1/nodes
 ```
 
-配置快照端点返回的是控制面翻译后的内部表示（IR），不是原始的 Kubernetes 资源。这有助于排查配置翻译是否正确，以及确认数据面收到的配置内容。
-
-### xDS 客户端状态
+### 快照同步检查
 
 ```bash
-# 列出所有连接的 xDS 客户端
-curl http://<controlplane-pod>:8081/api/v1/clients
-
-# 返回示例:
-# [
-#   {
-#     "node_id": "dataplane-7f8a9b-0",
-#     "cluster": "default",
-#     "version": "v1.2.3",
-#     "connected_since": "2024-06-01T11:55:00Z",
-#     "last_config_version": "snap-20240601-120000-abc123",
-#     "last_config_nonce": "nonce-xyz789",
-#     "last_config_status": "ACK",
-#     "subscriptions": ["http_routes", "backends", "listeners"]
-#   }
-# ]
-
-# 获取指定客户端详情
-curl http://<controlplane-pod>:8081/api/v1/clients/dataplane-7f8a9b-0
+# 查看哪些节点已同步、哪些存在差异
+curl http://controlplane:8081/v1/snapshot-sync
 ```
 
-`clients` 端点帮助确认数据面是否成功连接、收到了哪些配置、以及最后确认的状态。如果某个数据面长时间显示 `NACK` 状态，说明配置推送可能存在问题。
-
-## 数据面 Admin API
-
-数据面 Admin API 暴露在每个数据面 Pod 的 HTTP 端口上（默认 `8082`），提供单个代理实例的运行时状态。
-
-### 端点列表
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `GET` | `/healthz` | 健康检查 |
-| `GET` | `/readyz` | 就绪检查 |
-| `GET` | `/api/v1/status` | 代理运行时状态 |
-| `GET` | `/api/v1/config` | 当前应用的配置 |
-| `GET` | `/api/v1/config/version` | 当前配置版本 |
-| `GET` | `/api/v1/stats` | 运行时统计信息 |
-| `GET` | `/api/v1/stats/connections` | 活跃连接统计 |
-| `GET` | `/api/v1/stats/backends` | 后端健康状态 |
-| `GET` | `/api/v1/xds/status` | xDS 连接状态 |
-| `GET` | `/api/v1/metrics` | Prometheus 指标端点 |
-
-### 代理状态
+### 资源管理
 
 ```bash
-# 获取代理运行时状态
-curl http://<dataplane-pod>:8082/api/v1/status
+# 列举所有受管理资源
+curl http://controlplane:8081/v1/resources
 
-# 返回示例:
-# {
-#   "node_id": "dataplane-7f8a9b-0",
-#   "version": "v1.2.3",
-#   "uptime_seconds": 86400,
-#   "ready": true,
-#   "config_version": "snap-20240601-120000-abc123",
-#   "config_applied_at": "2024-06-01T12:00:01Z",
-#   "listeners": [
-#     {"name": "http-80", "address": "0.0.0.0:80", "protocol": "HTTP", "active": true},
-#     {"name": "https-443", "address": "0.0.0.0:443", "protocol": "HTTPS", "active": true}
-#   ]
-# }
+# 获取指定资源
+curl http://controlplane:8081/v1/resources/httproute/default/my-app-route
+
+# 创建或更新资源
+curl -X POST http://controlplane:8081/v1/resources \
+  -H "Content-Type: application/json" \
+  -d '{"apiVersion":"gateway.networking.k8s.io/v1","kind":"HTTPRoute",...}'
+
+# 删除资源
+curl -X DELETE http://controlplane:8081/v1/resources/httproute/default/my-app-route
 ```
 
-### 运行时统计
+### 指标查询
 
 ```bash
-# 获取活跃连接统计
-curl http://<dataplane-pod>:8082/api/v1/stats/connections
+# 即时查询
+curl -X POST http://controlplane:8081/v1/metrics/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"up"}'
 
-# 返回示例:
-# {
-#   "active_connections": 1250,
-#   "connections_per_second": 45.2,
-#   "total_connections": 3892000,
-#   "connection_errors": 12
-# }
-
-# 获取后端健康状态
-curl http://<dataplane-pod>:8082/api/v1/stats/backends
-
-# 返回示例:
-# [
-#   {
-#     "name": "backend-v1",
-#     "namespace": "default",
-#     "endpoints": [
-#       {"address": "10.0.1.5:8080", "healthy": true, "zone": "us-east-1a"},
-#       {"address": "10.0.1.6:8080", "healthy": true, "zone": "us-east-1b"},
-#       {"address": "10.0.1.7:8080", "healthy": false, "zone": "us-east-1a"}
-#     ]
-#   }
-# ]
+# 过去一小时的范围查询
+curl -X POST http://controlplane:8081/v1/metrics/query_range \
+  -H "Content-Type: application/json" \
+  -d '{"query":"rate(http_requests_total[5m])","start":"2025-01-01T00:00:00Z","end":"2025-01-01T01:00:00Z","step":"30s"}'
 ```
 
-### xDS 连接状态
+### AI 网关
 
 ```bash
-# 获取与控制面的 xDS 连接状态
-curl http://<dataplane-pod>:8082/api/v1/xds/status
+# 概览
+curl http://controlplane:8081/v1/ai/overview
 
-# 返回示例:
-# {
-#   "connected": true,
-#   "controlplane_address": "nantian-gw-controlplane:9090",
-#   "connected_since": "2024-06-01T11:55:00Z",
-#   "last_config_version": "snap-20240601-120000-abc123",
-#   "last_config_nonce": "nonce-xyz789",
-#   "last_config_status": "ACK",
-#   "stream_reconnects": 0
-# }
+# Token 用量
+curl http://controlplane:8081/v1/ai/token-usage
 ```
 
-## 常用诊断场景
+### 带认证的请求
 
-### 场景一：确认配置是否已生效
-
-当你在 Kubernetes 中修改了路由配置却看不到效果时，首先确认配置是否已推送并应用到数据面：
+当配置了 Admin Token 时，需在 `Authorization` 头中附带 Token：
 
 ```bash
-# 1. 检查控制面配置快照版本
-curl http://<controlplane>:8081/api/v1/config/snapshot/version
-
-# 2. 检查数据面是否收到了相同版本
-curl http://<dataplane>:8082/api/v1/config/version
-
-# 3. 如果版本不一致，检查 xDS 客户端状态
-curl http://<controlplane>:8081/api/v1/clients
+curl -H "Authorization: Bearer ${ADMIN_TOKEN}" http://controlplane:8081/v1/summary
 ```
 
-如果控制面快照版本已更新但数据面版本未更新，检查 xDS 客户端是否处于 `NACK` 状态，以及错误详情中是否有配置解析失败的信息。
-
-### 场景二：排查后端不可用
-
-```bash
-# 1. 检查控制面中后端集群的端点列表
-curl http://<controlplane>:8081/api/v1/backends/default/backend-v1
-
-# 2. 检查数据面中后端端点的健康状态
-curl http://<dataplane>:8082/api/v1/stats/backends
-```
-
-控制面返回的是从 Kubernetes EndpointSlice 翻译过来的配置，数据面返回的是实际健康检查的结果。如果控制面列出了端点但数据面显示 `healthy: false`，说明健康检查失败，需要检查后端服务本身是否正常。
-
-### 场景三：检查数据面与控制面的连接
-
-```bash
-# 查看所有数据面的连接状态
-curl http://<controlplane>:8081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
-
-# 查看特定数据面的 xDS 状态
-curl http://<dataplane>:8082/api/v1/xds/status
-```
-
-如果数据面的 `stream_reconnects` 持续增长，说明控制面和数据面之间的 gRPC 连接不稳定，需要检查网络和防火墙配置。
-
-:::tip[jq 工具]
-Admin API 返回 JSON 格式，推荐使用 `jq` 工具格式化输出。如果执行环境没有 `jq`，可以用 `python3 -m json.tool` 代替。
+:::tip[jq]
+所有诊断和 CRUD 端点均返回 JSON。可通过 `jq` 管道输出可读格式：`curl ... | jq .`
 :::
 
 ## 下一步
 
-- 查看 [xDS 协议](/zh/api-reference/xds-proto) 了解控制面和数据面之间的通信协议细节
-- 查看 [故障排查](/zh/operations/troubleshooting) 了解常见问题的诊断方法
-- 查看 [指标参考](/zh/operations/metrics) 了解 Prometheus 指标定义
+- [Gateway API 资源](/zh/api-reference/gateway-api) — 驱动网关配置的 Kubernetes 资源
+- [xDS 协议](/zh/api-reference/xds-proto) — 控制面与数据面之间的通信协议
+- [故障排查](/zh/operations/troubleshooting) — 常见诊断工作流
