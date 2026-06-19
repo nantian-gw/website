@@ -118,8 +118,8 @@ test('versioned English and Chinese docs stay path-mirrored', () => {
   assertMirroredDocs(collectMdxFiles(versionRoot), collectMdxFiles(zhVersionRoot), 'versioned English docs', 'versioned Chinese docs');
 });
 
-test('current docs intentionally keep pages that archived docs do not need', () => {
-  const expectedCurrentOnly = ['configuration/helm-values.mdx'];
+test('current and versioned docs only differ by the approved drift set', () => {
+  const expectedCurrentOnly = [];
   const expectedArchivedOnly = [];
 
   assertIntentionalDrift(

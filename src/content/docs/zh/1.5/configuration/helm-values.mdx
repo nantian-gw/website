@@ -1,0 +1,252 @@
+---
+title: Helm Values 指南
+description: "如何组织南天网关 1.5 Helm values 文件、哪些配置组最重要，以及变更上线前如何校验。"
+slug: 1.5/configuration/helm-values
+---
+
+在 Kubernetes 里，Helm values 才是 Nantian Gateway 面向运维人员的主控制面。你应该通过它表达平台边界、工作负载规模、TLS、安全策略和可观测性集成，而不是把渲染后的 ConfigMap 或 Deployment 清单当成长期维护入口。
+
+这篇指南重点讲 values 文件怎么组织、哪些配置组最值得优先关注。完整安装流程请看 [Helm 安装](/zh/1.5/installation/helm/)，生产硬化建议请继续阅读 [生产环境部署](/zh/1.5/installation/production/)。
+
+## 为什么要用分层 Values 文件
+
+分层 values 文件可以把 chart 默认值、环境默认值、集群定制项和 Secret 引用拆开维护。
+
+这样做的原因很现实：不同团队往往负责不同的问题域。
+
+- 平台团队通常负责 CRD、命名空间、RBAC、镜像仓库和证书体系
+- 业务或流量团队通常负责控制面/数据面的副本数和资源规模
+- 安全团队通常负责 TLS Secret、Bearer Token 和网络暴露策略
+
+与其每个集群维护一份超长的 values 文件，更稳妥的做法是保留一个较小的基础文件，再按环境和集群叠加覆盖值。
+
+## 推荐的文件组织方式
+
+一个实用的目录结构可以是：
+
+```text
+helm-values/
+  values-base.yaml
+  values-staging.yaml
+  values-production.yaml
+  values-cluster-a.yaml
+```
+
+安装或预渲染时按顺序叠加：
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+```
+
+通常可以这样分工：
+
+- `values-base.yaml`：所有环境都共享的默认值
+- `values-staging.yaml` 或 `values-production.yaml`：环境级策略
+- `values-cluster-a.yaml`：某个集群独有的入口域名、证书 Issuer 或集群集成参数
+
+不要把真正的密钥材料直接写进版本库里的 values 文件，应该把它们保存在 Kubernetes Secret 中，再通过 values 去引用。
+
+## 平台级配置
+
+先处理定义平台边界的那组值：
+
+```yaml
+global:
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+
+namespace:
+  create: true
+  name: "nantian-gw"
+
+gatewayAPI:
+  installCRDs: false
+  channel: standard
+
+rbac:
+  create: true
+```
+
+这组值主要回答以下平台问题：
+
+- 应用 release 自己创建命名空间，还是由平台预先提供？
+- Gateway API CRD 由 chart 安装，还是在集群引导阶段统一安装一次？
+- 镜像从公开仓库拉取，还是走企业内部镜像镜像源？
+- release 自己创建 RBAC，还是由平台提供等价权限？
+
+在多租户集群里，通常更推荐 `gatewayAPI.installCRDs: false`。把 CRD 作为平台层的统一资源管理，而不是让每个应用 release 都去碰它。
+
+如果平台统一管理镜像仓库，优先用全局 registry 覆盖：
+
+```yaml
+global:
+  imageRegistry: "registry.example.com"
+  imagePullSecrets:
+    - nantian-registry
+```
+
+## 控制面配置
+
+控制面 values 主要决定可用性、发布策略和控制链路安全：
+
+```yaml
+controlplane:
+  replicas: 2
+  image:
+    repository: "nantian-gw/nantian-controlplane"
+    tag: "sha-8737dc3"
+    pullPolicy: IfNotPresent
+  grpcTLS:
+    enabled: true
+    existingSecret: "nantian-controlplane-grpc-tls"
+    requireClientCert: true
+  adminAuth:
+    existingSecret: "nantian-controlplane-admin-auth"
+    secretKey: token
+  config:
+    dashboard:
+      enabled: true
+      capabilities:
+        wasmPlugins: false
+        chatbot: false
+```
+
+控制面发布时，优先看这些值：
+
+- `replicas`：生产环境至少 2 个副本
+- `image.tag`：在长期环境中固定不可变 tag 或 digest
+- `grpcTLS.*`：当数据面通过 TLS 或 mTLS 接入 xDS 时保护控制面 gRPC 服务端
+- `adminAuth.*`：当运维或外部集成使用 admin API 时启用 Bearer Token
+- `config.dashboard.*`：在 dashboard 启用时约束 UI 能暴露哪些能力
+
+如果你要保留 dashboard 工作负载，但不希望 UI 暴露某些功能，优先通过 dashboard capability policy 控制，而不是去 patch dashboard 镜像。
+
+## 数据面配置
+
+数据面 values 主要决定流量容量、xDS 客户端安全、会话行为和本地运行时面：
+
+```yaml
+dataplane:
+  replicas: 3
+  image:
+    repository: "nantian-gw/dataplane"
+    tag: "sha-9670107"
+    pullPolicy: IfNotPresent
+  xdsTLS:
+    enabled: true
+    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
+  sessionPersistence:
+    existingSecret: "nantian-gw-dataplane-session-persistence"
+    secretKey: session-persistence
+  accessLogVolume:
+    enabled: true
+    mountPath: /var/log/nantian-gw
+    sizeLimit: 256Mi
+  resources:
+    requests:
+      cpu: "2"
+      memory: "512Mi"
+    limits:
+      memory: "2Gi"
+```
+
+这组值通常会随着流量增长而调整：
+
+- `replicas`：随请求量和故障域目标水平扩容
+- `xdsTLS.*`：与控制面的 gRPC TLS 策略保持一致
+- `sessionPersistence.*`：多副本场景下使用稳定 Secret，而不是依赖运行时自动生成的密钥
+- `accessLogVolume.*`：决定是否继续使用本地文件访问日志
+- `resources`：根据真实流量设置请求和内存上限，而不是一直沿用开发默认值
+
+当多个数据面副本需要共享 sticky session 行为时，更推荐 `existingSecret`，这样密钥材料留在 Kubernetes Secret 中，而不会进入版本库里的 values 文件。
+
+## 可观测性与安全配置
+
+下一组值决定 chart 如何接入集群里的观测和安全体系：
+
+```yaml
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  fromNamespaces:
+    - monitoring
+
+networkPolicies:
+  enabled: true
+
+certs:
+  generate: false
+  certManager:
+    enabled: true
+    issuerRef:
+      name: nantian-ca
+      kind: ClusterIssuer
+      group: cert-manager.io
+```
+
+这组值要回答的是：
+
+- Prometheus Operator 是否通过 `ServiceMonitor` 发现指标？
+- 开启 NetworkPolicy 后，哪些命名空间被允许抓取 metrics？
+- 证书是仅用于开发环境的自签，还是由 cert-manager / 现有 Secret 提供？
+
+生产环境的 gRPC/xDS TLS 更推荐 cert-manager 或预创建 Secret。chart 的自签证书路径适合开发和快速验证，不应成为长期证书管理方案。
+
+## 生产环境护栏
+
+把 values 变更推进生产前，至少做完这些检查：
+
+- 明确固定 `controlplane.image.tag`、`dataplane.image.tag` 和 `dashboard.image.tag`，不要在长期环境里继续用 `latest`
+- values 文件可以进版本库，但真正的 Secret 材料应保存在 Kubernetes Secret 中
+- 不要直接编辑 Helm 渲染出来的 ConfigMap；下一次 upgrade 会把手工改动覆盖掉
+- 明确 CRD 归属：到底是 chart 安装，还是平台层统一引导
+- 长期环境优先使用分层 `-f` 文件配合 `helm upgrade --install`，不要依赖一串难以审计的 `--set`
+- 如果依赖 `helm test`，而你的集群不能直接拉默认公共镜像，请通过 `tests.image.repository`、`tests.image.tag` 和 `tests.image.pullPolicy` 指向内网镜像源
+
+当前 chart 的 Helm test hook 默认值是：
+
+```yaml
+tests:
+  enabled: true
+  image:
+    repository: "public.ecr.aws/docker/library/busybox"
+    tag: "1.36.1"
+    pullPolicy: IfNotPresent
+```
+
+hook 策略会在重新创建前删除旧测试 Pod，并在测试成功或失败后自动清理，因此重复执行 `helm test` 或清理 release 时不会堆积陈旧的 hook Pod。
+
+## 推荐校验流程
+
+values 变更上线前，至少走一遍下面的路径：
+
+```bash
+helm template nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml > rendered.yaml
+
+helm upgrade --install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw \
+  --create-namespace \
+  -f helm-values/values-base.yaml \
+  -f helm-values/values-production.yaml
+
+kubectl get pods -n nantian-gw
+kubectl get gatewayclass nantian-gw
+kubectl get svc -n nantian-gw
+helm status nantian-gw -n nantian-gw
+helm test nantian-gw --namespace nantian-gw
+```
+
+如果你改的是 chart 版本，请结合 [升级指南](/zh/1.5/installation/upgrade/) 一起看；如果改动涉及 TLS、资源规模或高可用参数，请同时对照 [生产环境部署](/zh/1.5/installation/production/) 进行复核。
