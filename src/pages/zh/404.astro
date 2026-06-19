@@ -1,0 +1,31 @@
+---
+import ContentLayout from '../../layouts/ContentLayout.astro';
+---
+
+<ContentLayout
+  lang="zh"
+  title="404 — 页面未找到 — Nantian Gateway"
+  description="您查找的页面不存在。"
+  heading="404 — 页面未找到"
+  intro="您查找的页面不存在或已被移动。"
+>
+  <div style="text-align: center; padding: 2rem 0;">
+    <div id="search" class="not-found-search"></div>
+    <nav class="not-found-nav">
+      <a href="/zh/" class="primary">首页</a>
+      <a href="/zh/getting-started/quick-start/">快速开始</a>
+      <a href="/zh/faq/">常见问题</a>
+    </nav>
+  </div>
+</ContentLayout>
+
+<script is:inline>
+  (async () => {
+    try {
+      const pf = await import('/pagefind/pagefind.js');
+      pf.init();
+      const container = document.getElementById('search');
+      if (container) new pf.PagefindUI({ element: container });
+    } catch {}
+  })();
+</script>
