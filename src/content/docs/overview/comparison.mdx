@@ -34,11 +34,11 @@ Features marked 🧪 (AI gateway, Wasm plugins) are experimental. APIs and behav
 
 **Where Nantian Gateway differs:**
 
-The most visible difference is the data plane language. Envoy is written in C++, which has decades of proven performance but a steeper contribution curve and a larger attack surface. Nantian Gateway's Rust data plane aims for comparable performance with stronger memory safety guarantees. This matters more for teams that need to audit or extend the proxy itself.
+The most visible difference is the data plane language. Envoy is written in C++, which has decades of proven performance and a mature ecosystem. Nantian Gateway's Rust data plane aims for comparable performance with strong memory safety guarantees. This matters more for teams that need to audit or extend the proxy itself.
 
 Nantian Gateway also includes an AI gateway module directly in the data plane. With Envoy Gateway, you'd need to deploy a separate AI proxy (like [LiteLLM](https://github.com/BerriAI/litellm) or [AI Gateway](https://github.com/Portkey-AI/gateway)) alongside the gateway, adding operational complexity and an extra hop. Nantian Gateway handles AI provider routing, token counting, rate limiting, and PII masking within the same proxy that handles your HTTP traffic.
 
-On the Gateway API coverage front, Nantian Gateway declares 55 features against the v1.5.1 spec, while Envoy Gateway targets v1.2.x with around 40 features. Nantian Gateway also supports Gateway API Mesh resources, which Envoy Gateway does not.
+On the Gateway API coverage front, Nantian Gateway declares 54 features against the v1.5.1 spec, while Envoy Gateway targets v1.2.x with around 40 features. Nantian Gateway also supports Gateway API Mesh resources, which Envoy Gateway does not.
 
 Both projects use gRPC/xDS for config distribution, so the control plane architecture is similar. Both support Wasm plugins through wasmtime.
 
@@ -50,9 +50,9 @@ Both projects use gRPC/xDS for config distribution, so the control plane archite
 
 Istio is a mesh first, gateway second. Its gateway functionality exists as a component of a larger mesh architecture that requires sidecar injection. Nantian Gateway is a gateway first, with mesh support as an extension. If you need a full mesh with mTLS, fine-grained authorization policies, and distributed tracing, Istio is the right choice. If you need a high-performance ingress gateway with optional mesh features, Nantian Gateway is a lighter fit.
 
-Nantian Gateway implements mesh through the Gateway API Mesh model, which doesn't require sidecars. This sidesteps the operational overhead of sidecar injection, pod lifecycle ordering, and the additional resource consumption that comes with a sidecar per pod.
+Nantian Gateway implements mesh through the Gateway API Mesh model, which does not require sidecars. This approach avoids the additional operational considerations of sidecar injection, pod lifecycle ordering, and the resource allocation that comes with a sidecar per pod.
 
-The AI gateway and dashboard features in Nantian Gateway have no Istio equivalent. Istio's observability is more comprehensive (Jaeger tracing, Kiali visualization), but Nantian Gateway's Prometheus and Grafana integration covers the gateway-specific metrics most teams need.
+The AI gateway and dashboard features in Nantian Gateway are areas where its scope differs from Istio's. Istio's observability is more comprehensive (Jaeger tracing, Kiali visualization), while Nantian Gateway's Prometheus and Grafana integration covers the gateway-specific metrics most teams need.
 
 ## Nantian Gateway vs Contour
 
@@ -64,7 +64,7 @@ Contour uses Envoy, so the same data plane tradeoffs apply. Nantian Gateway's Ru
 
 Feature coverage is a meaningful difference. Nantian Gateway supports gRPC routing with named route rules, TLS mode-mixed (passthrough and terminate on the same listener), and a broader set of redirect status codes and HTTP matching features. Contour's Gateway API support is more conservative.
 
-Contour doesn't include AI gateway features, a Wasm plugin system, or a mesh model. If your needs are straightforward HTTP routing with TLS termination, Contour works well. Nantian Gateway targets teams that need multi-protocol routing, AI traffic management, and extensibility from a single proxy.
+Nantian Gateway additionally provides AI gateway features, a Wasm plugin system, and mesh support. If your needs are straightforward HTTP routing with TLS termination, Contour excels in simplicity. Nantian Gateway targets teams that need multi-protocol routing, AI traffic management, and extensibility from a single proxy.
 
 ## Nantian Gateway vs NGINX Gateway Fabric
 
@@ -76,13 +76,13 @@ NGINX Gateway Fabric benefits from NGINX's massive installed base and ecosystem.
 
 The feature gap is the largest differentiator. NGINX Gateway Fabric supports a subset of Gateway API features, focusing on the most common HTTP routing patterns. Nantian Gateway covers a broader spec surface, including gRPC routing, UDP routes, TLS mode-mixed, mesh resources, and more granular matching and redirect options.
 
-Nantian Gateway's AI gateway, Wasm plugin system, and dashboard have no NGINX Gateway Fabric equivalent. If you need AI traffic management or custom plugin logic at the proxy level, you'd need to add separate components to an NGINX-based deployment.
+Nantian Gateway brings AI gateway capabilities, a Wasm plugin system, and a built-in dashboard — areas where it provides additional capabilities beyond NGINX Gateway Fabric's scope. If you need AI traffic management or custom plugin logic at the proxy level, Nantian Gateway offers an integrated solution.
 
 ## When to Choose Nantian Gateway
 
 Nantian Gateway is a strong fit when:
 
-- You need **comprehensive Gateway API coverage** (v1.5.1, 55 features) and want to stay close to the upstream spec
+- You need **comprehensive Gateway API coverage** (v1.5.1, 54 features) and want to stay close to the upstream spec
 - You're running **AI workloads** and want a single proxy that handles both API traffic and AI provider routing/rate limiting
 - You want **custom proxy logic** through Wasm plugins managed via Kubernetes CRDs
 - You prefer a **Rust data plane** for memory safety and concurrency
