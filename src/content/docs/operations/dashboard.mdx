@@ -88,6 +88,16 @@ When an auth secret is configured, the dashboard requires it on every page load.
 
 Leave both empty to run the dashboard without authentication. This is fine for local development and port-forward access behind a firewall, but don't do it on an internet-facing Ingress.
 
+### Retrieving the token after deployment
+
+If you did not set `authSecret` or `authExistingSecret`, the Helm chart auto-generates a random secret named `<release>-dashboard-auth`. Retrieve it with:
+
+```bash
+kubectl get secret -n nantian-gw nantian-gw-dashboard-auth \
+  -o jsonpath='{.data.auth-secret}' | base64 -d
+echo
+```
+
 ## Dependencies
 
 The dashboard depends on the control plane's Admin API being reachable. The Admin API is served by the control plane Deployment on port `18081` (Service: `nantian-gw-controlplane-admin`). If the control plane pod isn't running or the admin API isn't healthy, the dashboard will show connection errors.
