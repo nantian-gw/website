@@ -155,13 +155,13 @@ kubectl describe httproute echo -n nantian-demo
 打开一个终端，转发数据面运行时 HTTP 端口：
 
 ```bash
-kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 80:80
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 8080:80
 ```
 
 在另一个终端中，通过网关发送请求：
 
 ```bash
-curl -i http://localhost:80/echo
+curl -i http://localhost:8080/echo
 ```
 
 成功响应说明数据面已经收到运行时快照，并把请求路由到了 echo Service。
