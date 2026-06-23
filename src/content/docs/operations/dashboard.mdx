@@ -4,7 +4,7 @@ title: Dashboard
 
 The Nantian Gateway dashboard is a Next.js admin UI deployed alongside the control plane. It provides a web interface for inspecting gateway state, viewing route configurations, and monitoring data plane connections without needing `kubectl` or the admin API directly.
 
-The dashboard connects to the control plane's [Admin API](/architecture/admin-api) and reads configuration from it. It doesn't write anything back: it's a read-only observability tool for operators.
+The dashboard connects to the control plane's [Admin API](/architecture/admin-api) for observability and resource management. Operators can inspect gateway state, view route configurations, monitor data plane connections, and manage Gateway API and custom resources through the UI — all without needing `kubectl` directly.
 
 ## Enabling the Dashboard
 

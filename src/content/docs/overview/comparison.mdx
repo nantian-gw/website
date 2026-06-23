@@ -13,12 +13,12 @@ Features marked 🧪 (AI gateway, Wasm plugins) are experimental. APIs and behav
 | Feature | Nantian Gateway | Envoy Gateway | Istio | Contour | NGINX Gateway |
 |---------|----------------|---------------|-------|---------|---------------|
 | **Gateway API target** | v1.5.1 | v1.2.x | v1.2.x (via Gateway API) | v1.1.x | v1.2.x |
-| **Declared features** | 55 | ~40 | ~30 (Gateway API) | ~30 | ~35 |
+| **Declared features** | 54 | ~40 | ~30 (Gateway API) | ~30 | ~35 |
 | **Control plane** | Go | Go | Go | Go | Go |
 | **Data plane** | Rust | C++ (Envoy) | C++ (Envoy) | C++ (Envoy) | C (NGINX) |
 | **Config protocol** | gRPC/xDS | gRPC/xDS | gRPC/xDS | gRPC/xDS | Custom |
 | **AI gateway** 🧪 | Built-in | No | No | No | No |
-| **Wasm runtime** 🧪 | wasmtime | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | No |
+| **Wasm runtime** 🧪 | wasmtime (custom SDK) | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | No |
 | **Service mesh** | Yes (Gateway API Mesh) | No | Yes (core) | No | No |
 | **TCP/UDP/TLS** | Yes | Yes | Yes | Yes | Yes |
 | **gRPC routing** | Yes (named rules) | Yes | Yes | Limited | Yes |
