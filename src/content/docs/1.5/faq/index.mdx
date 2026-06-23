@@ -17,7 +17,7 @@ The split-plane architecture has another benefit: the two planes can evolve inde
 
 The two core differences are: (1) the data plane language (Rust vs C++), and (2) AI Gateway capabilities. Nantian Gateway embeds AI provider routing, token counting, rate limiting, and PII redaction directly in the data plane — no separate AI proxy needed. If you don't need AI Gateway capabilities, the difference in Gateway API implementation is primarily in feature coverage — Nantian Gateway declares support for 55 features in v1.5.1, while Envoy Gateway targets approximately 40 features in v1.2.x.
 
-See the [Comparison](/1.5/comparison) page for a detailed analysis.
+See the [Comparison](/1.5/overview/comparison/) page for a detailed analysis.
 
 ### Why use xDS instead of the Kubernetes API directly?
 

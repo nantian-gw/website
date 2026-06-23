@@ -17,7 +17,7 @@ slug: zh/1.5/faq
 
 最核心的区别有两个：一是数据面语言（Rust vs C++），二是 AI 网关能力。Nantian Gateway 把 AI 提供方路由、Token 计数、限流和 PII 脱敏直接做在数据面里，不需要额外部署 AI 代理。如果你不需要 AI 网关能力，两者在 Gateway API 实现上的差异主要在特性覆盖面上——Nantian Gateway 声明支持 v1.5.1 的 55 个特性，Envoy Gateway 目标是 v1.2.x 约 40 个特性。
 
-详细的对比分析见 [项目对比](/zh/1.5/comparison) 页面。
+详细的对比分析见 [项目对比](/zh/1.5/overview/comparison/) 页面。
 
 ### 为什么需要 xDS 协议？直接用 Kubernetes API 不行吗？
 
@@ -263,5 +263,5 @@ Admin API 提供网关配置的完整读取权限。保护措施：
 ## 下一步
 
 * 查看 [快速开始](/zh/1.5/getting-started/quick-start) 部署你的第一个 Nantian Gateway
-* 查看 [适用场景](/zh/1.5/use-cases) 了解典型部署模式
-* 查看 [项目对比](/zh/1.5/comparison) 了解与其他网关的差异
+* 查看 [适用场景](/zh/1.5/overview/use-cases/) 了解典型部署模式
+* 查看 [项目对比](/zh/1.5/overview/comparison/) 了解与其他网关的差异
