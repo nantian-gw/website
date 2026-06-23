@@ -35,7 +35,7 @@ function readArtifact(path) {
 test("default build command installs the browser before the Astro build", () => {
   const pkg = JSON.parse(read("package.json"));
 
-  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build && npm run build:llms");
+  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build && npm run build:llms && npm run build:markdown");
   assert.equal(pkg.scripts["build:astro"], "astro build");
   assert.equal(pkg.scripts["setup:browser"], "npx playwright install chromium");
   assert.equal(pkg.scripts["setup:browser:ci"], "npx playwright install --with-deps chromium");

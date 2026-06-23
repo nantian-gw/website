@@ -1,3 +1,4 @@
+/* global URL, Request, Response */
 /**
  * Cloudflare Pages Worker — content negotiation for markdown.
  *
