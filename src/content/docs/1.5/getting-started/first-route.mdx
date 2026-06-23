@@ -5,7 +5,7 @@ slug: 1.5/getting-started/first-route
 
 Now that Nantian Gateway is running, let's create a Gateway resource and an HTTPRoute to proxy traffic to a backend service. This is the core workflow you'll use every time you expose a service through the gateway.
 
-By the end of this guide, you'll have a working HTTP route that accepts requests on port 10080 and forwards them to a sample application.
+By the end of this guide, you'll have a working HTTP route that accepts requests on port 80 and forwards them to a sample application.
 
 ## Overview
 
@@ -262,7 +262,7 @@ If the route shows `Accepted: False`, check that the parent Gateway exists and i
 
 ## Step 4: Test the traffic
 
-The data plane listens on port `10080` inside the cluster. Depending on how you set up your Kind cluster, you have a few ways to reach it.
+The data plane listens on port `80` inside the cluster. Depending on how you set up your Kind cluster, you have a few ways to reach it.
 
 ### Option A: Port mapping (Kind with extraPortMappings)
 
@@ -277,7 +277,7 @@ curl http://localhost:18080/
 If you didn't set up port mappings, port-forward to the data plane service:
 
 ```bash
-kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:10080
+kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:80
 ```
 
 Then in another terminal:
@@ -292,7 +292,7 @@ Run a temporary pod inside the cluster to test:
 
 ```bash
 kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
-  curl -s http://nantian-gw-dataplane.nantian-gw.svc:10080/
+  curl -s http://nantian-gw-dataplane.nantian-gw.svc:80/
 ```
 
 ### Expected response

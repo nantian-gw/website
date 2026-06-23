@@ -42,10 +42,10 @@ The fixed services created by the Helm chart are:
 | `nantian-gw-dataplane-metrics` | `19080` | Data plane metrics scrape entry. |
 | `nantian-gw-dashboard` | `3000` | Dashboard web UI. |
 
-The data plane runtime HTTP listener is configured as `0.0.0.0:10080`. Port-forward the deployment for local route tests:
+The data plane runtime HTTP listener is configured as `0.0.0.0:80`. Port-forward the deployment for local route tests:
 
 ```bash
-kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 10080:10080
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 80:80
 ```
 
 ## Logs

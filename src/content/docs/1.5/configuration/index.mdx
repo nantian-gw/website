@@ -46,7 +46,7 @@ Before diving into individual pages, a few concepts show up repeatedly across th
 
 **Duration fields** use Go duration strings. Common values include `1s`, `500ms`, `2m`, `30s`. Millisecond-valued fields (ending in `Ms`) use plain integers.
 
-**Address fields** follow Go's `net.Listen` format. Use `:18080` to bind to all interfaces on port 18080, `127.0.0.1:6060` to bind to localhost only, or `0.0.0.0:10080` to explicitly bind to all interfaces.
+**Address fields** follow Go's `net.Listen` format. Use `:18080` to bind to all interfaces on port 18080, `127.0.0.1:6060` to bind to localhost only, or `0.0.0.0:80` to explicitly bind to all interfaces.
 
 **Boolean fields** default to `false` throughout unless noted otherwise. This is the safe default: features like TLS, pprof, and experimental flags are opt-in.
 

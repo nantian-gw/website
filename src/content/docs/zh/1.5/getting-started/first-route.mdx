@@ -5,7 +5,7 @@ slug: zh/1.5/getting-started/first-route
 
 Nantian Gateway 跑起来之后，我们来创建一个 Gateway 资源和 HTTPRoute，把流量代理到后端服务上。这就是你日常暴露服务时要走的流程。
 
-走完这篇指南，你会有一个能用的 HTTP 路由，监听 10080 端口，把请求转发到一个示例应用。
+走完这篇指南，你会有一个能用的 HTTP 路由，监听 80 端口，把请求转发到一个示例应用。
 
 ## 概念速览
 
@@ -262,7 +262,7 @@ Status:
 
 ## 第四步：验证流量
 
-数据面在集群内监听 `10080` 端口。根据你的 Kind 集群配置方式，有几种访问方法。
+数据面在集群内监听 `80` 端口。根据你的 Kind 集群配置方式，有几种访问方法。
 
 ### 方案 A：端口映射（Kind extraPortMappings）
 
@@ -277,7 +277,7 @@ curl http://localhost:18080/
 如果你没有配端口映射，把数据面 Service 的端口转到本地：
 
 ```bash
-kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:10080
+kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:80
 ```
 
 然后另开一个终端：
@@ -292,7 +292,7 @@ curl http://localhost:8080/
 
 ```bash
 kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
-  curl -s http://nantian-gw-dataplane.nantian-gw.svc:10080/
+  curl -s http://nantian-gw-dataplane.nantian-gw.svc:80/
 ```
 
 ### 期望返回

@@ -45,7 +45,7 @@ Nantian 还包含实验性 API：
 
 Helm 是推荐给用户和运维人员的安装路径。Chart 会安装控制面、数据面、dashboard、Service、RBAC、NetworkPolicy，以及一个默认名为 `nantian-gw` 的 `GatewayClass`。仓库内也提供 Kustomize overlays，用于开发和自定义部署。
 
-控制面在 `18080` 暴露 gRPC，在 `18081` 暴露 Admin API，在 `18082` 暴露 metrics，在 `18083` 暴露健康检查。数据面的运行时 HTTP 监听地址是 `0.0.0.0:10080`，Admin API 与 metrics Service 端口是 `19080`。Dashboard Service 在 Helm chart 中使用端口 `3000`。
+控制面在 `18080` 暴露 gRPC，在 `18081` 暴露 Admin API，在 `18082` 暴露 metrics，在 `18083` 暴露健康检查。数据面的运行时 HTTP 监听地址是 `0.0.0.0:80`，Admin API 与 metrics Service 端口是 `19080`。Dashboard Service 在 Helm chart 中使用端口 `3000`。
 
 日常运维可以先查看 Kubernetes Pod 状态、`GatewayClass` 状态、Route 绑定状态、控制面和数据面日志、Prometheus metrics、Grafana dashboard，以及 Admin API。
 

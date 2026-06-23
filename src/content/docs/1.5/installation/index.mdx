@@ -41,7 +41,7 @@ The current Helm templates create fixed ClusterIP services for control plane, da
 | `nantian-gw-dataplane-metrics` | `19080` | Data plane metrics scrape entry. |
 | `nantian-gw-dashboard` | `3000` | Dashboard web UI. |
 
-The data plane runtime HTTP listener is configured as `0.0.0.0:10080`. Expose this listener according to your environment, for example with port-forwarding in local tests or a Kubernetes Service overlay for cluster ingress. Do not expose the control plane gRPC, admin, or metrics services outside the cluster.
+The data plane runtime HTTP listener is configured as `0.0.0.0:80`. Expose this listener according to your environment, for example with port-forwarding in local tests or a Kubernetes Service overlay for cluster ingress. Do not expose the control plane gRPC, admin, or metrics services outside the cluster.
 
 ## Default Chart Behavior
 

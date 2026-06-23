@@ -45,7 +45,7 @@ Experimental features are disabled by default. Enable the relevant control plane
 
 Helm is the recommended install path for users and operators. The chart installs the control plane, data plane, dashboard, services, RBAC, network policies, and a default `GatewayClass` named `nantian-gw`. Repository-local Kustomize overlays are also available for development and custom deployments.
 
-The control plane exposes gRPC on `18080`, the admin API on `18081`, metrics on `18082`, and health probes on `18083`. The data plane listens for runtime HTTP traffic on `0.0.0.0:10080` and exposes admin and metrics services on `19080`. The dashboard service listens on chart port `3000`.
+The control plane exposes gRPC on `18080`, the admin API on `18081`, metrics on `18082`, and health probes on `18083`. The data plane listens for runtime HTTP traffic on `0.0.0.0:80` and exposes admin and metrics services on `19080`. The dashboard service listens on chart port `3000`.
 
 For day-two operations, start with Kubernetes pod status, `GatewayClass` status, route attachment status, control plane and data plane logs, Prometheus metrics, Grafana dashboards, and the admin APIs.
 

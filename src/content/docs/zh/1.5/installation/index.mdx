@@ -41,7 +41,7 @@ Helm chart 会创建 `GatewayClass`，但不会创建你的应用 `Gateway` 或 
 | `nantian-gw-dataplane-metrics` | `19080` | 数据面 metrics 抓取入口。 |
 | `nantian-gw-dashboard` | `3000` | Dashboard Web UI。 |
 
-数据面运行时 HTTP 监听地址配置为 `0.0.0.0:10080`。请根据环境暴露该监听器，例如本地测试使用 port-forward，集群入口使用 Kubernetes Service overlay。不要把控制面 gRPC、admin 或 metrics Service 暴露到集群外。
+数据面运行时 HTTP 监听地址配置为 `0.0.0.0:80`。请根据环境暴露该监听器，例如本地测试使用 port-forward，集群入口使用 Kubernetes Service overlay。不要把控制面 gRPC、admin 或 metrics Service 暴露到集群外。
 
 ## 默认 Chart 行为
 

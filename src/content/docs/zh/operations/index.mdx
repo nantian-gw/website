@@ -42,10 +42,10 @@ Helm chart 创建的固定 Service 如下：
 | `nantian-gw-dataplane-metrics` | `19080` | 数据面 metrics 抓取入口。 |
 | `nantian-gw-dashboard` | `3000` | Dashboard Web UI。 |
 
-数据面运行时 HTTP 监听地址配置为 `0.0.0.0:10080`。本地 route 测试可转发 deployment：
+数据面运行时 HTTP 监听地址配置为 `0.0.0.0:80`。本地 route 测试可转发 deployment：
 
 ```bash
-kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 10080:10080
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 80:80
 ```
 
 ## 日志
