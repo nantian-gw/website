@@ -50,7 +50,7 @@ Controls how the control plane tracks and persists data plane node status.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `nodeStatus.leasePrefix` | string | `aeg-node` | Prefix for node lease objects in the Kubernetes API |
+| `nodeStatus.leasePrefix` | string | `nantian-gw-node` | Prefix for node lease objects in the Kubernetes API |
 | `nodeStatus.persistTimeout` | duration | `2s` | Timeout for persisting node status to the API server |
 | `nodeStatus.persistDebounce` | duration | `250ms` | Minimum interval between node status persistence operations |
 
@@ -236,7 +236,7 @@ reconcilerRunner:
   retryBackoff: "1s"
 
 nodeStatus:
-  leasePrefix: "aeg-node"
+  leasePrefix: "nantian-gw-node"
   persistTimeout: "2s"
   persistDebounce: "250ms"
 

@@ -259,9 +259,9 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 
 * 多个数据面副本共用了同一个运行时 `nodeId`
 * 老清单把 `dataplane.config.nodeId` 固定成同一个值，例如 `dp-kubernetes`
-* 仍在使用已经废弃的 `PGW_NODE_ID`，而不是当前 chart 使用的 `AEG_NODE_ID`
+* 仍在使用已经废弃的 `PGW_NODE_ID`，而不是当前 chart 使用的 `NANTIAN_GW_NODE_ID`
 
-**解决方法**：确保每个数据面副本都有唯一的运行时身份。当前 Helm chart 会把 Pod `metadata.name` 注入到 `AEG_NODE_ID`，通常不需要额外修改；不要再用共享固定值覆盖它。若你维护的是自定义清单，请移除 `PGW_NODE_ID`，把 `dataplane.config.nodeId` 仅作为兜底值保留，然后重启数据面 Deployment。
+**解决方法**：确保每个数据面副本都有唯一的运行时身份。当前 Helm chart 会把 Pod `metadata.name` 注入到 `NANTIAN_GW_NODE_ID`，通常不需要额外修改；不要再用共享固定值覆盖它。若你维护的是自定义清单，请移除 `PGW_NODE_ID`，把 `dataplane.config.nodeId` 仅作为兜底值保留，然后重启数据面 Deployment。
 
 ### 会话保持使用自动生成密钥的告警
 

@@ -163,7 +163,7 @@ dataplane:
 
 数据面 Service 是 `nantian-gw-dataplane-admin` 和 `nantian-gw-dataplane-metrics`，两者 Service port 都是 `19080`。运行时 HTTP 流量由配置中的监听地址 `0.0.0.0:10080` 处理。
 
-在 Kubernetes 安装场景下，Chart 会把 Pod `metadata.name` 注入到 `AEG_NODE_ID`，因此即使 `dataplane.config.nodeId` 仍以 `dp-kubernetes` 作为兜底值，每个副本也会得到唯一的运行时 `nodeId`。如果你使用旧版清单部署，请确认没有再用固定值覆盖它，也不要继续使用已经废弃的 `PGW_NODE_ID`。
+在 Kubernetes 安装场景下，Chart 会把 Pod `metadata.name` 注入到 `NANTIAN_GW_NODE_ID`，因此即使 `dataplane.config.nodeId` 仍以 `dp-kubernetes` 作为兜底值，每个副本也会得到唯一的运行时 `nodeId`。如果你使用旧版清单部署，请确认没有再用固定值覆盖它，也不要继续使用已经废弃的 `PGW_NODE_ID`。
 
 当数据面副本数大于 1 时，不要依赖运行时自动生成的会话密钥，而应显式配置稳定的 session-persistence Secret：
 

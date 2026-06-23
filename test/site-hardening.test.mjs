@@ -340,7 +340,7 @@ test("chart-facing docs use current Helm values and rendered service names", () 
 test("Helm docs explain Pod-derived dataplane node IDs and stable session-persistence settings", () => {
   const docs = readMany(dataplaneHelmIdentityDocPaths);
 
-  assert.match(docs, /AEG_NODE_ID/);
+  assert.match(docs, /NANTIAN_GW_NODE_ID/);
   assert.match(docs, /metadata\.name/);
   assert.match(docs, /sharedSecret/);
   assert.match(docs, /existingSecret/);
@@ -350,7 +350,7 @@ test("troubleshooting docs explain superseded xDS streams as duplicate dataplane
   const docs = readMany(dataplaneTroubleshootingDocPaths);
 
   assert.match(docs, /xds stream superseded by newer connection/);
-  assert.match(docs, /AEG_NODE_ID/);
+  assert.match(docs, /NANTIAN_GW_NODE_ID/);
   assert.match(docs, /PGW_NODE_ID/);
   assert.match(docs, /nodeId/);
 });

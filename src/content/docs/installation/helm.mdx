@@ -163,7 +163,7 @@ dataplane:
 
 The data plane services are `nantian-gw-dataplane-admin` and `nantian-gw-dataplane-metrics`; both use service port `19080`. Runtime HTTP traffic is handled by the configured listener `0.0.0.0:10080`.
 
-For Kubernetes installs, the chart injects `AEG_NODE_ID` from Pod `metadata.name`, so each replica gets a unique runtime `nodeId` even though `dataplane.config.nodeId` still defaults to `dp-kubernetes` as a fallback. If you install from older manifests, verify they do not override this with a fixed value or the obsolete `PGW_NODE_ID` variable.
+For Kubernetes installs, the chart injects `NANTIAN_GW_NODE_ID` from Pod `metadata.name`, so each replica gets a unique runtime `nodeId` even though `dataplane.config.nodeId` still defaults to `dp-kubernetes` as a fallback. If you install from older manifests, verify they do not override this with a fixed value or the obsolete `PGW_NODE_ID` variable.
 
 When you run more than one data plane replica, configure stable session-persistence secrets instead of relying on the runtime's auto-generated key:
 

@@ -126,9 +126,9 @@ kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/
 
 - **Duplicate runtime `nodeId` across replicas**: The control plane keeps only one active xDS stream per `nodeId`, so a newer connection replaces the older one.
 - **Old manifests still use a fixed `dataplane.config.nodeId`**: Static values such as `dp-kubernetes` are safe only as fallbacks when the runtime also receives a unique env override.
-- **Obsolete env wiring**: Older manifests may still inject `PGW_NODE_ID`. Current chart versions inject `AEG_NODE_ID` from Pod `metadata.name`.
+- **Obsolete env wiring**: Older manifests may still inject `PGW_NODE_ID`. Current chart versions inject `NANTIAN_GW_NODE_ID` from Pod `metadata.name`.
 
-**Resolution**: Ensure every data plane replica has a unique runtime identity. With the current Helm chart, keep the `AEG_NODE_ID <- metadata.name` injection and avoid overriding it with a shared fixed value. If you maintain custom manifests, remove `PGW_NODE_ID`, keep `dataplane.config.nodeId` only as a fallback, and restart the data plane after applying the corrected Deployment.
+**Resolution**: Ensure every data plane replica has a unique runtime identity. With the current Helm chart, keep the `NANTIAN_GW_NODE_ID <- metadata.name` injection and avoid overriding it with a shared fixed value. If you maintain custom manifests, remove `PGW_NODE_ID`, keep `dataplane.config.nodeId` only as a fallback, and restart the data plane after applying the corrected Deployment.
 
 ### Session persistence warning about auto-generated keys
 
