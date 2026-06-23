@@ -1,9 +1,78 @@
 ---
-// Starlight Head override — enables Astro view transitions so docs navigation
-// swaps content in place instead of full-page reloads (no header/search flicker).
+// Starlight Head override — adds structured data (JSON-LD) for SEO on docs pages
+// and enables Astro view transitions for smooth navigation.
 import Default from '@astrojs/starlight/components/Head.astro';
 import { ClientRouter } from 'astro:transitions';
+
+// Derive structured data from page metadata
+const title = Astro.props.title ?? Astro.props.entry?.data?.title ?? 'Nantian Gateway';
+const description =
+  Astro.props.description ??
+  Astro.props.entry?.data?.description ??
+  'Nantian Gateway — High-performance Kubernetes Gateway API with Go + Rust';
+
+const pathname = Astro.url.pathname;
+const canonical = new URL(pathname, Astro.site ?? 'https://nantian.dev').href;
+
+// Build BreadcrumbList from URL path segments
+const segments = pathname.split('/').filter(Boolean);
+const breadcrumbs: { name: string; item: string }[] = [
+  { name: 'Nantian Gateway', item: 'https://nantian.dev/' },
+];
+let accumulated = '/';
+for (let i = 0; i < segments.length; i++) {
+  accumulated += segments[i] + '/';
+  // Convert slug to title case for display
+  const name = segments[i]
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  breadcrumbs.push({
+    name,
+    item: `https://nantian.dev${accumulated}`,
+  });
+}
+
+const breadcrumbList = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: breadcrumbs.map((crumb, i) => ({
+    '@type': 'ListItem',
+    position: i + 1,
+    name: crumb.name,
+    item: crumb.item,
+  })),
+};
+
+const webPage = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: title,
+  description,
+  url: canonical,
+  inLanguage: Astro.props.locale?.lang ?? 'en',
+  isPartOf: {
+    '@type': 'WebSite',
+    name: 'Nantian Gateway',
+    url: 'https://nantian.dev/',
+  },
+  breadcrumb: {
+    '@type': 'BreadcrumbList',
+    itemListElement: breadcrumbList.itemListElement,
+  },
+};
+
+const org = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Nantian Gateway',
+  url: 'https://nantian.dev/',
+  logo: 'https://nantian.dev/logo.svg',
+  sameAs: ['https://github.com/nantian-gw/gateway'],
+};
 ---
 
 <Default {...Astro.props}><slot /></Default>
 <ClientRouter />
+<script is:inline type="application/ld+json" set:html={JSON.stringify(breadcrumbList)} />
+<script is:inline type="application/ld+json" set:html={JSON.stringify(webPage)} />
+<script is:inline type="application/ld+json" set:html={JSON.stringify(org)} />

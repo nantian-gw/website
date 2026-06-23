@@ -1,5 +1,6 @@
 ---
 title: Control Plane Design
+description: "How the Go control plane watches Kubernetes resources, builds IR snapshots, and streams configuration to Rust data planes over gRPC xDS."
 ---
 
 The control plane is the brain of Nantian Gateway. It watches Kubernetes resources, translates them into configuration the data plane can understand, manages the lifecycle of data plane connections, and writes status back to Gateway API resources. It runs as a Go binary built on `controller-runtime` and `grpc-go`.

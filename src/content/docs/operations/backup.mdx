@@ -1,5 +1,6 @@
 ---
 title: Backup & Recovery
+description: "Backup strategy for Nantian Gateway: what Kubernetes resources to back up, what is stateless and self-healing, and procedures using Velero."
 ---
 
 Nantian Gateway is designed to be largely stateless. The control plane rebuilds its entire internal state from the Kubernetes API on startup. The data plane receives its configuration from the control plane over gRPC/xDS and holds no persistent state of its own. This design simplifies backup and recovery significantly: you mostly need to back up your Kubernetes resources, not the gateway itself.

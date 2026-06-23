@@ -1,5 +1,6 @@
 ---
 title: Split-Plane Architecture
+description: "Why Nantian Gateway separates the Go control plane from the Rust data plane — independent scaling, memory safety, and fast configuration propagation."
 ---
 
 Nantian Gateway uses a split-plane architecture where the control plane and data plane are separate processes communicating over gRPC. This design is fundamental to how the gateway operates and scales.

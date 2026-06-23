@@ -1,5 +1,6 @@
 ---
 title: xDS Protocol
+description: "Reference for the ConfigurationDiscoveryService gRPC protocol: DiscoveryRequest/Response schema, supported features, node identification, and ACK/NACK semantics."
 ---
 
 Communication between the Nantian Gateway control plane and data plane occurs over gRPC bidirectional streaming. The protocol is defined in `proto/gateway/control/v1/control.proto`. It is based on Envoy's xDS model, but the message structures are designed specifically for Nantian Gateway's internal representation (IR).

@@ -4,6 +4,7 @@ import starlight from '@astrojs/starlight';
 import rehypeMermaid from 'rehype-mermaid';
 import starlightVersions from 'starlight-versions';
 import pagefind from 'astro-pagefind';
+import sitemap from '@astrojs/sitemap';
 import { docsSidebar } from './src/config/docsSidebar.js';
 
 export default defineConfig({
@@ -73,6 +74,7 @@ export default defineConfig({
       customCss: ['./src/styles/custom.css'],
     }),
     pagefind(),
+    sitemap(),
   ],
   vite: {},
 });

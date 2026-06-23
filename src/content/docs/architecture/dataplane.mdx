@@ -1,5 +1,6 @@
 ---
 title: Data Plane Design
+description: "Internal architecture of the Rust data plane: xDS client, proxy runtime, HTTP/stream proxy stack, Wasm runtime, and backend pool management."
 ---
 
 The data plane is the workhorse of Nantian Gateway. Written in Rust, it receives configuration from the control plane over gRPC/xDS, applies it to a high-performance proxy runtime, and handles every byte of request traffic. It runs as a standalone binary that connects to the control plane, downloads its configuration, and then operates independently.

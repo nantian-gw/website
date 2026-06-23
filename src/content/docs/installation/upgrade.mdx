@@ -1,5 +1,6 @@
 ---
 title: Upgrade Guide
+description: "Upgrade Nantian Gateway between versions: pre-upgrade checks, Helm upgrade workflow, CRD migration, configuration compatibility, and rollback procedures."
 ---
 
 Upgrading Nantian Gateway follows a straightforward Helm workflow. The control plane and data plane use rolling updates, so there's no downtime for traffic during the upgrade. The two planes can tolerate brief version skew during the rollout window.
