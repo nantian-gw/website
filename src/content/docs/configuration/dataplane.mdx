@@ -78,6 +78,41 @@ Access logs record every request processed by the data plane:
 
 Available format placeholders: `%TIMESTAMP%`, `%EVENT%`, `%PROTOCOL%`, `%LISTENER%`, `%CLIENT_IP%`, `%HOST%`, `%METHOD%`, `%PATH%`, `%REQUEST_ID%`, `%ROUTE_NAMESPACE%`, `%ROUTE_NAME%`, `%BACKEND%`, `%STATUS%`, `%LATENCY_MS%`, `%BYTES_RECEIVED%`, `%BYTES_SENT%`, `%SNAPSHOT_VERSION%`, `%RETRY_ATTEMPTS%`, `%RESPONSE_FLAGS%`.
 
+### Response Flags
+
+The `%RESPONSE_FLAGS%` placeholder expands to a comma-separated list of flags indicating
+why a request was handled the way it was. An empty value or `none` means the request completed
+normally.
+
+**HTTP flags:**
+
+| Flag | HTTP Status | Description |
+|------|------------|-------------|
+| `none` | — | Request completed normally with no errors |
+| `NR` | 500 | No route matched the request |
+| `UH` | 503 | No healthy backend available |
+| `CB` | 503 | Circuit breaker is open for the upstream |
+| `IB` | 500 | BackendRefs configuration is invalid |
+| `UF` | 500 | Route references an unsupported/unknown filter |
+| `UT` | 504 | Upstream connection or response timed out |
+| `DC` | 499 | Client closed the connection before response |
+| `IT` | 408 | Downstream idle timeout before request completed |
+| `UC` | 502 | Upstream connection closed unexpectedly |
+| `OL` | 503 | Global overload protection rejected the request |
+| `RL` | 429 | Global rate limiter rejected the request |
+| `RH` | 431 | Request headers exceeded `maxRequestHeaderBytes` |
+| `RB` | 413 | Request body exceeded `maxRequestBodyBytes` |
+| `MA` | — | Connection closed due to `httpMaxConnectionAgeMs` |
+
+**TCP/TLS stream flags:**
+
+| Flag | Description |
+|------|-------------|
+| `NE` | Generic network-level error |
+| `UE` | Upstream connection error |
+| `DE` | Downstream connection error |
+| `MC` | Connection closed due to max connections |
+
 ## Runtime
 
 Core runtime settings for the data plane proxy:
