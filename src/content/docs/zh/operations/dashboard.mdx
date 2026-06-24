@@ -87,6 +87,24 @@ dashboard:
 
 两者都留空则运行无认证的仪表盘。这适用于本地开发和防火墙后面的端口转发访问，但不要在有公网访问的 Ingress 上这样做。
 
+## 数据面访问
+
+仪表盘登录时使用你提供的 bearer token 对控制面 Admin API 进行认证。而数据面 Admin API 使用的是**另一个独立的** bearer token（见 [数据面配置](/zh/configuration/dataplane) → `adminAuth`）。
+
+由于仪表盘的服务端代理（BFF）会代替你调用数据面 Admin——用于 `/v1/summary` 和诊断——它需要数据面的 token。如果缺失，数据面诊断将受限，仪表盘会提示：
+
+> Traffic and dataplane diagnostics are limited because the current dashboard session cannot access dataplane /v1/summary.
+
+当 Chart 管理数据面 admin token 时，Helm 会自动处理：仪表盘 Deployment 会收到一个 `DATAPLANE_BEARER_TOKEN` 环境变量，取值自数据面 admin 认证 Secret（`<release>-dataplane-admin-auth`，key 为 `token`）。这种情况下无需额外配置。
+
+当数据面 admin 使用内联 token（`dataplane.config.adminAuth.bearerToken`）而非 Chart 管理的 Secret 时，需要显式设置 `DATAPLANE_BEARER_TOKEN`——可以通过挂载到仪表盘的自定义 Secret，或让数据面 admin 认证指向一个仪表盘也能引用的 Secret。
+
+| 环境变量 | 来源 | 用途 |
+|---------|--------|---------|
+| `DATAPLANE_BEARER_TOKEN` | 数据面 admin 认证 Secret | 仪表盘 BFF 代理向数据面 Admin API 认证。 |
+| `CONTROLPLANE_ADMIN_URL` | Chart 计算的集群内 URL | 控制面 Admin API 基础 URL。 |
+| `DATAPLANE_ADMIN_URL` | Chart 计算的集群内 URL | 数据面 Admin API 基础 URL。 |
+
 ## 依赖关系
 
 仪表盘依赖控制面的 Admin API 可达。Admin API 由控制面的 Deployment 在端口 `18081` 上提供服务（Service：`nantian-gw-controlplane-admin`）。如果控制面 Pod 未运行或 Admin API 不健康，仪表盘会显示连接错误。

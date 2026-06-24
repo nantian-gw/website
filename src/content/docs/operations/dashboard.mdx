@@ -98,6 +98,24 @@ kubectl get secret -n nantian-gw nantian-gw-dashboard-auth \
 echo
 ```
 
+## Data plane access
+
+The dashboard authenticates against the control plane admin API using the bearer token you supply at login. The data plane admin API, however, is secured with a **separate** bearer token (see [Dataplane configuration](/configuration/dataplane) → `adminAuth`).
+
+Because the dashboard's server-side proxy (BFF) calls the data plane admin on your behalf — for `/v1/summary` and diagnostics — it needs that data plane token. If it is missing, data plane diagnostics are limited and the dashboard shows:
+
+> Traffic and dataplane diagnostics are limited because the current dashboard session cannot access dataplane /v1/summary.
+
+The Helm chart handles this automatically when it manages the data plane admin token: the dashboard Deployment receives a `DATAPLANE_BEARER_TOKEN` environment variable sourced from the data plane admin auth Secret (`<release>-dataplane-admin-auth`, key `token`). No extra configuration is needed in this case.
+
+When the data plane admin uses an inline token (`dataplane.config.adminAuth.bearerToken`) instead of the chart-managed Secret, set `DATAPLANE_BEARER_TOKEN` explicitly — either through a custom Secret mounted into the dashboard, or by pointing the data plane admin auth at a Secret the dashboard can also reference.
+
+| Env var | Source | Purpose |
+|---------|--------|---------|
+| `DATAPLANE_BEARER_TOKEN` | data plane admin auth Secret | Authenticates the dashboard BFF proxy to the data plane admin API. |
+| `CONTROLPLANE_ADMIN_URL` | chart-computed in-cluster URL | Control plane admin API base URL. |
+| `DATAPLANE_ADMIN_URL` | chart-computed in-cluster URL | Data plane admin API base URL. |
+
 ## Dependencies
 
 The dashboard depends on the control plane's Admin API being reachable. The Admin API is served by the control plane Deployment on port `18081` (Service: `nantian-gw-controlplane-admin`). If the control plane pod isn't running or the admin API isn't healthy, the dashboard will show connection errors.
