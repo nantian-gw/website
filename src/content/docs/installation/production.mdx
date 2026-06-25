@@ -133,15 +133,17 @@ dataplane:
     runAsUser: 65532
     runAsGroup: 65532
     fsGroup: 65532
+    sysctls:
+      - name: net.ipv4.ip_unprivileged_port_start
+        value: "0"
   containerSecurityContext:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
       drop: [ALL]
-      add: [NET_BIND_SERVICE]
 ```
 
-The data plane needs `NET_BIND_SERVICE` to bind to privileged ports (below 1024). All other capabilities are dropped. The control plane binds to high ports (18080+) so it doesn't need any special capabilities.
+The data plane sets `net.ipv4.ip_unprivileged_port_start=0` via a pod-level sysctl, which allows non-root users to bind to any port (including privileged ports below 1024) without requiring the `NET_BIND_SERVICE` capability. This is the recommended approach on Kubernetes clusters that allow unsafe sysctls. All capabilities are dropped for both components. When `hostNetwork` is enabled, the sysctl is skipped since low ports are natively accessible.
 
 ### 6. Logging and observability
 

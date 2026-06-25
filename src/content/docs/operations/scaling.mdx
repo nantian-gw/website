@@ -1,43 +1,41 @@
 ---
 title: Scaling and Autoscaling
-description: "Configure Horizontal Pod Autoscaling (HPA) for the data plane, control plane leader election scaling, and resource request tuning for production workloads."
+description: "Configure Horizontal Pod Autoscaling (HPA) for the data plane, control plane, and dashboard, plus resource request tuning for production workloads."
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-Nantian Gateway supports Horizontal Pod Autoscaling (HPA) for the data plane. The control plane uses leader election with a single active instance, so HPA does not apply to it.
+Nantian Gateway supports Horizontal Pod Autoscaling (HPA) for the data plane, control plane, and dashboard. When enabled, the Helm chart creates `autoscaling/v2` HorizontalPodAutoscaler resources targeting each component.
 
 ## How it works
 
-When HPA is enabled, the Helm chart creates an `autoscaling/v2` HorizontalPodAutoscaler targeting the data plane Deployment. The HPA watches CPU and memory utilization and adjusts the number of data plane replicas to match the configured targets.
+When HPA is enabled, the chart creates a separate HPA resource for each enabled component. Each HPA watches CPU and memory utilization and adjusts replicas to match the configured targets.
 
-The data plane runs stateless. Adding replicas increases capacity without requiring coordination between instances. Each replica receives its full routing snapshot from the control plane over gRPC/xDS.
+| Component | Scale behavior |
+|-----------|---------------|
+| Data plane | Stateless — adding replicas increases request capacity without coordination. Each replica receives its full routing snapshot from the control plane over gRPC/xDS. |
+| Control plane | The active leader performs reconciliation. Standby replicas provide high availability. HPA ensures enough standbys are available during leader transitions. |
+| Dashboard | Stateless Next.js application. HPA scales dashboard instances based on admin UI traffic. |
 
 ## Prerequisites
 
-Resource requests on the data plane container are required for HPA to function. The Kubernetes metrics pipeline uses container resource requests to calculate utilization percentages. Without requests, the HPA cannot determine target utilization.
+Resource requests on each component's container are required for HPA to function. The Kubernetes metrics pipeline uses container resource requests to calculate utilization percentages.
 
-The chart ships default data plane resource requests:
-
-```yaml
-dataplane:
-  resources:
-    requests:
-      cpu: "25m"
-      memory: "32Mi"
-```
-
-Adjust these values to match your workload before enabling HPA.
+The chart ships default resource requests for each component. Adjust these values to match your workload before enabling HPA.
 
 ## Configuration values
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `hpa.enabled` | `false` | Enable HPA for the data plane |
-| `hpa.minReplicas` | `2` | Minimum number of data plane replicas |
-| `hpa.maxReplicas` | `10` | Maximum number of data plane replicas |
+| `hpa.enabled` | `false` | Enable HPA for all components |
 | `hpa.targetCPUUtilization` | `70` | Target CPU utilization percentage |
 | `hpa.targetMemoryUtilization` | `75` | Target memory utilization percentage |
+| `hpa.dataplane.minReplicas` | `2` | Minimum data plane replicas |
+| `hpa.dataplane.maxReplicas` | `10` | Maximum data plane replicas |
+| `hpa.controlplane.minReplicas` | `2` | Minimum control plane replicas |
+| `hpa.controlplane.maxReplicas` | `5` | Maximum control plane replicas |
+| `hpa.dashboard.minReplicas` | `2` | Minimum dashboard replicas |
+| `hpa.dashboard.maxReplicas` | `5` | Maximum dashboard replicas |
 
 ## Enabling HPA
 
@@ -46,10 +44,17 @@ Set `hpa.enabled` to `true` in your values override. A typical configuration loo
 ```yaml
 hpa:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
   targetCPUUtilization: 70
   targetMemoryUtilization: 75
+  dataplane:
+    minReplicas: 2
+    maxReplicas: 10
+  controlplane:
+    minReplicas: 2
+    maxReplicas: 5
+  dashboard:
+    minReplicas: 2
+    maxReplicas: 5
 ```
 
 Apply the chart with your overrides:
@@ -62,20 +67,22 @@ helm upgrade nantian-gw nantian/nantian-gw \
 
 ## Control plane scaling
 
-The control plane runs as a single active replica with Kubernetes leader election. Only the elected leader performs reconciliation and publishes xDS snapshots. Standby instances wait for the leader lease and take over if the leader fails.
+The control plane runs with Kubernetes leader election. Only the elected leader performs reconciliation and publishes xDS snapshots. Standby instances wait for the leader lease and take over if the leader fails.
 
-Because leader election enforces a single active instance, the control plane Deployment does not benefit from multiple replicas for capacity. If you need to run standby replicas for high availability, set `controlplane.replicas` directly. HPA is not appropriate for this component.
+Enabling HPA for the control plane ensures sufficient standby replicas are available for high availability. When the leader fails, a standby can immediately take over without waiting for a new pod to start.
 
 ## Checking HPA status
 
-After enabling HPA, confirm the HPA resource is created and tracking metrics:
+After enabling HPA, confirm the HPA resources are created and tracking metrics:
 
 ```bash
-# List HPA resources
+# List all HPA resources
 kubectl get hpa -n nantian-gw
 
-# Inspect the HPA details
+# Inspect individual HPA details
 kubectl describe hpa nantian-gw-dataplane -n nantian-gw
+kubectl describe hpa nantian-gw-controlplane -n nantian-gw
+kubectl describe hpa nantian-gw-dashboard -n nantian-gw
 ```
 
 Look for these signals in the describe output:

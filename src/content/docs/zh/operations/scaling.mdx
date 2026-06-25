@@ -4,39 +4,37 @@ title: 扩缩容与自动扩缩
 
 import { Tabs, TabItem } from "@astrojs/starlight/components";
 
-Nantian Gateway 支持对数据面进行 Horizontal Pod Autoscaling（HPA）。控制面采用 Leader 选举，只有单个活跃实例，因此 HPA 不适用于控制面。
+Nantian Gateway 支持对数据面、控制面和 Dashboard 进行 Horizontal Pod Autoscaling（HPA）。启用后，Helm Chart 会为每个组件分别创建 `autoscaling/v2` HorizontalPodAutoscaler 资源。
 
 ## 工作原理
 
-启用 HPA 后，Helm Chart 会创建一个 `autoscaling/v2` HorizontalPodAutoscaler 资源，目标指向数据面 Deployment。HPA 持续监控 CPU 和内存利用率，并根据配置的目标值自动调整数据面 Pod 副本数。
+Chart 为每个启用的组件创建一个独立的 HPA。每个 HPA 持续监控 CPU 和内存利用率，并根据配置的目标值自动调整 Pod 副本数。
 
-数据面本身是无状态的。增加副本数即可提升容量，无需各实例间协调。每个副本通过 gRPC/xDS 从控制面接收完整的路由快照。
+| 组件 | 扩缩行为 |
+|------|----------|
+| 数据面 | 无状态 — 增加副本可直接提升请求容量，无需实例间协调。每个副本通过 gRPC/xDS 从控制面接收完整的路由快照。 |
+| 控制面 | 活跃 Leader 执行调和逻辑。备用副本提供高可用保障。HPA 确保 Leader 切换时有足够的备用实例。 |
+| Dashboard | 无状态 Next.js 应用。HPA 根据管理 UI 流量扩缩 Dashboard 实例。 |
 
 ## 前提条件
 
-HPA 正常运行的前提是为数据面容器配置资源请求（resource requests）。Kubernetes 指标管线使用容器的资源请求来计算利用率百分比。未设置资源请求时，HPA 无法确定目标利用率。
+HPA 正常运行的前提是为各组件容器配置资源请求（resource requests）。Kubernetes 指标管线使用容器的资源请求来计算利用率百分比。
 
-Chart 内置了默认的数据面资源请求：
-
-```yaml
-dataplane:
-  resources:
-    requests:
-      cpu: "25m"
-      memory: "32Mi"
-```
-
-在启用 HPA 之前，请根据实际工作负载调整这些值。
+Chart 内置了各组件的默认资源请求。在启用 HPA 之前，请根据实际工作负载调整这些值。
 
 ## 配置值
 
 | 值 | 默认值 | 描述 |
 |----|--------|------|
-| `hpa.enabled` | `false` | 为数据面启用 HPA |
-| `hpa.minReplicas` | `2` | 数据面最小副本数 |
-| `hpa.maxReplicas` | `10` | 数据面最大副本数 |
+| `hpa.enabled` | `false` | 为所有组件启用 HPA |
 | `hpa.targetCPUUtilization` | `70` | 目标 CPU 利用率百分比 |
 | `hpa.targetMemoryUtilization` | `75` | 目标内存利用率百分比 |
+| `hpa.dataplane.minReplicas` | `2` | 数据面最小副本数 |
+| `hpa.dataplane.maxReplicas` | `10` | 数据面最大副本数 |
+| `hpa.controlplane.minReplicas` | `2` | 控制面最小副本数 |
+| `hpa.controlplane.maxReplicas` | `5` | 控制面最大副本数 |
+| `hpa.dashboard.minReplicas` | `2` | Dashboard 最小副本数 |
+| `hpa.dashboard.maxReplicas` | `5` | Dashboard 最大副本数 |
 
 ## 启用 HPA
 
@@ -45,10 +43,17 @@ dataplane:
 ```yaml
 hpa:
   enabled: true
-  minReplicas: 2
-  maxReplicas: 10
   targetCPUUtilization: 70
   targetMemoryUtilization: 75
+  dataplane:
+    minReplicas: 2
+    maxReplicas: 10
+  controlplane:
+    minReplicas: 2
+    maxReplicas: 5
+  dashboard:
+    minReplicas: 2
+    maxReplicas: 5
 ```
 
 使用覆盖文件部署 Chart：
@@ -61,20 +66,22 @@ helm upgrade nantian-gw nantian/nantian-gw \
 
 ## 控制面扩缩
 
-控制面以单个活跃副本运行，通过 Kubernetes Leader 选举机制保证。只有当选的 Leader 执行调和逻辑并发布 xDS 快照。备用实例等待 Leader 租约，在 Leader 故障时接管。
+控制面通过 Kubernetes Leader 选举机制运行。只有当选的 Leader 执行调和逻辑并发布 xDS 快照。备用实例等待 Leader 租约，在 Leader 故障时接管。
 
-由于 Leader 选举强制维持单个活跃实例，控制面 Deployment 增加副本数并不能提升处理能力。如果出于高可用目的需要运行备用副本，可直接设置 `controlplane.replicas`。HPA 不适用于该组件。
+为控制面启用 HPA 可确保有足够的备用副本提供高可用保障。当 Leader 发生故障时，备用实例可以立即接管，无需等待新 Pod 启动。
 
 ## 检查 HPA 状态
 
 启用 HPA 后，确认 HPA 资源已创建并正在采集指标：
 
 ```bash
-# 列出 HPA 资源
+# 列出所有 HPA 资源
 kubectl get hpa -n nantian-gw
 
-# 查看 HPA 详情
+# 查看各组件 HPA 详情
 kubectl describe hpa nantian-gw-dataplane -n nantian-gw
+kubectl describe hpa nantian-gw-controlplane -n nantian-gw
+kubectl describe hpa nantian-gw-dashboard -n nantian-gw
 ```
 
 在 describe 输出中关注以下信号：
