@@ -1,0 +1,129 @@
+---
+title: Prompt Guard
+description: "Detect prompt injections, jailbreak attempts, and blocked keywords in AI requests with Nantian Gateway."
+---
+
+Prompt Guard inspects every message in an AI request before it reaches the model provider. When it detects an injection pattern, jailbreak attempt, or blocked keyword, it can block the request outright, log a warning, or let it through with a note.
+
+## How Detection Works
+
+The guard runs a set of regex patterns and keyword checks against the text content of every message in the request. Both system and user messages are scanned. Multi-part messages with separate text fields are joined into a single string before scanning.
+
+Patterns are checked first, followed by keywords. The first match short-circuits the check and produces a result immediately. No further patterns or keywords are evaluated once a match is found. The result includes both a `reason` label (such as `injection_pattern_match` or `blocked_keyword`) and the specific text that triggered the match.
+
+The entire guard check runs synchronously in the data plane. There is no extra latency from an external scanner or separate service call.
+
+## Built-in Patterns
+
+Prompt Guard ships with five default regex patterns compiled once at startup:
+
+| Pattern Name | Detection Target |
+| --- | --- |
+| Ignore previous instructions | Phrases like "ignore all previous instructions," "forget prior prompts," or "override above instructions." |
+| DAN / jailbreak | Attempts to make the model act as "DAN" or declare itself jailbroken: "you are DAN," "act as jailbroken." |
+| Persona switch | Requests to respond in a "different persona," "new role," or "different character." |
+| Guideline bypass | Phrases like "don't follow your guidelines," "never follow the rules," or "don't follow your instructions." |
+| System prompt injection | Messages that try to set a new system prompt inline, such as `system prompt: you are ...`. |
+
+All built-in patterns are case-insensitive. They target the phrasing patterns most commonly seen in real-world injection and jailbreak attempts.
+
+If you want to keep the built-in patterns and add custom ones on top, leave `customPatterns` unset so the defaults remain active. Specifying `customPatterns` replaces the built-in patterns entirely.
+
+## Configuration
+
+Configure Prompt Guard through the `AIService` resource:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: guarded-openai
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  promptGuard:
+    enabled: true
+    mode: block
+    customPatterns:
+      - "(?i)reveal\\s+(your|the)\\s+(credentials|secrets|token)"
+      - "(?i)output\\s+the\\s+hidden\\s+prompt"
+    keywords:
+      - "malware"
+      - "phishing"
+```
+
+This configuration replaces the five default patterns with two custom ones and adds two keywords. The guard is set to `block` mode, so any matching request will be rejected.
+
+## Custom Patterns
+
+Custom patterns use Rust regex syntax and are compiled at startup. Invalid patterns cause the gateway to reject the configuration with an error describing which pattern failed and why.
+
+Patterns are applied to the joined text of all messages in each request. To match case-insensitively, prefix your pattern with `(?i)`. To match across message boundaries, structure your regex to allow for whitespace between tokens.
+
+A well-targeted custom pattern should catch exactly the injection technique you want to block without false positives. Test new patterns on sample traffic before deploying to production.
+
+## Keywords
+
+The `keywords` list blocks or flags requests that contain specific terms. Keyword matching is case-insensitive and works as a substring check within the full message text.
+
+Keywords are simpler but less precise than patterns. A keyword like `"password"` would block any request containing that substring, even if the request is legitimate (for example, "What is a password manager?"). Use keywords sparingly and prefer regex patterns for nuanced detection.
+
+Keywords are checked after patterns. If a regex pattern already matched, the keyword check is skipped for that request.
+
+## Modes
+
+The `mode` field controls what happens when a match is found:
+
+| Mode | Behavior |
+| --- | --- |
+| `block` | The request is rejected with an HTTP 503 status. The response body contains the reason and matched text. |
+| `warn` | The request proceeds to the provider, but the match is logged and surfaced in metrics with a warning label. |
+| `log` | The match is recorded silently in the gateway logs. The request continues without any client-visible signal. |
+
+`block` is the default mode when `promptGuard.enabled` is set to `true` and no mode is explicitly configured.
+
+## Blocked Request Response
+
+When a request is blocked in `block` mode, the caller receives an HTTP 503 response. The response body contains a JSON error object with the guard decision:
+
+```json
+{
+  "error": {
+    "message": "request blocked by prompt guard",
+    "reason": "injection_pattern_match",
+    "matched": "ignore all previous instructions"
+  }
+}
+```
+
+The `reason` field uses one of two values: `injection_pattern_match` for regex pattern matches or `blocked_keyword: <keyword>` for keyword matches. The `matched` field contains the exact text that triggered the block, which helps with debugging false positives.
+
+## Disabling Prompt Guard
+
+Set `enabled: false` to disable all guard checks without removing the configuration. This is useful during testing, when troubleshooting false positives, or when you want to temporarily allow all traffic while you refine your patterns.
+
+## Metrics
+
+Blocked requests are counted in the AI Gateway metrics with a `prompt_guard_blocked` label. In `warn` mode, matches are surfaced through a separate warning counter. Use these metrics to:
+
+- Track the volume of blocked requests over time and identify attack surges.
+- Monitor the false positive rate by comparing blocked requests to total request volume.
+- Validate that a new pattern or keyword is not blocking legitimate traffic before switching from `warn` to `block`.
+- Alert on sudden spikes that might indicate a coordinated injection campaign.
+
+## Production Notes
+
+- Start with `mode: warn` when deploying Prompt Guard for the first time. Let it run for several days so you can review false positive patterns before switching to `block`.
+- Custom patterns should be as specific as possible. Overly broad patterns (like `(?i)system`) can block legitimate requests and degrade the user experience.
+- Keywords are a blunt tool. Prefer regex patterns for nuanced detection and reserve keywords for absolute blocklists of terms that should never appear in production traffic.
+- Monitor the `prompt_guard_blocked` metric closely for the first week after any pattern or keyword change. A spike after a change usually means the new rule is catching something it should not.
+- If the built-in patterns produce too many false positives for your use case, replace them with `customPatterns` rather than disabling the guard entirely.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Model Routing](/features/ai-gateway/model-routing/)
+- [Semantic Cache](/features/ai-gateway/semantic-cache/)
+- [Security And Observability](/features/security-observability/)

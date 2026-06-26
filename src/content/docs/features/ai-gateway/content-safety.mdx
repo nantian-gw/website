@@ -1,0 +1,119 @@
+---
+title: Content Safety
+description: "Detect and filter harmful content in AI prompts and responses with built-in regex patterns and configurable enforcement modes."
+---
+
+Content safety filtering scans AI request messages for harmful content before they reach the model provider, and can also inspect model responses. The filter uses compiled regex patterns and keyword matching across five predefined categories.
+
+:::caution[Experimental]
+Content safety is part of the AI Gateway feature set and uses `gateway.nantian.dev/v1alpha1` resources. Enable `featureMode: experimental` and `controlplane.config.features.enableAiGateway: true` before configuring safety rules.
+:::
+
+## What Content Safety Detects
+
+The filter ships with built-in patterns and keywords for five categories:
+
+| Category | Detects |
+| --- | --- |
+| `violence` | Instructions for killing, murder, torture, bomb-making, weapon manufacturing |
+| `hate` | Ethnic cleansing, racial purity, white supremacy, genocide denial |
+| `self_harm` | Suicide methods, self-harm guides, instructions to end one's life |
+| `exploitation` | Child abuse, human trafficking, forced labour, modern slavery |
+| `illegal` | Drug manufacturing instructions, phishing tutorials, hacking guides |
+
+Each category includes pre-compiled regex patterns that execute on every message. The patterns are compiled once on startup and reused across all requests, so there is no runtime regex compilation overhead after the filter initialises.
+
+## Enforcement Modes
+
+The filter supports two enforcement modes, controlled by the `block_mode` field:
+
+| Mode | Behaviour |
+| --- | --- |
+| **Block** (`block_mode: true`) | Rejects the request when content matches any pattern. Returns a `Block` verdict with the matched category and text. |
+| **Flag** (`block_mode: false`) | Logs a `Flag` verdict without blocking. Useful for audit-only deployments where you want to collect violation data before enforcing. |
+
+When `enabled` is set to `false`, the filter returns `Pass` for all requests and incurs no runtime cost. You can toggle this without removing the configuration.
+
+## Custom Patterns
+
+You can override the built-in patterns with your own regex rules. Use `customPatterns` to provide a list of category-to-regex mappings:
+
+```yaml
+contentSafety:
+  enabled: true
+  blockMode: true
+  customPatterns:
+    - category: violence
+      pattern: "(?i)how\\s+to\\s+harm\\s+(animals|children)"
+    - category: illegal
+      pattern: "(?i)(sell|buy)\\s+(stolen\\s+)?(data|credentials|passwords)"
+```
+
+When `customPatterns` is non-empty, the built-in regex patterns are replaced entirely. The built-in keyword list is also replaced when `customKeywords` is non-empty. Leave a field empty to keep its defaults.
+
+## Configuration
+
+Content safety is configured inside an `AIService` resource under the `contentSafety` field:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: safe-gpt4
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  contentSafety:
+    enabled: true
+    blockMode: true
+    customPatterns: []
+    customKeywords:
+      - category: violence
+        keyword: "harm animals"
+      - category: illegal
+        keyword: "sell stolen credentials"
+```
+
+## How Blocked Requests Appear
+
+When the filter blocks a request, the data plane returns an error response with details about the violation. The response includes:
+
+- HTTP status `400` or `403`
+- A message identifying the matched category
+- The specific text that triggered the filter
+
+Example error body for a blocked request:
+
+```json
+{
+  "error": {
+    "message": "Content safety violation: blocked content in category 'violence'",
+    "type": "content_safety_violation",
+    "details": {
+      "category": "violence",
+      "matched": "how to build a bomb"
+    }
+  }
+}
+```
+
+Flagged content does not produce an error. The verdict is recorded in metrics and logs but the request proceeds to the model provider as normal.
+
+## Observability
+
+Content safety violations appear in the AI Gateway metrics under the `content_safety` label dimension. You can query:
+
+- Violations by category (`violence`, `hate`, `self_harm`, `exploitation`, `illegal`)
+- Violations by model (the model field on the `AIService`)
+- Violations by verdict (`block` vs `flag`)
+
+Combine these metrics with standard [troubleshooting](/operations/troubleshooting/) workflows to identify which models and applications generate the most safety events.
+
+## Related Pages
+
+- [AI Gateway](/features/ai-gateway/)
+- [PII Masking](/features/ai-gateway/pii-masking/)
+- [Security And Observability](/features/security-observability/)
+- [Experimental Features](/configuration/experimental-features/)

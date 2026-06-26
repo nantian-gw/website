@@ -1,0 +1,155 @@
+---
+title: Model Routing
+description: "Classify incoming AI requests by complexity and route them to different LLM models with Nantian Gateway."
+---
+
+Model routing lets the gateway inspect each AI request and send it to a different model depending on the task. A simple `hello` goes to a fast, cheap model. A 5000-word essay goes to a more capable one. The routing happens transparently, so the client does not need to know which model is handling the request.
+
+## How Classification Works
+
+The model router classifies each request into one of three complexity levels. Classification is based on the total character count across all messages in the request:
+
+| Complexity | Threshold | Typical Use |
+| --- | --- | --- |
+| Simple | Fewer than 200 characters | Greetings, single questions, quick lookups |
+| Medium | 200 to 1999 characters | Explanations, summaries, code snippets |
+| Complex | 2000 or more characters | Long-form writing, multi-turn dialogue, deep analysis |
+
+The character count includes all message content, both system and user messages. Multi-part messages with separate text fields are treated as a single joined string for counting purposes. Classification runs on every request before any routing decision is made, with no external classifier or extra API call required.
+
+## Configure Routes
+
+Routes map each complexity level to one or more model targets. Each route carries a `model` name, a `weight` for ordering within the same complexity class, and an optional `maxTokens` cap on the output length for that route. The gateway picks the highest-weight route for the classified complexity.
+
+Configure model routing through the `AIService` resource:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: smart-router
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  modelRouting:
+    routes:
+      simple:
+        - model: gpt-3.5-turbo
+          weight: 100
+      medium:
+        - model: gpt-4o-mini
+          weight: 100
+          maxTokens: 4096
+      complex:
+        - model: gpt-4o
+          weight: 100
+```
+
+In this example, an incoming `"hello"` (under 200 characters) is routed to `gpt-3.5-turbo`, the cheapest option. A paragraph asking for a code review (200 to 1999 characters) hits `gpt-4o-mini` with a 4096-token output cap. Anything 2000 characters or longer lands on the full `gpt-4o` model.
+
+## Per-Route Model Override
+
+Each complexity route can override the model independently. If you only want to redirect complex requests while keeping everything else on the default, declare only the `complex` route:
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: claude-3-opus
+          weight: 100
+          maxTokens: 8192
+```
+
+Requests under 2000 characters stay on the default model specified in `spec.model`. Requests at 2000 characters or above are intercepted and sent to `claude-3-opus` instead.
+
+You can also define routes for only one or two complexity levels. Any complexity level without an explicit route falls back to the default provider model.
+
+## Weight-Based Ordering
+
+When multiple routes exist for the same complexity level, the gateway sorts them by weight in descending order and picks the first. A route with `weight: 100` takes priority over a route with `weight: 50`. This lets you define a primary model and one or more backup targets within the same complexity class.
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: gpt-4o
+          weight: 100
+        - model: claude-3-sonnet
+          weight: 50
+        - model: gpt-4o-mini
+          weight: 25
+```
+
+Here, `gpt-4o` is always tried first for complex requests. The other two models sit behind it in the fallback chain based on their weights.
+
+## Integration With Fallback Chains
+
+Model routing works with the gateway's fallback mechanism. When a routed model returns an error, times out, or becomes unavailable, the gateway can fall back to the next route in the same complexity class. Combined with weight-based ordering, this gives you both model selection and resilience in a single configuration.
+
+For a three-tier routing setup with fallback:
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: gpt-4o
+          weight: 100
+        - model: claude-3-sonnet
+          weight: 50
+        - model: gpt-4o-mini
+          weight: 25
+    fallback:
+      enabled: true
+      maxAttempts: 3
+      retryOnStatus: [429, 500, 502, 503]
+```
+
+The gateway tries `gpt-4o` first. If it returns a server error or rate limit, the next weight-ranked model is tried: `claude-3-sonnet`. If that also fails, `gpt-4o-mini` gets a turn. After exhausting all routes, the gateway returns an error to the caller.
+
+## A/B Model Testing
+
+Weight-based routing also supports A/B testing across different models for the same complexity class. Define two routes with different weights under the same complexity level to split traffic proportionally:
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      medium:
+        - model: gpt-4o-mini
+          weight: 90
+        - model: claude-3-haiku
+          weight: 10
+```
+
+For medium-complexity requests, 90 percent of traffic goes to `gpt-4o-mini` and 10 percent to `claude-3-haiku`. Monitor cost, latency, and quality metrics for both models before adjusting the split or making a permanent switch.
+
+## Observability
+
+Model routing decisions are reported through the AI Gateway metrics. Each request carries routing-related labels that show the classified complexity level and the model that was ultimately selected. Use these metrics to:
+
+- Track how traffic distributes across complexity levels over time.
+- Identify complexity classes that are over or under-utilized.
+- Compare latency and error rates between different models handling the same complexity class.
+- Validate that A/B splits are delivering the expected proportions.
+
+The Admin API also surfaces the current routing table so you can verify configuration without inspecting pod logs or individual response headers.
+
+## Production Notes
+
+- Start with the default thresholds (200, 2000 characters) and monitor traffic distribution for a few days before adjusting. Your workload may cluster around different character counts than you expect.
+- Keep per-route `maxTokens` caps aligned with each model's cost profile and context window. Overriding `gpt-3.5-turbo` for simple requests with a low token cap can significantly reduce cost.
+- Test fallback chains with intentional failures before putting them into production. Verify that each fallback model works with the same prompts.
+- Use the built-in metrics to validate that complex routes are only firing on genuinely complex input. If too many requests land on the expensive model, consider raising the Complex threshold.
+- When running A/B tests, keep the test window long enough to gather statistically meaningful data (at least several thousand requests per model).
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Experimental Features](/configuration/experimental-features/)
+- [Traffic Management](/features/traffic-management/)
+- [Security And Observability](/features/security-observability/)

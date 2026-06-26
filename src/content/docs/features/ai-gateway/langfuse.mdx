@@ -1,0 +1,131 @@
+---
+title: Langfuse Observability
+description: "Send AI request traces, generations, scores, and prompt metrics to a Langfuse instance for LLM observability in Nantian Gateway."
+---
+
+Langfuse is an open-source LLM observability platform. The Nantian AI Gateway can ingest traces, generations, scores, and prompt usage data directly into your Langfuse instance so you can monitor model performance, debug production issues, and track costs from a single dashboard.
+
+## How It Works
+
+When Langfuse is configured on an `AIService`, the gateway records every AI request as a Langfuse trace. Each call to a model within that trace produces a generation record with token usage, latency, input content, and output content. You can also attach scores to traces for custom evaluation metrics. The gateway sends this data to the Langfuse ingestion API asynchronously.
+
+Data ingestion is fire-and-forget from the gateway's perspective. The HTTP call to Langfuse happens outside the request path, so it does not add latency to the client's response. If the ingestion fails, the gateway logs the error but does not retry and does not affect the ongoing request.
+
+When the Langfuse public key is left empty or the client is explicitly disablD (noop mode), all ingest methods become silent no-ops. No HTTP requests are made and no errors are raised.
+
+## Configuration
+
+Langfuse requires three configuration values:
+
+| Field | Description |
+| --- | --- |
+| `host` | The base URL of your Langfuse instance (e.g. `https://langfuse.example.com`). |
+| `publicKey` | Your Langfuse project public key. |
+| `secretKey` | Your Langfuse project secret key. |
+
+Authentication uses HTTP Basic Auth with the public key as the username and the secret key as the password, base64-encoded.
+
+### Timeouts
+
+The HTTP client used for Langfuse communication has two timeout values:
+
+| Timeout | Value | Description |
+| --- | --- | --- |
+| Request timeout | 10 seconds | Maximum time for a full HTTP request-response cycle. |
+| Connect timeout | 5 seconds | Maximum time to establish a TCP connection to the Langfuse host. |
+
+These values are hardcoded and not configurable. Since ingestion is non-blocking, a timeout on an ingestion call only means that particular trace or generation is lost, not that the client request fails.
+
+## Traces
+
+A trace represents the full lifecycle of a single AI request through the gateway. Each trace carries:
+
+| Field | Description |
+| --- | --- |
+| `traceId` | Unique identifier for this trace. |
+| `userId` | Optional user identifier scoping the trace to a specific end user. |
+| `sessionId` | Optional session identifier for grouping multiple user interactions. |
+| `metadata` | Arbitrary key-value pairs attached to the trace. |
+| `timestamp` | ISO 8601 timestamp of when the trace was created. |
+
+The trace is created when the request begins processing. All subsequent generations and scores reference the same trace ID, making it easy to reconstruct the full request chain in Langfuse.
+
+## Generations
+
+A generation represents a single call to an AI model within a trace. Each generation records:
+
+| Field | Description |
+| --- | --- |
+| `traceId` | The parent trace this generation belongs to. |
+| `model` | The model name (e.g. `gpt-4o`, `claude-3-sonnet`). |
+| `usage.input` | Number of input (prompt) tokens consumed. |
+| `usage.output` | Number of output (completion) tokens produced. |
+| `usage.total` | Sum of input and output tokens. |
+| `latency` | Round-trip time from request to response, in seconds. |
+| `input` | The full request payload sent to the model, as JSON. |
+| `output` | The full response payload from the model, as JSON. |
+| `metadata` | Arbitrary key-value metadata attached to this generation. |
+
+If a request fans out through a fallback chain, each model attempt produces its own generation record under the same trace. This means you can see which model ultimately succeeded and how many attempts were made.
+
+## Scores
+
+Scores attach custom numeric metrics to a trace. Use them to track evaluation results, quality signals, or any other quantitative measurement relevant to your AI traffic.
+
+| Field | Description |
+| --- | --- |
+| `traceId` | The trace this score applies to. |
+| `name` | A label for the score (e.g. `toxicity`, `relevance`, `latency_score`). |
+| `value` | A numeric value (float). |
+| `comment` | Optional free-text note about the score. |
+
+Scores are ingested independently of generations and can be added after the trace is complete, making them suitable for offline evaluation workflows that run asynchronously.
+
+## Prompt Management
+
+The gateway can fetch prompt templates from Langfuse Prompt Management (v2 API). A fetched prompt template includes:
+
+| Field | Description |
+| --- | --- |
+| `name` | The name of the prompt template in Langfuse. |
+| `prompt` | The compiled prompt text with variables resolved. |
+| `version` | The template version number. |
+| `config` | Arbitrary configuration data attached to the template (as JSON). |
+| `variables` | List of variable names used in the template. |
+
+You can request a specific version or let Langfuse return the latest. This integration lets you manage prompts in Langfuse's UI and have the gateway pull them at runtime without redeploying.
+
+## Example Configuration
+
+Configure Langfuse on an `AIService` through the `observability` block:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: observed-openai
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  observability:
+    langfuse:
+      host: https://langfuse.example.com
+      publicKey: pk-lf-abc123
+      secretKey: sk-lf-xyz789
+```
+
+With this configuration, every request routed through the `observer-openai` service automatically ingests traces, generations, and any attached scores into the Langfuse instance at `langfuse.example.com`.
+
+## Production Considerations
+
+Ingestion is best-effort. The gateway does not buffer or retry failed ingestion calls. If your Langfuse instance is unreachable, traces and generations are silently dropped. This design keeps the gateway fast and resilient: observability degrades gracefully rather than causing request failures.
+
+Monitor the gateway logs for ingestion errors to detect connectivity issues. If you see persistent failures, check that the Langfuse host is reachable from the data plane pods and that the credentials are still valid.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Security And Observability](/features/security-observability/)
+- [Model Fallback](/features/ai-gateway/fallback/)

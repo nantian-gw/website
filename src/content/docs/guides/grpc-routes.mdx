@@ -1,0 +1,176 @@
+---
+title: gRPC Routes
+description: "Route gRPC traffic by service and method name. Configure matches, backends, and header-based routing with Nantian Gateway."
+---
+
+Nantian Gateway supports the Gateway API `GRPCRoute` resource for routing gRPC traffic. Unlike `HTTPRoute`, which matches on paths and headers, `GRPCRoute` routes requests by the gRPC service name and method name. This gives you precise control over how gRPC calls reach their backends.
+
+## Prerequisites
+
+Your cluster needs the Gateway API CRDs installed with `GRPCRoute` support. Nantian Gateway's Helm chart handles this when you set `gatewayAPI.installCRDs: true` and `gatewayAPI.channel: experimental`.
+
+Beyond the CRDs, you need a `GatewayClass` and at least one `Gateway` that listens on the protocol you plan to use for gRPC. Typically this means a Gateway listener with `protocol: HTTP` (gRPC runs over HTTP/2) or `protocol: HTTPS` when TLS is involved.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public-gateway
+  namespace: nantian-demo
+spec:
+  gatewayClassName: nantian
+  listeners:
+    - name: grpc
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grpc-cert
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+## Service And Method Matching
+
+A `GRPCRoute` rule matches gRPC requests by inspecting the request path. gRPC uses a fixed path format of `/{service-name}/{method-name}`, and Gateway API translates this into structured match fields.
+
+The `.service` field matches the gRPC service name, while `.method` matches the method name. Both support exact and prefix matching via the `type` field.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-demo
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - matches:
+        - method:
+            service: helloworld.Greeter
+            method: SayHello
+      backendRefs:
+        - name: greeter-service
+          port: 50051
+    - matches:
+        - method:
+            service: helloworld.Greeter
+      backendRefs:
+        - name: greeter-fallback
+          port: 50051
+```
+
+In this example, `SayHello` calls go to `greeter-service`, while any other method on `helloworld.Greeter` goes to `greeter-fallback`. Rules are evaluated top-to-bottom. The first rule with a matching service and method wins.
+
+The wildcard value `*` matches any service or method. This is equivalent to omitting the field:
+
+```yaml
+matches:
+  - method:
+      service: "*"
+```
+
+## Header-Based Matching
+
+`GRPCRoute` supports the same header matching syntax as `HTTPRoute`. You can use header matches to further qualify routing decisions, such as routing based on a tenant header or API version header carried in gRPC metadata.
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: helloworld.Greeter
+          method: SayHello
+        headers:
+          - name: x-tenant-id
+            value: premium
+    backendRefs:
+      - name: greeter-premium
+        port: 50051
+```
+
+Header values follow Gateway API match semantics: `Exact` is the default; `RegularExpression` is available when the Gateway API experimental channel is used.
+
+## BackendRefs And Weighted Splitting
+
+`GRPCRoute` uses `backendRefs` the same way `HTTPRoute` does. You can reference a Kubernetes Service by name and port, and you can split traffic across multiple backends with weights.
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: orders.OrderService
+          method: CreateOrder
+    backendRefs:
+      - name: orders-v1
+        port: 50051
+        weight: 80
+      - name: orders-v2
+        port: 50051
+        weight: 20
+```
+
+Weights must sum to a value between 1 and 1,000,000. Backends with a weight of 0 still receive traffic when all other backends are unhealthy.
+
+## Load Balancing With BackendLBPolicy
+
+`GRPCRoute` integrates with `BackendLBPolicy` just as `HTTPRoute` does. You can attach a `BackendLBPolicy` to a gRPC service to control the load balancing strategy and to configure per-backend circuit breaking.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: greeter-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: greeter-service
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+  circuitBreaker:
+    maxInflightRequests: 200
+```
+
+When a `GRPCRoute` backendRef points to a Service that has a `BackendLBPolicy` targeting it, the data plane applies the policy's load balancing strategy and circuit breaker limits to gRPC traffic. Read the [Circuit Breaker guide](/guides/circuit-breaker/) for details on `maxInflightRequests`.
+
+## Filters And Modifications
+
+`GRPCRoute` supports filters including request header modifications, response header modifications, and URL rewrites. Request mirroring is not supported on gRPC routes because gRPC is incompatible with one-way mirroring semantics.
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: helloworld.Greeter
+    filters:
+      - type: RequestHeaderModifier
+        requestHeaderModifier:
+          add:
+            - name: x-routed-by
+              value: nantian-gw
+    backendRefs:
+      - name: greeter-service
+        port: 50051
+```
+
+## Production Checklist
+
+- Confirm the Gateway API experimental CRDs are installed and `GRPCRoute` is available.
+- Verify the Gateway listener protocol matches your gRPC transport (HTTP/2 or TLS).
+- Order rules from most specific to least specific; the first match wins.
+- Use `BackendLBPolicy` for consistent load balancing and circuit breaking on gRPC backends.
+- Test gRPC health with a tool like `grpcurl` or `grpc_health_probe` before routing production traffic.
+
+## Related Pages
+
+- [Traffic Management](/features/traffic-management/)
+- [Circuit Breaker](/guides/circuit-breaker/)
+- [Retry Configuration](/guides/retry/)
+- [Gateway API Resources](/api-reference/gateway-api/)

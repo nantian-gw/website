@@ -1,0 +1,92 @@
+---
+title: A/B Testing
+description: "Split AI traffic across model variants by weight to compare performance, cost, or quality in production without separate deployments."
+---
+
+A/B testing lets you route AI requests to different model variants using weighted random selection. Each experiment defines a set of variants with assigned weights, and the data plane picks a variant per request based on a random roll.
+
+:::caution[Experimental]
+A/B testing is part of the AI Gateway feature set and uses `gateway.nantian.dev/v1alpha1` resources. Enable `featureMode: experimental` and `controlplane.config.features.enableAiGateway: true` before configuring experiments.
+:::
+
+## How A/B Testing Works
+
+The engine uses cumulative weight selection. For each incoming request, it generates a random float in `[0.0, 1.0)` and walks through the variant list. The first variant whose cumulative weight exceeds the random roll is selected.
+
+Each experiment has these fields:
+
+| Field | Description |
+| --- | --- |
+| `experimentId` | Unique identifier for the experiment, typically `exp_` followed by a UUID |
+| `variants` | List of weighted model variants to route to |
+
+Each variant has:
+
+| Field | Description |
+| --- | --- |
+| `name` | Human-readable label such as `control` or `treatment-a` |
+| `model` | The model name to use when this variant is selected |
+| `weight` | Probability weight from `0.0` to `1.0`; weights should sum to `1.0` |
+| `config` | Arbitrary JSON configuration attached to the variant |
+
+## Creating an Experiment
+
+Define experiments inside an `AIService` resource. The following example splits traffic 70/30 between two model variants:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: ab-test-gpt
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  abTesting:
+    experimentId: exp_a1b2c3d4e5f6
+    variants:
+      - name: control
+        model: gpt-4o
+        weight: 0.7
+      - name: treatment-a
+        model: gpt-4-turbo
+        weight: 0.3
+```
+
+With this configuration, roughly 70% of requests go to `gpt-4o` and 30% to `gpt-4-turbo`. The distribution converges to the configured weights as request volume increases.
+
+## Weight Selection Behaviour
+
+The engine handles edge cases predictably:
+
+- **Weights sum to 1.0**: Standard weighted random. The `weight` values act as probabilities.
+- **Weights sum to less than 1.0**: The last variant catches all remaining probability mass beyond the last cumulative weight. A 0.3/0.3 split on two variants gives 30% to variant A and 70% to variant B.
+- **All weights are zero**: The first variant is returned unconditionally. This is treated as a degenerate case.
+- **Single variant with weight 1.0**: All traffic goes to that variant.
+- **Unknown experiment ID**: `select_variant()` returns `None`, and the caller should fall back to the `AIService` default model.
+
+The fallback rule ensures that uncovered probability mass does not drop requests. Always verify that your weights produce the distribution you expect before going to production.
+
+## Experiment Lifecycle
+
+Registering an experiment with an existing `experimentId` replaces any previous experiment with that ID. Use this to update weights or swap variants without creating new experiment identifiers.
+
+To generate a unique experiment ID, the engine provides a utility that produces `exp_` followed by a UUID without dashes. You do not need to manage collision risk manually.
+
+## Observability
+
+Each variant selection is visible through the AI Gateway metrics. Track per-variant behaviour by querying metrics with the variant `name` label:
+
+- Request count per variant
+- Latency distribution per variant
+- Token consumption per variant
+- Error rate per variant
+
+Use these metrics to compare variants and decide which model to promote. Combine with [operations metrics](/operations/metrics/) for end-to-end observability of your experiment pipeline.
+
+## Related Pages
+
+- [AI Gateway](/features/ai-gateway/)
+- [Traffic Management](/features/traffic-management/)
+- [Operations Metrics](/operations/metrics/)
+- [Experimental Features](/configuration/experimental-features/)

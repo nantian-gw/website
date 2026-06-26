@@ -1,0 +1,130 @@
+---
+title: Model Fallback
+description: "Configure fallback chains so the AI gateway automatically retries with backup models when a primary model fails."
+---
+
+When a primary model returns an error or times out, model fallback transparently retries the request against a chain of backup models. The client sees one successful response from whichever model in the chain ultimately succeeds, without needing to know about the failure or the switch.
+
+## How Fallback Works
+
+A fallback chain is an ordered list of backup models attached to a primary model. Each entry in the chain defines what triggers a fallback to that entry, and the gateway evaluates entries in order. When the primary model fails and the first fallback entry triggers, the request is retried against that backup model. If that backup also fails and the next entry triggers, the gateway moves on to the entry after that, and so on until a model returns a successful response or the chain is exhausted.
+
+Fallback only kicks in when the primary model produces a failure. A response with valid content but poor quality does not trigger fallback. The decision is gated on transport-level failures: timeouts and HTTP status codes.
+
+## Chain Configuration
+
+Each fallback chain entry carries three triggers:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `model` | string | The name of the backup model to try. |
+| `on_timeout` | bool | Fire this fallback entry if the previous model timed out. |
+| `on_status` | list of u16 | Fire this fallback entry if the previous model returned one of these HTTP status codes. An empty list means any non-success status code triggers this entry. |
+| `max_retries` | u32 | Maximum number of retries for the fallback model. |
+
+The chain is keyed by the primary model name. You declare one chain per primary model. The fallback entries are evaluated sequentially: entry at index 0 is tried first, then index 1, and so on.
+
+## Timeout-Triggered Fallback
+
+When `on_timeout` is set to `true` for an entry, that entry is tried only if the previous model hit its timeout deadline. Timeout fallback is useful when you know certain models are fast but less reliable under load. A timeout on the primary sends the request to a backup that might be slower but more dependable.
+
+## Status-Code-Triggered Fallback
+
+Each entry can specify a list of HTTP status codes in `on_status`. When the previous model responds with one of those codes, the gateway tries this backup entry. If `on_status` is left empty, the entry triggers on any non-success status code. This gives you fine control: you might want to fallback on 5xx server errors but let 4xx client errors propagate back to the caller unchanged.
+
+## Integration With Model Routing
+
+Fallback chains complement model routing. If you use model routing to classify requests by complexity, you can attach a fallback chain to each complexity route independently. A simple route might fallback from `gpt-3.5-turbo` to `llama-3-8b` on timeout, while a complex route falls back from `gpt-4o` to `claude-3-opus` on 5xx errors. Each route keeps its own fallback policy.
+
+## Resolution Logic
+
+When the primary model fails, the gateway calls `resolve_fallback` with the current model name, the status code (if any), whether it was a timeout, and the current attempt number. The function does the following:
+
+1. Looks up the primary model's chain in the internal registry.
+2. Indexes into the fallback entries using the attempt number. Attempt 0 means primary failure, so it checks entry at index 0. Attempt 1 checks entry at index 1, and so on.
+3. Evaluates the entry's trigger conditions: if the failure was a timeout and the entry has `on_timeout: true`, it triggers. If the failure carried a status code included in the entry's `on_status` list (or the list is empty), it triggers.
+4. Returns the next model to try, or `None` when the chain is exhausted.
+
+The caller is responsible for tracking the attempt counter. Each time a fallback model fails, the caller increments the attempt counter and calls `resolve_fallback` again. When `resolve_fallback` returns `None`, the chain has been fully tried and the gateway returns the last error to the client.
+
+## Multiple Chains
+
+You can define multiple fallback chains, one per primary model. The gateway stores chains by primary model name, so lookup is a hashmap key lookup. This means you can configure distinct fallback strategies for different models used by the same route:
+
+```yaml
+fallback:
+  chains:
+    - primary: gpt-4o
+      fallbacks:
+        - model: claude-3-sonnet
+          on_timeout: true
+          max_retries: 1
+    - primary: gpt-3.5-turbo
+      fallbacks:
+        - model: llama-3-8b
+          on_status: [500, 502, 503]
+          max_retries: 2
+```
+
+## Interaction With AIService Retry
+
+The `AIService` spec already supports a `retry` block with `maxRetries` and `backoff`. The fallback module's `max_retries` field controls retries per fallback model. These two retry mechanisms are independent: the AIService retry governs retries for the primary and fallback models at the HTTP transport level, while the fallback chain governs model-switching decisions. A request might retry a fallback model once due to a transient network error before the fallback module moves to the next entry in the chain.
+
+## Metrics
+
+The fallback module emits metrics so you can monitor chain health:
+
+| Metric | Description |
+| --- | --- |
+| Fallback attempts | Total number of times the gateway tried a fallback model. |
+| Fallback successes | Total number of times a fallback model returned a successful response. |
+
+Track the ratio of successes to attempts to identify chains that are firing often but rarely succeeding. A high attempt count with low success rate suggests your backup models are also unreliable.
+
+A useful alerting pattern is to watch for chains where fallback attempts exceed a threshold within a time window. A spike in attempts against a particular primary model often indicates upstream provider issues before users report degraded service.
+
+## Inspecting Chain State
+
+The `ModelFallback` struct exposes helper methods for diagnostics:
+
+| Method | Returns | Description |
+| --- | --- | --- |
+| `primary(model)` | `Option<&str>` | Returns the primary model name for a given chain key. |
+| `has_fallbacks(model)` | `bool` | Whether the given model has any fallback chain configured. |
+| `fallback_count(model)` | `usize` | The number of fallback entries in the model's chain. |
+
+These are useful in integration tests and health-check routines. For example, you can assert that `fallback_count` matches the expected number of entries after configuration is loaded, or verify that `has_fallbacks` returns `false` for routes that should not have fallback chains.
+
+## Example Configuration
+
+This example defines a fallback chain where `gpt-4o` is the primary model. On timeout, the gateway falls back to `claude-3-sonnet`. If `claude-3-sonnet` returns a 5xx status, the gateway falls back to `llama-3-70b`:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: resilient-router
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  fallback:
+    chains:
+      - primary: gpt-4o
+        fallbacks:
+          - model: claude-3-sonnet
+            on_timeout: true
+            max_retries: 1
+          - model: llama-3-70b
+            on_status: [500, 502, 503, 504]
+            max_retries: 1
+```
+
+This configuration means: try `gpt-4o` first. If it times out, try `claude-3-sonnet` with one retry. If `claude-3-sonnet` returns a 5xx status, try `llama-3-70b` with one retry. If `llama-3-70b` also fails, the gateway returns the last error to the caller.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Model Routing](/features/ai-gateway/model-routing/)
+- [Cost Tracking](/features/ai-gateway/cost-tracking/)

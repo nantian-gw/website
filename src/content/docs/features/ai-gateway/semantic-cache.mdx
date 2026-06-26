@@ -1,0 +1,114 @@
+---
+title: Semantic Cache
+description: "Avoid redundant LLM calls by caching responses for similar prompts with Nantian Gateway's semantic cache."
+---
+
+When multiple users or applications ask the same question, calling the LLM again wastes time and tokens. The semantic cache stores responses keyed by the prompt content and model, so identical or near-identical requests get an immediate cached answer.
+
+## How Semantic Caching Works
+
+The cache intercepts AI requests before they reach the provider. It builds a cache key from a hash of the model name and the content of the last user message in the request. If a matching entry exists and has not expired, the cached response is returned immediately. No provider call happens at all.
+
+Cache keys use a full-content hash, not a truncated prefix. Two requests with different wording but the same meaning produce different keys and, therefore, different cached entries. The cache is exact-match, not embedding-based. This means only character-for-character identical prompts share cached responses.
+
+## Backend Options
+
+The cache supports pluggable backends through the `CacheBackend` trait:
+
+| Backend | Use Case |
+| --- | --- |
+| In-memory (`DashMap`) | Single-instance deployments, low latency, no external dependencies. Default capacity is 10,000 entries. |
+| Redis | Multi-instance deployments where all data plane pods share one cache. Entries survive pod restarts. |
+| pgvector | Environments that already run PostgreSQL and want cache alongside other data. Supports larger working sets than in-memory. |
+
+The backend is selected at configuration time. The gateway abstracts the storage layer so all backends share the same cache key format, TTL semantics, and eviction behavior.
+
+### In-Memory Backend Details
+
+The default in-memory backend uses `DashMap` for lock-free concurrent access. It holds up to 10,000 entries by default. When the cache reaches capacity:
+
+1. All expired entries are evicted first.
+2. If the cache is still full after eviction, the oldest remaining entry is removed to make room for the new one.
+
+This two-phase eviction keeps the cache bounded while prioritizing fresh entries over stale ones.
+
+## Configuration
+
+Enable and tune the semantic cache through the `AIService` resource. The default TTL is one hour (3600 seconds) and the default `maxTokens` cap is 4096:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: cached-openai
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  semanticCache:
+    enabled: true
+    ttl: 3600s
+    maxTokens: 4096
+```
+
+### TTL
+
+The `ttl` field controls how long a cached entry lives after it was stored. Shorter TTLs keep responses fresher at the cost of more provider calls. Longer TTLs save more tokens but risk serving stale responses if the underlying model's behavior changes.
+
+### Max Tokens
+
+The `maxTokens` field caps the size of responses eligible for caching. Responses larger than `maxTokens` are not stored, which prevents the cache from filling with long generated content. If your typical requests produce short completions, a lower `maxTokens` value (such as 1024) keeps the cache focused on the most reusable responses.
+
+### Disabling the Cache
+
+Set `enabled: false` to bypass the cache entirely without removing the configuration. This is useful for debugging cache-related issues or temporarily disabling caching during model migrations.
+
+## Cache Behavior
+
+On a cache hit, the gateway returns the stored response with the same ID, model, choices, and usage data that the original provider call returned. The client cannot distinguish a cached response from a fresh one.
+
+On a cache miss, the request goes through to the provider, and the response is stored for future requests. Storage happens only if the response meets the `maxTokens` threshold and the backend has room.
+
+The cache does not extend TTL on hits. An entry stored with a one-hour TTL expires exactly one hour after it was created, regardless of how many times it was accessed. This keeps cache lifetime predictable and avoids stale entries lingering past their intended window.
+
+## Metrics
+
+The AI Gateway metrics surface cache behavior through hit and miss counters. Use these to gauge cache effectiveness:
+
+- A high hit rate means the cache is paying for itself in avoided provider calls. Ratios above 30 percent on production traffic are a strong signal to keep caching enabled.
+- A low hit rate suggests prompts are too varied for exact-match caching, or the TTL is too short for your access patterns.
+- Watch the miss counter alongside provider latency. A sudden drop in cache hits combined with rising latency may indicate a cache backend failure.
+- Track cache entry count over time to confirm the eviction policy is keeping the backend within bounds.
+
+## Production Notes
+
+- Start with a modest TTL (600 to 3600 seconds) and adjust based on your prompt diversity and response freshness requirements. Knowledge-base Q&A workloads can often tolerate longer TTLs than creative writing workloads.
+- Use the in-memory backend for single-pod deployments. Switch to Redis when scaling to multiple data plane replicas so all instances share one cache.
+- `maxTokens` should align with the kinds of responses you want to cache. Set it lower (such as 1024) to avoid storing long completions, or raise it to cover more response shapes.
+- Cache keys are tied to the model name. If you change the model in `spec.model`, existing cache entries are not reused. Purge the cache or let entries expire naturally during model migrations.
+- Monitor hit rate after any TTL or `maxTokens` change. Large adjustments can swing cache behavior significantly.
+
+## Cache Key Format
+
+The cache key is built from two components: the model name and the content of the last user message in the request. Both are hashed together using a standard hash function, producing a hex-encoded identifier in the format `cache:0123456789abcdef`.
+
+Only the last user message contributes to the key. System messages and earlier messages in the conversation history are excluded. This means two requests with different system prompts but the same final user question will share a cache entry. It also means a multi-turn conversation where the user asks the same question in turn three and turn five will produce the same cache key.
+
+The full-content hash approach avoids collisions that could happen with truncated prefixes. Two prompts that start the same way but differ later (for example, "What is the capital of France?" versus "What is the capital of Germany?") produce different cache keys.
+
+## Consistency Considerations
+
+Because the cache is exact-match on the last user message, it works best in environments where identical prompts produce responses with consistent quality. Situations where caching may be less effective include:
+
+- Prompts that include timestamps, random IDs, or session-specific data. Each variation produces a different cache key and a cache miss.
+- System prompts that change frequently. Since system messages are excluded from the key, two requests with different system prompts but the same user message will get the same cached response, even if the system prompt would have changed the output.
+- Models that return non-deterministic responses. If the same prompt produces different answers on different calls, the first response gets cached and subsequent calls return the first version, even if a fresh call would have produced a different answer.
+
+In these cases, consider a shorter TTL or disabling the cache entirely.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Model Routing](/features/ai-gateway/model-routing/)
+- [Security And Observability](/features/security-observability/)

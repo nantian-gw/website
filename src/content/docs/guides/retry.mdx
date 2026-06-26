@@ -1,0 +1,102 @@
+---
+title: Request Retry
+description: "Configure automatic retry on backend failure. Set retryable status codes, attempt limits, and backoff with Nantian Gateway."
+---
+
+Nantian Gateway can automatically retry failed requests to backend services. Retry eliminates transient errors without caller involvement: connection refused, a backend that returns a 503, or a request that times out. The gateway handles the retry logic inside the data plane, so your clients send one request and receive one response.
+
+## When The Gateway Retries
+
+The gateway decides to retry when two conditions hold:
+
+1. **The request method is replayable.** GET, HEAD, OPTIONS, TRACE, PUT, and DELETE are considered safe to retry. POST, PATCH, and CONNECT are not retried automatically because they may have side effects.
+
+2. **The response status or transport error matches a retryable condition.** The gateway checks the retry policy attached to the route. A policy declares specific HTTP status codes as retryable. Even without an explicit policy, the gateway retries on connect-level transport errors: connection refused, no route to host, and connection timeout.
+
+When both conditions hold and the retry budget has capacity, the gateway resets the backend selection, releases the previous circuit breaker permit, and re-dispatches the request as if it were new. The retry attempt counter increments, and if a backoff duration is configured, the gateway pauses before sending the retry.
+
+## Retry Policy Configuration
+
+Retry policies are configured per-route through the selected backend configuration, not through a standalone CRD. The policy specifies three fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `codes` | list of integers | HTTP status codes that trigger a retry. Common values: 500, 502, 503, 504. |
+| `attempts` | integer | Maximum number of retry attempts. 0 means use the default route retry limit. |
+| `backoff` | duration | Optional delay before each retry attempt. If `None`, retries happen immediately. |
+
+The default retry limit is `DEFAULT_HTTP_ROUTE_RETRIES` when `attempts` is 0 or when no explicit policy exists. Transport-level retries (connect failures without a route policy) use `DEFAULT_TRANSPORT_CONNECT_RETRIES`, which is a smaller fixed count.
+
+### Example: Retry On 5xx With Backoff
+
+A route configured to retry up to 3 times on 5xx responses with 500 milliseconds of backoff between attempts:
+
+```yaml
+# Conceptual: retry settings are part of the route's backend configuration
+retry:
+  codes:
+    - 500
+    - 502
+    - 503
+    - 504
+  attempts: 3
+  backoff: 500ms
+```
+
+With this configuration, a request that gets a 502 from the backend is retried up to 3 times. The gateway waits 500ms before the first retry, 500ms before the second, and 500ms before the third. If all retries fail, the gateway returns the last response to the client. The backoff is constant; Nantian Gateway does not currently implement jitter or exponential backoff in the retry policy itself. Combine with circuit breaker limits to bound the worst-case latency.
+
+### Example: Transport Retries With No Explicit Policy
+
+If no retry policy is configured for a route, the gateway still retries on transport errors. A connection refused, no-route, or connection timeout triggers up to `DEFAULT_TRANSPORT_CONNECT_RETRIES` retries without backoff. The failed endpoint is marked for exclusion so subsequent retries try a different endpoint when possible.
+
+## Retry Budget
+
+To prevent retry storms from overwhelming backends, Nantian Gateway enforces a retry budget. The budget acts as a global gate on retry attempts. When the budget is exhausted, the gateway stops retrying even when the per-route policy says it should.
+
+The retry budget controller tracks the ratio of total requests to successful retries. If too many retries are failing, the budget tightens to preserve backend capacity. This automatic circuit breaker for retries ensures that retry behavior degrades gracefully under load rather than amplifying the problem.
+
+A retry needs two things to proceed: the per-route policy must allow another attempt, and the global retry budget must have a token available. If either check fails, the retry does not happen, and the request completes with whatever status it has at that point.
+
+## Interaction With The Circuit Breaker
+
+Each retry attempt acquires a new circuit breaker permit for the backend. This has two practical effects:
+
+- A backend with `maxInflightRequests: 10` and a route with `attempts: 3` can have up to 40 inflight requests at the same time: 10 initial requests, each with up to 3 retries in flight. The circuit breaker does not double-count; each attempt independently goes through the acquire/release cycle. The previous permit is released before the retry acquires a new one.
+
+- When a backend is already at its circuit breaker limit and a retry needs a permit, the retry is rejected immediately with a 503 and a `CircuitBreakerOpen` proxy error flag. The request fails at that point without further retries.
+
+After a successful transport retry, the gateway clears the failed endpoint from the transport exclusion list. This ensures the retry is not pinned to a known-bad endpoint across future requests.
+
+Note that the first request also seeds the retry budget when the request is retryable. This means a retryable request that eventually succeeds without retrying still contributes to the budget's view of demand.
+
+## How Retry Interacts With Streaming
+
+Retry is not available for streaming responses. The gateway buffers response data during retry to replay it on the wire after a successful attempt, but this buffer has a fixed capacity. If the response exceeds the retry buffer capacity before the retry cycle completes, retry is disabled for that request and the response is streamed without retry protection.
+
+Downstream connection closures during a retry are treated differently: if the downstream client disconnects while the gateway is retrying on its behalf, the retry is abandoned and the upstream connection is closed.
+
+## Observability
+
+The gateway tracks retry state in the request context. You can observe it through access logs and distributed traces:
+
+- `retryAttempts` increments on each retry and resets to 0 when a request arrives without retry context.
+- `retryBackoff` holds the configured backoff duration, visible in the request lifecycle.
+- A successful retry produces a `200`-level final status code from the last attempt.
+- A request that exhausted all retries returns the last received status: 502 if all backends returned 502, 504 if every attempt timed out.
+- The proxy error flag `DC` (downstream closed) appears if the client disconnects during a retry cycle.
+
+The retry budget controller also exports internal metrics. Use these together with the circuit breaker and upstream health metrics to understand whether retry is compensating for transient failures or masking a deeper capacity problem.
+
+## Production Notes
+
+- Start with a small number of attempts (2 or 3) and conservative retry codes (500, 502, 503). Wider retry windows can hide real application bugs.
+- Pair retry with circuit breaking. Without a circuit breaker, retries to a degraded backend can turn a brownout into a full outage.
+- Idempotent GET endpoints are the safest candidates for retry. Verify PUT and DELETE idempotency before enabling retry on mutation endpoints.
+- The retry buffer capacity limits streaming retry. For long-lived streaming connections, design client-side retry logic instead.
+
+## Related Pages
+
+- [Circuit Breaker](/guides/circuit-breaker/)
+- [gRPC Routes](/guides/grpc-routes/)
+- [Traffic Management](/features/traffic-management/)
+- [Operations And Troubleshooting](/operations/troubleshooting/)

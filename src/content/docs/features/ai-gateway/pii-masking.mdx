@@ -1,0 +1,103 @@
+---
+title: PII Masking
+description: "Detect and mask personally identifiable information in AI prompts and responses before they reach the model provider or the client."
+---
+
+PII masking scans AI request and response content for personally identifiable information and replaces detected entities according to a configurable masking mode. The detector uses compiled regex patterns for each entity type.
+
+:::caution[Experimental]
+PII masking is part of the AI Gateway feature set and uses `gateway.nantian.dev/v1alpha1` resources. Enable `featureMode: experimental` and `controlplane.config.features.enableAiGateway: true` before configuring PII rules.
+:::
+
+## What PII Masking Detects
+
+The masker ships with built-in regex patterns for eight entity types:
+
+| Entity Type | What It Matches | Example |
+| --- | --- | --- |
+| `email` | Email addresses | `user@example.com` |
+| `phone` | Phone numbers (Chinese mobile format) | `13800138000` |
+| `credit_card` | Credit card number patterns (13-16 digits) | `4111-1111-1111-1111` |
+| `id_card` | Identity card numbers (17 digits + check) | `110101199001011234` |
+| `url` | HTTP and HTTPS URLs | `https://internal.example.com` |
+| `ip_address` | IPv4 addresses | `192.168.1.100` |
+| `person` | Person name patterns | Detected via keyword or custom pattern |
+| `address` | Physical address patterns | Detected via keyword or custom pattern |
+
+The `person` and `address` types are defined in the entity enum but do not have built-in regex patterns. Configure them through `customEntities` when you need name or address masking.
+
+## Masking Modes
+
+The masker supports three replacement modes, each producing different output for detected entities:
+
+| Mode | Replacement | Example (email detected) |
+| --- | --- | --- |
+| **Mask** | `[entity_type]` brackets | `[email]` |
+| **Redact** | Literal `[REDACTED]` | `[REDACTED]` |
+| **Anonymize** | `<entity_type>` angle brackets | `<email>` |
+
+Pick the mode that matches your observability and audit requirements. Mask mode preserves the entity type in the replacement, which helps you understand what was removed. Redact mode provides a uniform placeholder with no type information. Anonymize mode uses a distinguishable angle-bracket format.
+
+When masking is disabled (`enabled: false`), the detector returns the original text unchanged with zero runtime cost.
+
+## Configuration
+
+PII masking is configured inside an `AIService` resource under the `piiMasking` field:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: private-gpt4
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  piiMasking:
+    enabled: true
+    mode: mask
+```
+
+For custom entity detection, provide additional regex patterns per entity type:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: private-gpt4-custom
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  piiMasking:
+    enabled: true
+    mode: redact
+    customEntities:
+      - entityType: person
+        pattern: "(Mr|Ms|Dr)\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+"
+      - entityType: address
+        pattern: "\\d+\\s+[A-Za-z]+\\s+(Street|Road|Avenue|Lane)"
+```
+
+Custom patterns are added alongside the built-in patterns. Both sets run on every message, and overlapping matches are deduplicated with the longest match taking precedence.
+
+## How Masking Works
+
+The masker runs `detect()` to find all entity matches, then replaces them in left-to-right order. Overlapping matches are resolved by keeping the longest match at each position. For example, if a URL contains an embedded IP address, only the URL is replaced, not the IP.
+
+The `mask()` method returns three values:
+
+- The masked text as a string
+- A count of entities replaced
+- A list of `(original, replacement)` pairs for audit logging
+
+You can use the audit pairs to verify which PII was removed without logging the original sensitive data to your primary log storage.
+
+## Related Pages
+
+- [AI Gateway](/features/ai-gateway/)
+- [Content Safety](/features/ai-gateway/content-safety/)
+- [Security And Observability](/features/security-observability/)
+- [Experimental Features](/configuration/experimental-features/)

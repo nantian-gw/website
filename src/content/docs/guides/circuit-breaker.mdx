@@ -1,0 +1,114 @@
+---
+title: Circuit Breaker
+description: "Limit concurrent inflight requests per backend with per-backend circuit breaking. Reject excess traffic immediately with 503."
+---
+
+Nantian Gateway provides per-backend circuit breaking through the `BackendLBPolicy` CRD. The circuit breaker limits the number of concurrent inflight requests a single backend can handle at any time. When a backend reaches its limit, the gateway rejects additional requests immediately with a 503 status to protect the backend from overload and to give callers a fast failure signal.
+
+## How Circuit Breaking Works
+
+The circuit breaker uses a counting semaphore per backend. Each inbound request acquires a permit before the gateway proxies it to the backend. The semaphore has a fixed capacity: the `maxInflightRequests` value configured for that backend.
+
+When a request arrives and the backend semaphore has no available permits, the gateway rejects the request immediately. No queuing, no waiting. The rejection returns a `503 Service Unavailable` response to the client along with a `CB` proxy error flag in the response metadata. This fast-fail behavior prevents slow backends from accumulating a backlog of requests that would eventually time out anyway.
+
+Once an inflight request completes (whether it succeeds, fails, or times out), the gateway releases the permit back to the semaphore. The backend becomes eligible for a new request. A request that does not acquire a permit does not count against the limit, so backends with `maxInflightRequests: 0` have their circuit breaker entirely disabled.
+
+The semaphore is created lazily for each backend name when the first request arrives. If a backend is removed from configuration, its semaphore is cleaned up after a cooldown period so it does not leak memory.
+
+## Configure Via BackendLBPolicy
+
+Circuit breaker limits are configured through the `BackendLBPolicy` CRD, which is part of Gateway API's experimental policy set (`gateway.networking.k8s.io/v1alpha2`). The `circuitBreaker.maxInflightRequests` field on the spec controls the limit.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: orders-cb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: orders-service
+  circuitBreaker:
+    maxInflightRequests: 100
+```
+
+This policy targets the Service `orders-service` and caps it at 100 concurrent inflight requests. When `targetRefs` contains multiple entries, the policy applies to each listed Service independently. Each Service gets its own semaphore with its own limit.
+
+A `BackendLBPolicy` without `circuitBreaker` uses the gateway-wide default, which is controlled by the data plane configuration key `http_backend_circuit_breaker_max_requests`.
+
+## Global Default And Per-Backend Override
+
+The gateway has a global circuit breaker limit that applies to all backends that are not explicitly configured. You set this at deployment time through the control plane configuration.
+
+```yaml
+controlplane:
+  config:
+    httpBackendCircuitBreakerMaxRequests: 1000
+```
+
+Individual `BackendLBPolicy` resources override the global limit for the targeted Service. A backend with a `BackendLBPolicy` that sets `maxInflightRequests: 100` has a 100-request limit. Every other backend uses the global default.
+
+Setting `maxInflightRequests: 0` disables the circuit breaker for that backend entirely. Requests are never rejected due to inflight limits. The semaphore is skipped and no permit is acquired.
+
+The lookup is hierarchical: if a backend name has a per-backend override in the `BackendLBPolicy`, that value is used. Otherwise, the global value applies. If the global value is also 0, the circuit breaker is globally disabled.
+
+## How To Check Circuit Breaker Status
+
+The data plane exposes circuit breaker state through the admin API and metrics. Both are available per data plane instance.
+
+### Admin API Snapshot
+
+Each data plane instance serves a snapshot of its circuit breaker state at the admin endpoint:
+
+```
+GET /admin/circuit_breakers
+```
+
+The response returns a JSON object with the following fields:
+
+| Field | Meaning |
+| --- | --- |
+| `backendMaxInflightRequests` | The configured global limit. |
+| `backendInflightCurrent` | Map of backend name to current inflight count. |
+| `rejectedTotal` | Total requests rejected due to circuit breaker since startup. |
+| `rejectedBackendTotal` | Total backend-scoped rejections (includes both named and unnamed backends). |
+| `rejectedBackendByName` | Map of backend name to reject count. |
+
+A rising `rejectedBackendByName` count for a specific backend paired with a `backendInflightCurrent` at or near its limit suggests a capacity problem. Consider scaling that backend, raising its limit, or tuning upstream timeouts.
+
+You can curl the admin endpoint directly from inside the cluster:
+
+```bash
+kubectl exec deploy/nantian-gw-dataplane -- curl -s localhost:9090/admin/circuit_breakers
+```
+
+### Metrics
+
+The data plane exports Prometheus metrics that track circuit breaker state. The primary gauge and counter metrics include:
+
+| Metric | Type | Description |
+| --- | --- | --- |
+| `nantian_gateway_dataplane_http_circuit_breaker_backend_max_inflight_requests` | Gauge | Configured global limit. |
+| Per-backend inflight gauge | Gauge | Current inflight requests per backend. |
+| `nantian_gateway_dataplane_http_circuit_breaker_rejected_total` | Counter | Cumulative rejected request counter across all backends. |
+
+Alert on `rejected_total` increases to catch overload episodes early. Cross-reference the per-backend inflight gauge with the per-backend reject counter to identify which Service needs attention.
+
+In your Prometheus alert rules, pair the circuit breaker metrics with upstream latency metrics. A backend whose p99 latency climbs while circuit breaker rejections spike is almost certainly overloaded. Raising the inflight limit alone may not help; consider scaling the backend horizontally or reducing upstream timeouts first.
+
+## Production Notes
+
+- Set `maxInflightRequests` based on the backend's known capacity. Start conservatively (50% of observed peak concurrency) and raise it after observing production traffic.
+- Circuit breaker rejections appear as 503s in your request-level metrics. Filter by the `CB` proxy error flag in access logs to distinguish them from genuine upstream 503s.
+- Retries interact with the circuit breaker: each retry attempt acquires a new permit. A retry-heavy configuration can exhaust circuit breaker capacity faster than expected. Read the [Retry guide](/guides/retry/) for how to tune retry and circuit breaker policies together.
+- The semaphore is bound to a backend by its string name, which means a Service scaled from 3 to 10 pods still shares one semaphore. The `maxInflightRequests` applies to the Service as a whole, not per endpoint.
+- Monitor the data plane's CPU and memory alongside circuit breaker metrics. Rejecting requests early saves backend capacity but shifts load to the data plane's error path.
+
+## Related Pages
+
+- [Retry Configuration](/guides/retry/)
+- [gRPC Routes](/guides/grpc-routes/)
+- [Traffic Management](/features/traffic-management/)
+- [Metrics And Observability](/operations/metrics/)

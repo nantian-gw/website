@@ -1,0 +1,220 @@
+---
+title: WASM Plugin Development
+description: "Build, load, and deploy WebAssembly plugins for request and response processing. Compile plugins, configure sandbox limits, and bind them to backends."
+---
+
+Nantian Gateway supports WebAssembly (Wasm) plugins for extending request and response processing in the data plane. You write a plugin in Rust, compile it to `.wasm`, and deploy it through the `WasmPlugin` CRD. The gateway loads the module into a sandboxed Wasmtime runtime and invokes your hook functions at the configured points in the proxy pipeline.
+
+## Plugin Lifecycle
+
+A plugin goes through four stages from development to execution:
+
+1. **Compile** the plugin to a `.wasm` binary targeting `wasm32-unknown-unknown`.
+2. **Deploy** the binary. Make it available via a URL, a Kubernetes ConfigMap, or inline base64 in the `WasmPlugin` spec.
+3. **Load** the module. The data plane compiles it with Wasmtime and registers the exported hook functions.
+4. **Execute** at runtime. The gateway calls your hook functions when proxying requests through a bound target.
+
+The `WasmPlugin` CRD references the target resources (such as an `HTTPRoute` or `Service`) that the plugin should intercept. The data plane watches for `WasmPlugin` changes and reloads or unloads plugins dynamically. No data plane restart is required to add or update a plugin.
+
+## Required Exports
+
+Every plugin module must export at least these three symbols:
+
+| Export | Type | Purpose |
+| --- | --- | --- |
+| `memory` | WebAssembly memory | Shared memory for passing data between the host and the plugin. |
+| `alloc` | function `(len: i32) -> i32` | Allocates a buffer in the module's memory. Returns a pointer. |
+| Hook functions | function `(ptr: i32, len: i32) -> i32` | One or more of `on_request`, `on_response`, `on_stream_chunk`. |
+
+The hook functions receive a pointer and length to a JSON-encoded context buffer. They must return an integer status code. The gateway interprets the return value as follows:
+
+| Return value | Meaning |
+| --- | --- |
+| `1` | `Continue`. Let the request or response proceed normally. |
+| Any negative value | `Reject`. Block the request or response with the absolute value as the HTTP status code. For example, `-403` rejects with 403 Forbidden. |
+
+### Hook Signatures In Rust
+
+Your plugin's hook functions should follow this signature:
+
+```rust
+#[no_mangle]
+pub extern "C" fn on_request(ptr: i32, len: i32) -> i32 {
+    // Read the context from memory at (ptr, len)
+    // Perform logic
+    // Return 1 to continue, or negative to reject
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn on_response(ptr: i32, len: i32) -> i32 {
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn on_stream_chunk(ptr: i32, len: i32) -> i32 {
+    1
+}
+```
+
+Only export the hooks your plugin needs. A plugin that only modifies response headers exports `on_response`. A plugin that blocks requests exports `on_request`. You can export any combination.
+
+## Plugin Configuration
+
+Plugins receive configuration through the `config` field on the `WasmPlugin` spec. The value is a raw string, typically JSON, passed to the plugin at load time. Use it for API keys, rules, or feature flags that your plugin reads once during initialization.
+
+```yaml
+spec:
+  config: |
+    {"mode":"audit","allowedHosts":["internal.example.com"]}
+```
+
+## Sandbox Limits
+
+The data plane runs plugins in a sandbox with configurable resource limits. These limits prevent a plugin from consuming excessive CPU, memory, or I/O:
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `maxMemoryBytes` | 16 MiB (16777216) | Maximum heap memory. Allocation beyond this limit fails. |
+| `maxExecutionTimeMs` | 10 ms | Maximum wall-clock time per hook invocation. Exceeding this triggers a sandbox timeout and the hook is treated as a rejection. |
+| `allowNetwork` | false | When true, the plugin can make outbound network calls. Disabled by default for security. |
+| `allowFileSystem` | false | When true, the plugin can access the host filesystem. Disabled by default. |
+
+The epoch-based timeout mechanism increments every millisecond on a background thread. When a hook's execution time exceeds `maxExecutionTimeMs`, the Wasmtime engine interrupts the guest and the gateway rejects the request.
+
+## Module Sources
+
+`WasmPlugin` supports three ways to provide the `.wasm` binary:
+
+### URL
+
+The gateway fetches the module from an HTTPS URL. Useful during development or when you host plugins on an artifact server.
+
+```yaml
+spec:
+  wasm:
+    url: https://plugins.example.com/auth-check.v1.wasm
+    sha256: abc123...
+```
+
+### ConfigMap
+
+Store the module as a binary key in a Kubernetes ConfigMap. Works well in air-gapped or offline clusters.
+
+```yaml
+spec:
+  wasm:
+    configMap:
+      name: auth-plugin
+      key: plugin.wasm
+    sha256: abc123...
+```
+
+### Inline Base64
+
+Embed the entire module in the CRD as a base64-encoded string. Best for small plugins that must travel with the CRD.
+
+```yaml
+spec:
+  wasm:
+    inline: AGFzbQEAAAAB...
+    sha256: abc123...
+```
+
+The `sha256` field is optional but recommended. When present, the data plane verifies the loaded module matches the expected hash before executing it.
+
+## Target Binding
+
+The `targetRefs` field binds a plugin to specific resources. When a request is processed for a bound target, the gateway invokes the plugin's hooks.
+
+```yaml
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: api-route
+```
+
+You can also target a Service directly. When multiple plugins target the same resource, the gateway executes them in load order.
+
+## Example: An Auth Plugin
+
+Here is a minimal auth plugin that checks for a required header and rejects the request if it is missing:
+
+```rust
+use std::alloc::{alloc, Layout};
+use std::slice;
+
+static mut CONTEXT: Vec<u8> = Vec::new();
+
+#[no_mangle]
+pub extern "C" fn alloc(len: i32) -> i32 {
+    let layout = Layout::array::<u8>(len as usize).unwrap();
+    let ptr = unsafe { alloc(layout) };
+    ptr as i32
+}
+
+fn read_context(ptr: i32, len: i32) -> &'static [u8] {
+    unsafe { slice::from_raw_parts(ptr as *const u8, len as usize) }
+}
+
+#[no_mangle]
+pub extern "C" fn on_request(ptr: i32, len: i32) -> i32 {
+    let data = read_context(ptr, len);
+    let ctx: serde_json::Value = serde_json::from_slice(data).unwrap_or_default();
+    let headers = &ctx["request"]["headers"];
+    if headers["x-api-key"].is_null() {
+        return -401;
+    }
+    1
+}
+```
+
+Compile it with:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo build --target wasm32-unknown-unknown --release
+```
+
+Deploy it with:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: auth-check
+  namespace: nantian-demo
+spec:
+  wasm:
+    url: https://plugins.example.com/auth-check.wasm
+  hooks:
+    - onRequest
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: api-route
+  sandbox:
+    maxMemoryBytes: 33554432
+    maxExecutionTimeMs: 20
+```
+
+## Debugging Tips
+
+Plugins fail silently when things go wrong. Here are common symptoms and their causes:
+
+| Symptom | Likely cause |
+| --- | --- |
+| Hook never called. | The hook name is not exported from the Wasm module, or the hook is not listed in `spec.hooks`. |
+| Plugin loads but returns errors. | Missing `memory` or `alloc` export. The host cannot pass context to a plugin without both. |
+| Intermittent 503 with `CircuitBreakerOpen`. | `maxExecutionTimeMs` is too low. The sandbox kills the hook before it completes, and the request is rejected. |
+| Plugin compiles but fails at load. | Wrong Wasm target. Use `wasm32-unknown-unknown`. Do not use WASI targets; the sandbox provides its own host functions. |
+| Plugin loaded from wrong source. | The `WasmPlugin` spec references a `configMap` that does not exist, or the key does not match. |
+
+Check data plane logs for messages containing the plugin name. The gateway logs load, reload, and unload events at the `info` level and invocation errors at the `warn` level.
+
+## Related Pages
+
+- [Experimental Features](/configuration/experimental-features/)
+- [Custom And Experimental Resources](/api-reference/crds/)
+- [Operations And Troubleshooting](/operations/troubleshooting/)

@@ -1,0 +1,102 @@
+---
+title: Cost Tracking
+description: "Track token usage and spending per model and per tenant with built-in cost accounting in the Nantian AI Gateway."
+---
+
+Cost tracking gives you real-time visibility into how much each AI model is costing. The gateway counts input and output tokens for every request, applies per-model pricing rates, and accumulates spend so you can monitor costs without external instrumentation.
+
+## How Cost Calculation Works
+
+Each model registered in the gateway has a pricing configuration that specifies the dollar cost per 1000 input tokens and per 1000 output tokens. When a request completes, the gateway extracts the token usage from the model's response, computes the input cost and output cost independently, and sums them to produce the total request cost.
+
+The formula for a single request is:
+
+```
+input_cost  = (prompt_tokens / 1000.0) * input_per_1k
+output_cost = (completion_tokens / 1000.0) * output_per_1k
+total_cost  = input_cost + output_cost
+```
+
+Costs are internally tracked in deci-cent-dollar precision (1 internal unit equals 0.0001 dollars) to avoid floating-point accumulation errors. Each time cost is recorded, the dollar value is multiplied by 10,000, rounded to the nearest integer, and added atomically to a running total. When you read the total back, it is divided by 10,000 to return dollars.
+
+All public cost values exposed through metrics and configuration are in dollars.
+
+## Recording vs Calculating
+
+The cost tracker provides two methods:
+
+| Method | Behavior |
+| --- | --- |
+| `calc_cost` | Computes the cost for a given model and usage without updating the running total. Useful for pre-flight checks or cost estimates before committing a request. |
+| `record` | Computes the cost, updates the running total atomically, then returns the computed dollar value. This is the method called after each successful request. |
+
+Recording uses relaxed atomic ordering, so concurrent requests from different threads record costs together without contention. The tradeoff is that a snapshot of `total_cost_dollars` during heavy traffic might miss the most recent sub-microsecond updates, but the total eventually converges.
+
+## Built-in Model Pricing
+
+The gateway ships with pricing for several common models. You can also supply your own pricing map through `with_pricing`.
+
+| Model | Input Cost per 1K Tokens | Output Cost per 1K Tokens |
+| --- | --- | --- |
+| `gpt-4o` | $2.50 | $10.00 |
+| `gpt-4o-mini` | $0.15 | $0.60 |
+| `gpt-3.5-turbo` | $0.50 | $1.50 |
+| `claude-3-opus` | $15.00 | $75.00 |
+| `claude-3-sonnet` | $3.00 | $15.00 |
+| `claude-3-haiku` | $0.25 | $1.25 |
+
+Models not listed in the pricing table accumulate zero cost when requests are recorded. The return value of `calc_cost` for an unknown model is `0.0`.
+
+## Token Counting
+
+The gateway uses token counts reported by each model provider in the response body. These are semantic token counts as computed by the model's own tokenizer, not approximate character-based estimates. The `AIUsage` struct carries `prompt_tokens` and `completion_tokens` as reported by the provider.
+
+If a model response does not include usage information, the cost for that request is zero. The gateway does not attempt to estimate token counts from the raw text content.
+
+## Custom Pricing Configuration
+
+You can supply a custom pricing map to override the built-in defaults or to add pricing for models not in the default table. Pass a `HashMap<String, ModelPricing>` to `CostTracker::with_pricing`, where each entry defines `input_per_1k` and `output_per_1k` as f64 dollar amounts:
+
+```yaml
+cost:
+  pricing:
+    gpt-4o:
+      inputPer1k: 2.50
+      outputPer1k: 10.00
+    claude-3-sonnet:
+      inputPer1k: 3.00
+      outputPer1k: 15.00
+    custom-model:
+      inputPer1k: 1.25
+      outputPer1k: 5.00
+```
+
+Custom pricing fully replaces the built-in defaults when used. Include entries for every model you want priced.
+
+## Per-Tenant Cost Limits
+
+When combined with multi-tenant configuration, cost tracking integrates with tenant-level spend caps. Each tenant can have an optional `cost_limit` in dollars. The gateway calls `check_cost_limit`, passing the tenant's current accumulated cost against the cap. If the tenant exceeds their limit, further requests are blocked until the cost is reset or the limit is raised.
+
+## Metrics Integration
+
+The cost tracker exposes the total accumulated cost in dollars through `total_cost_dollars`. You can expose this through the standard metrics endpoint and scrape it with Prometheus. Common operational patterns include:
+
+- Alerting when total cost exceeds a daily or weekly budget.
+- Trending cost over time by scraping at regular intervals and computing deltas.
+- Breaking down spend by model using per-model tracking (configure separate tracker instances or track model-level cost in application code).
+
+## Resetting Cost
+
+The tracker supports resetting the total to zero via the `reset` method. This is useful in ephemeral deployments, per-billing-cycle accounting, or integration test suites where you need a clean cost baseline. Reset is atomic: calling `reset` between recording calls is safe across threads.
+
+## Thread Safety
+
+The `CostTracker` uses an `AtomicU64` for the running total, which means concurrent calls to `record` from different tokio tasks or threads do not require external synchronization. The atomic `fetch_add` with `Relaxed` ordering provides sufficient consistency for a monotonically increasing counter in a metrics context.
+
+Note that `calc_cost` does not synchronize with `record` at all. If you call `calc_cost` for a pre-flight estimate and then call `record` on a different thread, the two operations are independent and the `calc_cost` result is a point-in-time snapshot that does not reflect the recording.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Multi-Tenant Configuration](/features/ai-gateway/multitenant/)
+- [Security And Observability](/features/security-observability/)

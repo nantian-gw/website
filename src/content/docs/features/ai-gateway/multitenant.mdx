@@ -1,0 +1,114 @@
+---
+title: Multi-Tenant Configuration
+description: "Isolate AI traffic by tenant using API key resolution, model allowlists, quota enforcement, and cost limits in Nantian Gateway."
+---
+
+Multi-tenant support lets a single gateway instance serve multiple organizations, teams, or projects with isolated resource limits and access controls. Each tenant is identified by its API keys, and every request is routed with tenant context so that quotas, model access, and cost tracking are scoped per tenant.
+
+## How Multi-Tenant Works
+
+Every incoming AI request carries an API key. The gateway resolves the key to a tenant identity, then enforces the tenant's policies before forwarding the request to the model provider. Resolution is a constant-time lookup against a pre-built index, so tenant checks add negligible latency.
+
+The gateway maintains three categories of per-tenant constraints:
+
+1. **Quota limits**: Token and request rate limits, enforced on rolling minute and day windows.
+2. **Model allowlists**: Which models the tenant is permitted to use.
+3. **Cost limits**: A monthly dollar cap on the tenant's accumulated spend.
+
+A request that passes all three checks proceeds normally. A request that fails any check is rejected with an appropriate error before it reaches the model provider.
+
+## Initialization and Index Building
+
+When the `TenantManager` is created with a list of tenants, it builds two data structures in its constructor:
+
+- A `tenants` hashmap keyed by `tenant_id` for tenant definition lookups.
+- An `api_key_index` hashmap that maps every API key from every tenant to its owning `tenant_id` for O(1) resolution.
+
+The index is built eagerly at startup. If you add or remove tenants at runtime, you must rebuild the `TenantManager` with the full updated tenant list. There is no incremental add or remove API.
+
+## Tenant Configuration
+
+Each tenant definition includes an identity, a set of API keys, quota parameters, model access rules, and an optional cost cap:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `tenant_id` | string | Unique identifier for the tenant (e.g. `acme-corp`). |
+| `api_keys` | list of string | One or more API keys that map to this tenant. |
+| `quota.tokens_per_minute` | u64 | Maximum tokens allowed per rolling minute window. `0` means unlimited. |
+| `quota.tokens_per_day` | u64 | Maximum tokens allowed per rolling 24-hour window. `0` means unlimited. |
+| `quota.requests_per_minute` | u64 | Maximum requests allowed per rolling minute window. `0` means unlimited. |
+| `allowed_models` | list of string | Models this tenant can access. An empty list means all models are allowed. |
+| `cost_limit` | float or null | Monthly cost cap in dollars. `null` means no limit. |
+
+## API Key Resolution
+
+API keys are the binding between an incoming request and its tenant. When the gateway receives a request, it extracts the key from the `Authorization` header and looks it up in the `api_key_index` hashmap. If the key is not found, `resolve` returns `None` and the request is rejected as unauthorized.
+
+Multiple keys can map to the same tenant. This is useful when different teams or services within the same organization use separate keys but share the same quota pool and model access. During initialization, every key from every tenant is flattened into the index, so lookup cost is always O(1) regardless of how many keys a tenant has.
+
+## Model Allowlists
+
+Each tenant declares a list of `allowed_models`. When `check_model_access` is called:
+
+- If the tenant is not found, access is denied (`false`).
+- If the allowlist is empty, any model is permitted (`true`).
+- If the allowlist is non-empty, the requested model must match one entry in the list.
+
+This gives you three levels of access control: unrestricted (empty list), restricted to specific models, and completely denied (tenant not registered). The check is a linear scan over the allowlist. For small allowlists this is fast; for tenants with many allowed models, consider the performance tradeoff.
+
+## Quota Enforcement
+
+Quotas are tracked per tenant using rolling windows maintained in a `DashMap` for concurrent access. Each tenant gets a `TenantQuotaState` that tracks:
+
+| Counter | Scope | Reset Trigger |
+| --- | --- | --- |
+| `minute_tokens` | Per rolling minute | When `Instant::now()` passes `minute_reset` |
+| `day_tokens` | Per rolling 24 hours | When `Instant::now()` passes `day_reset` |
+| `minute_requests` | Per rolling minute | When `Instant::now()` passes `minute_reset` |
+
+When `check_quota` is called:
+
+1. The function checks whether the minute or day window has expired. If so, it resets the relevant counters and pushes the reset deadline forward.
+2. It computes candidate values for all three counters after adding the request's token count and one request.
+3. It compares against the tenant's quota limits. A value of `0` for any quota field means that limit is not enforced.
+4. If all checks pass, it updates the counters and returns `true`. If any check fails, it returns `false` without updating counters.
+
+Quota checks run before the request is sent to the model provider. The token count passed to `check_quota` is the estimated prompt token count, since the completion size is not yet known.
+
+## Quota State Cleanup
+
+When tenants are removed from the registry, their quota state entries in the `DashMap` become stale. To avoid unbounded memory growth, the manager performs opportunistic cleanup: every 1000th call to `check_quota` triggers `maybe_cleanup`, which removes any `QuotaState` entries whose `tenant_id` is no longer in the registry. This keeps memory usage proportional to the number of active tenants without adding cleanup overhead to every request.
+
+## Cost Limit Enforcement
+
+Each tenant can have a `cost_limit` dollar cap. `check_cost_limit` compares the tenant's accumulated cost against this cap. If the accumulated cost exceeds the cap, the check returns `false` and the request is blocked. The cost accumulation is handled by the cost tracker module, and the tenant manager queries it on each request.
+
+A tenant with no `cost_limit` (set to `null` in configuration, represented as `Option::None` internally) has unlimited spending.
+
+## Example Configuration
+
+This example defines a tenant `acme-corp` with two API keys, model restrictions to `gpt-4o` and `claude-3-sonnet`, quota limits of 1M tokens per minute and 50M per day, and a monthly cost cap of $5000:
+
+```yaml
+tenants:
+  - tenant_id: acme-corp
+    api_keys:
+      - sk-proj-abc123xyz
+      - sk-proj-def456uvw
+    allowed_models:
+      - gpt-4o
+      - claude-3-sonnet
+    quota:
+      tokens_per_minute: 1000000
+      tokens_per_day: 50000000
+      requests_per_minute: 500
+    cost_limit: 5000.00
+```
+
+A request carrying either `sk-proj-abc123xyz` or `sk-proj-def456uvw` resolves to the `acme-corp` tenant. The gateway checks that the requested model is either `gpt-4o` or `claude-3-sonnet`, that the tenant is within its token and request quotas, and that accumulated monthly cost has not exceeded $5000.
+
+## Related Pages
+
+- [AI Gateway Overview](/features/ai-gateway/)
+- [Cost Tracking](/features/ai-gateway/cost-tracking/)
+- [Model Routing](/features/ai-gateway/model-routing/)
