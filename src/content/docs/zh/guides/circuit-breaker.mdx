@@ -1,0 +1,114 @@
+---
+title: 熔断器
+description: "为每个后端独立配置并发请求上限，超限请求立即返回 503。支持全局限速和逐后端覆盖。"
+---
+
+Nantian Gateway 通过 `BackendLBPolicy` CRD 提供逐后端熔断能力。熔断器限制单个后端在同一时刻所能处理的并发请求数。当后端达到上限时，网关立即以 503 状态码拒绝额外请求，既保护后端免于过载，也让调用方能快速收到失败信号。
+
+## 熔断器工作原理
+
+熔断器为每个后端使用一个计数信号量。每个入站请求在网关将其代理到后端之前，需要获取一个许可。信号量有一个固定容量，即该后端配置的 `maxInflightRequests` 值。
+
+当请求到达时，如果后端信号量没有可用许可，网关立即拒绝该请求。不排队，不等待。拒绝操作向客户端返回 `503 Service Unavailable` 响应，并在响应元数据中附带 `CB` 代理错误标记。这种快速失败行为能防止慢后端积累大量最终仍会超时的请求。
+
+一旦某个进行中的请求完成（无论成功、失败还是超时），网关会将许可释放回信号量。该后端重新具备接收新请求的能力。未获取到许可的请求不计入限制，因此配置了 `maxInflightRequests: 0` 的后端，其熔断器是彻底禁用的。
+
+信号量在首个请求到达时为每个后端名称惰性创建。如果后端从配置中被移除，其信号量会在冷却期后被清理，不会造成内存泄漏。
+
+## 通过 BackendLBPolicy 配置
+
+熔断器限制通过 `BackendLBPolicy` CRD 配置，该 CRD 属于 Gateway API 实验性策略集（`gateway.networking.k8s.io/v1alpha2`）。spec 上的 `circuitBreaker.maxInflightRequests` 字段控制限制值。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: orders-cb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: orders-service
+  circuitBreaker:
+    maxInflightRequests: 100
+```
+
+此策略以 Service `orders-service` 为目标，将其限制为 100 个并发请求。当 `targetRefs` 包含多个条目时，策略独立应用于每个列出的 Service。每个 Service 拥有独立的信号量和独立的限制。
+
+未设置 `circuitBreaker` 的 `BackendLBPolicy` 使用网关全局默认值，该值由数据面配置键 `http_backend_circuit_breaker_max_requests` 控制。
+
+## 全局默认值与逐后端覆盖
+
+网关有一个全局熔断器限制，适用于所有未显式配置的后端。在部署时通过控制面配置设置：
+
+```yaml
+controlplane:
+  config:
+    httpBackendCircuitBreakerMaxRequests: 1000
+```
+
+单独的 `BackendLBPolicy` 资源会覆盖目标 Service 的全局限制。若某个后端配置了 `BackendLBPolicy` 并设置 `maxInflightRequests: 100`，则该后端的限制为 100 个请求。所有其他后端使用全局默认值。
+
+将 `maxInflightRequests` 设为 `0` 会为该后端彻底禁用熔断器。请求不会因并发限制被拒绝，信号量被跳过，不获取许可。
+
+查找逻辑是层级式的：如果某个后端名称在 `BackendLBPolicy` 中有逐后端覆盖值，则使用该值。否则使用全局值。如果全局值也为 0，则熔断器在全局范围内禁用。
+
+## 查看熔断器状态
+
+数据面通过 admin API 和指标暴露熔断器状态。两者均可按数据面实例获取。
+
+### Admin API 快照
+
+每个数据面实例在 admin 端点提供其熔断器状态的快照：
+
+```
+GET /admin/circuit_breakers
+```
+
+响应返回一个 JSON 对象，包含以下字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `backendMaxInflightRequests` | 配置的全局限制。 |
+| `backendInflightCurrent` | 后端名称到当前并发请求数的映射。 |
+| `rejectedTotal` | 启动以来因熔断器拒绝的请求总数。 |
+| `rejectedBackendTotal` | 后端级别的拒绝总数（包括命名和未命名的后端）。 |
+| `rejectedBackendByName` | 后端名称到拒绝计数的映射。 |
+
+如果一个特定后端的 `rejectedBackendByName` 计数上升，同时 `backendInflightCurrent` 接近或达到其限制，说明可能存在容量问题。考虑对该后端进行扩容、提高限制或调整上游超时时间。
+
+你可以从集群内部直接 curl admin 端点：
+
+```bash
+kubectl exec deploy/nantian-gw-dataplane -- curl -s localhost:9090/admin/circuit_breakers
+```
+
+### 指标
+
+数据面导出 Prometheus 指标来追踪熔断器状态。主要 gauge 和 counter 指标包括：
+
+| 指标 | 类型 | 描述 |
+| --- | --- | --- |
+| `nantian_gateway_dataplane_http_circuit_breaker_backend_max_inflight_requests` | Gauge | 配置的全局限制。 |
+| 逐后端并发 gauge | Gauge | 每个后端当前的并发请求数。 |
+| `nantian_gateway_dataplane_http_circuit_breaker_rejected_total` | Counter | 所有后端累计的拒绝请求计数。 |
+
+对 `rejected_total` 的增长设置告警，以便尽早发现过载事件。交叉对比逐后端并发 gauge 和逐后端拒绝 counter，确定哪个 Service 需要关注。
+
+在 Prometheus 告警规则中，将熔断器指标与上游延迟指标配对使用。如果一个后端的 p99 延迟上升，同时熔断器拒绝激增，那几乎可以确定是过载了。仅仅提高并发限制可能无济于事，建议首先考虑水平扩容后端或降低上游超时时间。
+
+## 生产环境建议
+
+- 根据后端的已知容量设置 `maxInflightRequests`。从保守值开始（观察到的峰值并发的 50%），在观察生产流量后再上调。
+- 熔断器拒绝在你的请求级指标中显示为 503。通过访问日志中的 `CB` 代理错误标记进行过滤，将其与真正的上游 503 区分开来。
+- 重试与熔断器的交互：每次重试都会获取一个新的许可。重试较多的配置可能会比预期更快地耗尽熔断器容量。请阅读[重试指南](/guides/retry/)了解如何协调重试和熔断策略。
+- 信号量通过后端的字符串名称绑定，这意味着从 3 个 Pod 扩展到 10 个 Pod 的 Service 仍然共享同一个信号量。`maxInflightRequests` 适用于整个 Service，而非单个 endpoint。
+- 在监控熔断器指标的同时，也要监控数据面的 CPU 和内存。提前拒绝请求虽然节省了后端容量，但会将负载转移到数据面的错误路径上。
+
+## 相关页面
+
+- [重试配置](/guides/retry/)
+- [gRPC 路由](/guides/grpc-routes/)
+- [流量管理](/features/traffic-management/)
+- [指标与可观测性](/operations/metrics/)

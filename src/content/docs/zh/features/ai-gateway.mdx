@@ -1,35 +1,72 @@
 ---
 title: AI 网关
-description: "使用 Nantian Gateway 配置实验性 AI provider 目标、token 策略和 AI 流量可观测性。"
+description: "Nantian Gateway 内置 AI 网关，支持模型路由、语义缓存、提示词防护、A/B 测试、回退链、成本追踪、多租户和 Langfuse 可观测性。"
 ---
 
-Nantian Gateway 可以在数据面处理 AI 流量，让应用通过同一个 Kubernetes Gateway 出口访问模型，同时由平台统一控制 provider、凭据、token 配额和可观测性。
+Nantian Gateway 可以在数据面中处理 AI 流量，让应用通过一个 Kubernetes Gateway 完成路由，同时由平台统一管理 provider、凭证、token 配额和可观测性。
 
-:::caution[实验功能]
-AI Gateway 资源使用 `gateway.nantian.dev/v1alpha1`，默认关闭。创建 `AIService` 或 `TokenPolicy` 前，需要启用 `featureMode: experimental`、安装 Nantian CRD，并设置 `controlplane.config.features.enableAiGateway: true`。
+:::caution[实验性功能]
+AI Gateway 资源使用 `gateway.nantian.dev/v1alpha1`，默认处于禁用状态。在创建 `AIService` 或 `TokenPolicy` 之前，需要先开启 `featureMode: experimental`，安装 Nantian CRD，并设置 `controlplane.config.features.enableAiGateway: true`。
 :::
 
-## AI 网关做什么
+## AI 网关能做什么
 
-AI Gateway 主要围绕两个 Kubernetes 资源：
+AI Gateway 功能围绕两个 Kubernetes 资源构建：
 
-| Resource | 作用 |
+| 资源 | 用途 |
 | --- | --- |
-| `AIService` | 定义一个 AI provider/model 目标，包括 provider format、model name、auth、timeout、retry 和 observability 设置。 |
-| `TokenPolicy` | 把 token 和请求限制绑定到本地 Gateway API 目标，例如某个 `HTTPRoute`。 |
+| `AIService` | 定义一个 AI provider/模型目标，包括 provider 格式、模型名称、认证、超时、重试和可观测性设置。 |
+| `TokenPolicy` | 将 token 和请求限制附加到本地 Gateway API 目标上，例如 `HTTPRoute`。 |
 
-运行时包含 OpenAI、Anthropic、Ollama 格式处理、token 统计、限流、prompt 和 PII 处理、semantic cache、fallback、A/B testing、cost tracking 和 multitenant context 等模块。除非稳定 CRD 字段明确暴露某项行为，否则不要把这些模块当成可稳定配置的 Kubernetes 字段。
+运行时包含 OpenAI、Anthropic 和 Ollama 格式处理、token 统计、速率限制、prompt 和 PII 处理、语义缓存、回退、A/B 测试、成本追踪和多租户上下文等模块。在稳定的 CRD 字段显式暴露你希望配置的行为之前，请将这些视为运行时模块。
+
+## 核心能力
+
+AI Gateway 提供以下能力，每项均可通过 CRD 配置：
+
+### 模型路由
+根据复杂度分类、请求属性或 header 选择，将请求路由到不同的 LLM 模型。[了解更多](/features/ai-gateway/model-routing)
+
+### 语义缓存
+利用嵌入向量相似度，对语义相近的 prompt 缓存 LLM 响应，减少重复的 API 调用和成本。[了解更多](/features/ai-gateway/semantic-cache)
+
+### 提示词防护
+在请求到达模型之前，检测并拦截 prompt 注入攻击和可疑的关键词模式。[了解更多](/features/ai-gateway/prompt-guard)
+
+### 内容安全
+过滤 prompt 和模型响应中的暴力、仇恨、自残、剥削和非法内容。[了解更多](/features/ai-gateway/content-safety)
+
+### PII 脱敏
+检测并遮蔽 prompt 和响应中的个人身份信息，如电子邮件地址、电话号码和凭证。[了解更多](/features/ai-gateway/pii-masking)
+
+### A/B 测试
+通过加权选择在模型变体之间分流，对比各 provider 的性能、成本和质量。[了解更多](/features/ai-gateway/ab-testing)
+
+### 回退链
+按顺序配置备用模型，当主模型失败或超时时，请求自动级联到回退 provider。[了解更多](/features/ai-gateway/fallback)
+
+### 成本追踪
+按模型、租户和路由监控 token 用量和预估成本，用于计费和预算分析。[了解更多](/features/ai-gateway/cost-tracking)
+
+### 多租户
+将多个 API key 映射到租户，每个租户拥有独立的模型白名单、速率限制和用量配额。[了解更多](/features/ai-gateway/multitenant)
+
+### Token 策略
+对 AI 路由实施每分钟和每小时的 token 速率限制，支持可配置的突发倍数和拒绝策略。[了解更多](/features/ai-gateway/token-policy)
+
+### Langfuse 集成
+将 trace、generation 和 score 发送到 Langfuse，用于 LLM 可观测性和模型性能调试。[了解更多](/features/ai-gateway/langfuse)
 
 ## 启用方式
 
-先从 [实验功能](/zh/configuration/experimental-features/) 开始，并确认所需 CRD 已安装：
+从[实验性功能](/configuration/experimental-features/)开始，确保所需 CRD 已安装：
 
 ```bash
 kubectl get crd aiservices.gateway.nantian.dev
 kubectl get crd tokenpolicies.gateway.nantian.dev
 ```
 
-Helm 的最小 AI Gateway values 如下：
+使用 Helm 时，启用 AI Gateway 的最小配置如下：
 
 ```yaml
 featureMode: experimental
@@ -41,7 +78,7 @@ controlplane:
 
 ## 配置 AI Provider
 
-`AIService` 描述 provider 和 model 目标。根据后端，provider 可以使用 OpenAI、Anthropic 或 Ollama 等格式。
+`AIService` 描述 provider 和模型目标。Provider 可以使用 OpenAI、Anthropic 或 Ollama 等格式，取决于你路由到的后端。
 
 ```yaml
 apiVersion: gateway.nantian.dev/v1alpha1
@@ -64,11 +101,11 @@ spec:
     backoff: 500ms
 ```
 
-控制面会把这个资源转换成运行时配置，再分发给数据面实例。provider 凭据应放在 Kubernetes Secret 中，不要直接写进 route manifest。
+控制面将资源转换为运行时配置，并分发到各数据面实例。请将 provider 凭证保存在 Kubernetes Secret 中，避免在路由清单中嵌入 token。
 
-## 执行 Token 配额
+## 实施 Token 配额
 
-AI 流量通常需要按 token 限制，而不是只按请求数限制。`TokenPolicy` 可以挂到某个 route：
+AI 流量通常需要基于 token 的限制，而不仅仅是基于请求的限制。`TokenPolicy` 可以将限制附加到路由上：
 
 ```yaml
 apiVersion: gateway.nantian.dev/v1alpha1
@@ -89,11 +126,11 @@ spec:
   onLimit: reject
 ```
 
-请求限制用于控制流量形态，token 限制用于控制成本。明确 `onLimit` 行为可以让调用方获得可预测的失败模式。
+请求限制用于流量整形，token 限制用于成本控制。设置清晰的 `onLimit` 行为，让调用方获得可预测的失败模式。
 
-## 观察 AI 流量
+## 观测 AI 流量
 
-`AIService` 可以携带 Langfuse 和 OpenTelemetry 设置。Nantian Gateway 不内置这些后端，需要指向你自己运维的系统。
+`AIService` 可以携带 Langfuse 和 OpenTelemetry 设置。Nantian Gateway 不内置这些后端，需要将字段指向你自己部署的系统。
 
 ```yaml
 apiVersion: gateway.nantian.dev/v1alpha1
@@ -115,20 +152,20 @@ spec:
       serviceName: nantian-ai-gateway
 ```
 
-AI 专属遥测应结合标准 [指标](/zh/operations/metrics/) 和 [故障排查](/zh/operations/troubleshooting/) 流程一起使用。
+将 AI 特定的遥测数据与标准的[指标](/operations/metrics/)和[故障排查](/operations/troubleshooting/)工作流结合使用。
 
-## 生产检查清单
+## 生产环境检查清单
 
-- 只在能接受 API 变化的集群启用实验模式。
-- 应用 manifest 前先安装并验证 `AIService` 和 `TokenPolicy` CRD。
-- provider 凭据放在 Kubernetes Secret 中。
-- 初始 token 和请求限制应采用 fail closed 策略。
-- 发布后观察控制面和数据面日志。
-- 生产 AI 流量切入前确认 metrics 和 traces 可用。
+- 仅在能够容忍 API 变更的集群中启用实验性模式。
+- 在应用清单之前安装并验证 `AIService` 和 `TokenPolicy` CRD。
+- 将 provider 凭证存储在 Kubernetes Secret 中。
+- 初始的请求和 token 限制应设置为 fail-closed 模式。
+- 上线后监控控制面和数据面的日志。
+- 在路由生产 AI 流量之前，确认指标和 trace 正常工作。
 
 ## 相关页面
 
-- [实验功能](/zh/configuration/experimental-features/)
-- [自定义和实验资源](/zh/api-reference/crds/)
-- [流量治理](/zh/features/traffic-management/)
-- [安全与可观测性](/zh/features/security-observability/)
+- [实验性功能](/configuration/experimental-features/)
+- [自定义和实验性资源](/api-reference/crds/)
+- [流量管理](/features/traffic-management/)
+- [安全与可观测性](/features/security-observability/)
