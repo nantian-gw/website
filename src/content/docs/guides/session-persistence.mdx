@@ -1,0 +1,88 @@
+---
+title: Session Persistence
+description: "Route requests from the same user session to the same backend instance with cookie-based or header-based sticky sessions."
+---
+
+Session persistence (also called sticky sessions) ensures that all requests belonging to the same user session are routed to the same backend instance. This is required when a backend stores state locally, such as a shopping cart in memory or a WebSocket connection tied to a specific process.
+
+## How Session Persistence Works
+
+The first time a user makes a request, the gateway routes it to a backend instance using the standard load balancing algorithm. If session persistence is configured for that route, the gateway attaches a session identifier to the response. On subsequent requests from the same user, the gateway reads the identifier and routes the request to the same backend instance that handled the original session.
+
+The session identifier is a signed token that encodes the backend name, endpoint address, and optional expiry times. The signing prevents tampering: if a client modifies the identifier, the signature fails to verify and the gateway treats it as a new session, routing to a fresh backend instance.
+
+## Cookie-Based Persistence
+
+When `sessionType` is `Cookie` (the default), the gateway sets a cookie on the first response. The cookie holds the signed session token. The cookie name is configured through the `sessionName` field. If the cookie already exists on an incoming request, the gateway verifies its signature and routes to the recorded backend.
+
+The cookie carries an optional `absoluteTimeout` that limits the lifetime of the session. When the timeout is reached, the session is discarded and the next request is routed to a new backend instance. If no absolute timeout is set, the session persists indefinitely.
+
+Cookie lifetime is controlled by `cookieConfig.lifetimeType`:
+
+| Lifetime Type | Cookie Expiry | Description |
+| --- | --- | --- |
+| `Session` | Browser session (no `Expires`/`Max-Age`) | The cookie is deleted when the browser closes. This is the default. |
+| `Permanent` | Set by `absoluteTimeout` | The cookie includes a `Max-Age` attribute matching the configured timeout. Requires `absoluteTimeout` to be set. |
+
+## Header-Based Persistence
+
+When `sessionType` is `Header`, the gateway does not set a cookie. Instead it sets a response header with the name configured in `sessionName`. The client is expected to echo the header value back on subsequent requests. This mode is useful for API clients that do not handle cookies, or for gRPC services where cookies are uncommon.
+
+Header-based sessions have the same signing, timeout, and routing guarantees as cookie-based sessions. The only difference is the transport mechanism.
+
+## Configure Via BackendLBPolicy
+
+Session persistence is configured through the `BackendLBPolicy` CRD under the `sessionPersistence` field:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: cart-sticky
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: shopping-cart-service
+  sessionPersistence:
+    sessionName: ROUTEID
+    sessionType: Cookie
+    absoluteTimeout: 3600s
+    idleTimeout: 600s
+    cookieConfig:
+      lifetimeType: Session
+```
+
+This policy targets the `shopping-cart-service` backend. Requests are routed to a backend instance and the gateway sets a `ROUTEID` cookie with a signed session token. The session cookie lasts for the browser session. The absolute timeout of 3600 seconds (1 hour) caps the maximum session lifetime even if the browser does not close. If the user is idle for 600 seconds (10 minutes), the session is eligible for expiry.
+
+When `targetRefs` contains multiple Services, each Service gets its own persistence configuration. A single `BackendLBPolicy` can apply cookie-based persistence to one Service and header-based persistence to another, as long as each has a separate policy.
+
+## Session Secret
+
+The session token is signed with a shared secret for integrity. The gateway supports three methods to configure the secret:
+
+| Method | Configuration | Use Case |
+| --- | --- | --- |
+| Inline secret | `sharedSecret` in data plane config | Small deployments with a pre-shared key |
+| File-based secret | `sharedSecretFile` pointing to a file path | Deployments with secret rotation (the file is re-read every 250ms) |
+| Auto-generated | No configuration | Development and single-replica deployments only |
+
+For multi-replica data plane deployments, configure a consistent `sharedSecret` or `sharedSecretFile` across all replicas. If each replica auto-generates a different key, a session token signed by replica A will fail validation on replica B, causing the user to lose their session when traffic shifts between replicas.
+
+## When to Use Session Persistence
+
+Session persistence is the right choice when:
+
+- A backend stores state in local memory instead of a shared database or cache.
+- You are running a WebSocket or long-polling service that must stay pinned to one instance.
+- A backend relies on filesystem-local data that is not replicated across instances.
+- You are gradually migrating services and need to pin users to specific backend versions.
+
+Session persistence is tradeoff. It reduces the effectiveness of load balancing by concentrating traffic from the same session onto a single backend. If a backend instance goes down, all sessions pinned to it are lost until new sessions are established. Use it only for backends that genuinely need sticky routing.
+
+## Limitations
+
+Session persistence does not survive data plane restarts. The gateway stores session-to-backend mappings in memory. When a data plane process restarts, all session state is lost. Incoming requests that carry a valid session token from before the restart are rejected as unknown and routed to a new backend instance. The user will be assigned a new session automatically, but any state tied to the old backend instance is gone.
+
+Session tokens are opaque to the client. The client should not attempt to parse or modify the cookie value. Any modification will invalidate the signature and cause the gateway to create a new session.

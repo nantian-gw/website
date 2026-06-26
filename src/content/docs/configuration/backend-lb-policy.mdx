@@ -1,0 +1,112 @@
+---
+title: BackendLBPolicy
+description: "CRD reference for BackendLBPolicy. Configure session persistence, load balancing, and circuit breaking per backend Service."
+---
+
+The `BackendLBPolicy` CRD bundles three backend-level traffic management features into a single policy resource: session persistence, load balancing, and circuit breaking. It is a Gateway API local policy, which means it targets specific backends in the same namespace.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: orders-lb-policy
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: orders-service
+  sessionPersistence:
+    sessionName: orders-session
+    type: Cookie
+    absoluteTimeout: 30m
+    idleTimeout: 10m
+    cookie:
+      lifetimeType: Session
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-tenant-id
+  circuitBreaker:
+    maxInflightRequests: 200
+```
+
+## Target Selection
+
+The `targetRefs` field specifies which backends the policy applies to. Each entry is a `LocalPolicyTargetReference`:
+
+| Field | Description |
+| --- | --- |
+| `group` | API group of the target. Empty string for core `Service`. |
+| `kind` | Must be `Service`. |
+| `name` | Name of the Service in the same namespace as the policy. |
+
+The policy cannot target Services in other namespaces. A single policy can target multiple Services by listing multiple entries in `targetRefs`.
+
+## Policy Fields
+
+All three features (session persistence, load balancing, and circuit breaking) are optional. Omit a field to leave the gateway default in place for that feature. An empty `BackendLBPolicy` with all three fields absent has no effect.
+
+### sessionPersistence
+
+Configures cookie-based session affinity. Requests from the same client are routed to the same backend for the duration of the session.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `sessionName` | string | Name used to identify the session. |
+| `type` | string | Session persistence type. Currently `Cookie`. |
+| `absoluteTimeout` | duration | Maximum session lifetime regardless of activity. |
+| `idleTimeout` | duration | Session expires after this period of inactivity. |
+| `cookie.lifetimeType` | string | `Session` (browser session) or `Permanent` (persistent cookie). |
+
+### loadBalancing
+
+Overrides the default weighted round-robin strategy for the targeted backends.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | Strategy: `RoundRobin`, `ConsistentHash`, `LeastRequest`, or `Random`. |
+| `consistentHash.keyType` | string | Hash key source: `SourceIP`, `Header`, or `Hostname`. Required when `type` is `ConsistentHash`. |
+| `consistentHash.headerName` | string | Header name to hash. Required when `keyType` is `Header`. |
+
+When `type` is omitted, the backend uses weighted round-robin. The `consistentHash` block is only relevant for `ConsistentHash`; it is ignored for other strategies.
+
+### circuitBreaker
+
+Limits concurrent inflight requests to protect the backend from overload.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `maxInflightRequests` | int32 | Maximum concurrent requests allowed. Omit or set to 0 to disable (gateway-wide default applies). |
+
+When the inflight request count reaches this limit, additional requests are rejected immediately with a `503 Service Unavailable` response.
+
+## Policy Precedence
+
+Multiple `BackendLBPolicy` resources may target the same backend. When this happens, the gateway resolves the conflict using a deterministic precedence order:
+
+1. **Creation timestamp.** The policy created first wins.
+2. **Name.** If timestamps are identical, the policy whose `metadata.name` comes first alphabetically wins.
+3. **Namespace.** If both timestamp and name match, the policy from the alphabetically smaller namespace wins.
+
+This is a first-match-wins rule per backend. The gateway does not merge policies. Each backend gets exactly one winning policy, as determined by the `PolicyPrecedes` function.
+
+The resolved policy appears in the data plane snapshot under `BackendCluster.loadBalancing`, `BackendCluster.sessionPersistence`, and `BackendCluster.circuitBreaker`. You can inspect these fields through the data plane admin API at the `/snapshots` endpoint.
+
+## Status Conditions
+
+The gateway reports policy resolution status in `status.conditions`:
+
+| Condition type | Meaning |
+| --- | --- |
+| `Accepted` | The policy was parsed and applied successfully. |
+| `Conflicted` | Another policy targeting the same backend took precedence. |
+| `Invalid` | The policy contains an invalid configuration. |
+| `TargetNotFound` | A `targetRef` names a Service that does not exist. |
+
+Check `status.conditions` to troubleshoot why a policy is not taking effect. A policy with condition `Conflicted` is valid but was overridden by an earlier-created policy; check which policy won and either delete the older one or adjust your targeting.
+
+## Checking Applied Policies
+
+Query the data plane admin API at port `19080` to see which policies are active. The `/snapshots` endpoint returns the full IR snapshot. Look for the `BackendCluster` entry matching your service and inspect the `sessionPersistence`, `loadBalancing`, and `circuitBreaker` fields. These fields are present only when a `BackendLBPolicy` has been resolved for that backend.

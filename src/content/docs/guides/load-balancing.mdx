@@ -1,0 +1,132 @@
+---
+title: Load Balancing
+description: "Configure how Nantian Gateway distributes traffic across backends. Round-robin, weighted routing, consistent hash, random, and least-request strategies."
+---
+
+Nantian Gateway selects one backend from each route's `backendRefs` list for every request. The load balancing strategy controls how that selection happens. By default, the gateway uses simple round-robin with even distribution. You can override this per-backend with a `BackendLBPolicy`.
+
+## Available Strategies
+
+| Strategy | Behavior | When to use |
+| --- | --- | --- |
+| `RoundRobin` (default) | Cycles through backends in order | General-purpose, uniform distribution |
+| `ConsistentHash` | Maps requests to backends by a hash key | Stateful routing: same client always hits the same backend |
+| `LeastRequest` | Sends to the backend with the fewest inflight requests | Backends with varying response times |
+| `Random` | Picks a backend uniformly at random | Simple, low-overhead distribution |
+
+All strategies respect the `weight` field on each `BackendRef`. A backend with a higher weight receives proportionally more traffic. Weight applies to RoundRobin, Random, and LeastRequest. ConsistentHash uses the hash result, so weight is irrelevant.
+
+## Round-Robin (Default)
+
+Without any `BackendLBPolicy`, the gateway distributes traffic using weighted round-robin. Each backend gets a share proportional to its weight. A backend with `weight: 0` is excluded from selection entirely.
+
+The default strategy requires no configuration. It works across HTTP, gRPC, and stream routes.
+
+## Weighted Routing
+
+You control traffic distribution by setting weights on individual `BackendRef` entries. Weights are relative integers; the gateway normalizes them across all backends in the same rule.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: weighted-demo
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: canary-v2
+          port: 8080
+          weight: 30
+        - name: stable-v1
+          port: 8080
+          weight: 70
+```
+
+Here, `stable-v1` receives 70% of traffic and `canary-v2` receives 30%. Adjust the weights to shift traffic gradually during canary deployments.
+
+Weighted routing pairs naturally with any load balancing strategy. When you combine weights with `LeastRequest`, for example, the gateway first applies the weight distribution and then picks the least-loaded endpoint within each backend.
+
+## Consistent Hash
+
+Consistent hash routing sends requests that share the same hash key to the same backend. This is useful when you need request affinity without sticky sessions: a tenant's requests always land on the same backend, or requests from the same source IP stay pinned to one instance.
+
+Configure consistent hash through `BackendLBPolicy` by setting the `loadBalancing` field:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: tenant-hash
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: tenant-service
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-tenant-id
+```
+
+This policy hashes the value of the `x-tenant-id` request header to select a backend. All requests with `x-tenant-id: acme-corp` go to the same backend, giving you tenant-level locality without explicit session state.
+
+### Hash Key Types
+
+The `keyType` field controls what the gateway hashes:
+
+| Key type | Hashes | Use case |
+| --- | --- | --- |
+| `SourceIP` | The client's source IP address | Pin a caller to a specific backend instance |
+| `Header` | The value of a named HTTP header (requires `headerName`) | Tenant routing, user-level affinity |
+| `Hostname` | The `Host` header from the request | Domain-based sharding |
+
+When you use `Header` key type, the `headerName` field is required. The gateway normalizes the header name to lowercase before lookup. If the header is missing from a request, the gateway uses an empty string as the hash input. This means all requests without the header will hash to the same backend.
+
+Consistent hash uses a ring-based algorithm. Small changes to the backend set (adding or removing one backend) only redistribute the keys that mapped to the changed backend, minimizing disruption for the remaining backends.
+
+### Per-Route Consistent Hash
+
+You can apply consistent hash across multiple routes by targeting the same `Service` with a single `BackendLBPolicy`. If different routes need different hash keys for the same backend, you need separate `BackendLBPolicy` resources. The first policy that targets the backend (by creation timestamp, then name) wins. See the [BackendLBPolicy reference](/configuration/backend-lb-policy/) for conflict resolution rules.
+
+## Least Request
+
+`LeastRequest` selects the backend with the fewest inflight requests at the time of selection. This works well when backends vary in processing speed or when some backends are temporarily slower than others.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: least-req-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: slow-backend
+  loadBalancing:
+    type: LeastRequest
+```
+
+The inflight request count is tracked per-backend by the data plane. The counter increments when the gateway sends a request to the backend and decrements when the response completes, fails, or times out. Connections to unhealthy endpoints are treated as having infinite inflight requests, so they are never selected until they become healthy again.
+
+## Random
+
+`Random` picks a backend uniformly at random for each request. It has the lowest CPU overhead of all strategies and works well when your backends are homogeneous and you do not need any affinity or adaptive behavior.
+
+## Strategy Comparison
+
+| Strategy | Respects weights | Request affinity | Adapts to load | Overhead |
+| --- | --- | --- | --- | --- |
+| RoundRobin | Yes | No | No | Very low |
+| ConsistentHash | No | Yes (by key) | No | Moderate |
+| LeastRequest | Yes | No | Yes | Moderate |
+| Random | Yes | No | No | Very low |
+
+## Checking The Active Policy
+
+The admin API exposes the load balancing configuration applied to each backend. Query the `/snapshots` endpoint on the data plane admin port (default `19080`). Each `BackendCluster` in the snapshot includes a `loadBalancing` field that shows the resolved policy. If the field is absent, the backend uses weighted round-robin.

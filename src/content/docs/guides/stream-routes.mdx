@@ -1,0 +1,142 @@
+---
+title: Stream Routes
+description: "Route TCP and UDP traffic with StreamRoute. Configure port-based matching, SNI-based routing, and TLS passthrough for databases, message queues, and raw TCP services."
+---
+
+Nantian Gateway supports Gateway API `TCPRoute` and `UDPRoute` resources for routing Layer 4 traffic. These are collectively referred to as stream routes. Unlike `HTTPRoute` or `GRPCRoute`, which operate at Layer 7, stream routes work at the transport layer: they proxy raw TCP streams and UDP datagrams without inspecting application-layer content.
+
+## How Stream Routes Differ
+
+HTTP routes match requests on paths, headers, and query parameters. Stream routes have none of that. They match on two fields only:
+
+| Match field | TCPRoute | UDPRoute |
+| --- | --- | --- |
+| Port | Supported | Supported |
+| SNI hostname | Supported (when `mode: Terminate`) | Not applicable |
+
+There is no URL rewriting, no header manipulation, and no request or response modification at the L4 level. The gateway forwards bytes as they arrive, bidirectionally.
+
+## TCPRoute: TCP-Level Forwarding
+
+A `TCPRoute` proxies TCP connections from a gateway listener to backend services. It is the simplest form of routing: a connection arrives on a specific port, optionally with a known SNI hostname, and the gateway forwards it to one of the listed backends.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: postgres-route
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: tcp-listener
+  rules:
+    - backendRefs:
+        - name: postgres-service
+          port: 5432
+```
+
+This route sends every TCP connection arriving on the `tcp-listener` to `postgres-service:5432`. The gateway listener (configured on the Gateway resource) must use `protocol: TCP` and the same port number.
+
+### Matching By Port
+
+When a listener handles multiple ports, you can narrow matching with a rule-level port:
+
+```yaml
+rules:
+  - matches:
+      - port: 6379
+    backendRefs:
+      - name: redis-primary
+        port: 6379
+  - matches:
+      - port: 5432
+    backendRefs:
+      - name: postgres-service
+        port: 5432
+```
+
+Connections to port 6379 go to Redis; connections to port 5432 go to PostgreSQL. Rules are evaluated top-to-bottom, and the first match wins.
+
+### SNI Matching And TLS Passthrough
+
+When a gateway listener uses `protocol: TLS` with `tls.mode: Passthrough`, the SNI hostname from the TLS ClientHello is available for matching. This lets you route TLS traffic to different backends based on the hostname the client is connecting to, without terminating TLS at the gateway.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: sni-routing
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: tls-passthrough
+  rules:
+    - matches:
+        - sniHostname: "api.example.com"
+          mode: Passthrough
+      backendRefs:
+        - name: api-tls-backend
+          port: 8443
+    - matches:
+        - sniHostname: "*.internal.example.com"
+          mode: Passthrough
+      backendRefs:
+        - name: internal-tls-backend
+          port: 8443
+```
+
+The `mode: Passthrough` field tells the gateway to read the SNI from the ClientHello and compare it against `sniHostname`. The gateway does not decrypt the TLS session; it forwards the raw bytes to the selected backend. The `sniHostname` field supports exact and wildcard prefix matching (the prefix must be a complete DNS label followed by a dot, like `*.internal.example.com`).
+
+For `mode: Terminate`, the gateway terminates TLS and then routes the plaintext stream to the backend. The SNI match still works, but the backend receives unencrypted traffic.
+
+## UDPRoute: Datagram Forwarding
+
+`UDPRoute` routes UDP datagrams to backend services. The configuration looks almost identical to `TCPRoute`, but the listener protocol must be `UDP`.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: dns-route
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: udp-listener
+  rules:
+    - backendRefs:
+        - name: coredns-service
+          port: 53
+```
+
+UDP is connectionless, so there is no SNI matching. The only match field is `port`.
+
+## Backend Selection
+
+Every stream route rule specifies a list of `backendRefs`. When a rule matches, the gateway selects one backend from the list using weighted round-robin (default) or the load balancing policy configured via `BackendLBPolicy` for that backend. Each `backendRef` supports a `weight` field to tune traffic distribution:
+
+```yaml
+backendRefs:
+  - name: postgres-primary
+    port: 5432
+    weight: 90
+  - name: postgres-readonly
+    port: 5432
+    weight: 10
+```
+
+With these weights, roughly 90% of connections go to the primary and 10% to the read-only replica. Weights are relative integers; a weight of 0 removes the backend from selection.
+
+## When To Use Stream Routes
+
+Stream routes are the right choice when your backend protocol does not fit the HTTP model:
+
+**Databases.** PostgreSQL, MySQL, Redis, MongoDB. These speak their own wire protocols over TCP. A stream route gives you connection-level load balancing, SNI-based routing for TLS connections, and backend health checks.
+
+**Message queues.** Kafka, RabbitMQ, NATS. These protocols are binary and stateful. The gateway proxies the TCP connection without interpreting the protocol.
+
+**Custom TCP services.** Any service that speaks a non-HTTP protocol over TCP or UDP: DNS (UDPRoute), syslog, monitoring agents, game servers.
+
+**TLS passthrough.** When you want the backend to handle TLS termination, configure a listener with `protocol: TLS` and `mode: Passthrough`, then use SNI matching on the stream route to select the right backend.

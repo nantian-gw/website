@@ -1,0 +1,97 @@
+---
+title: Token Policies
+description: "Control the request rate per AI model and per tenant with token-based rate limiting in the Nantian AI Gateway."
+---
+
+Token policies let you control how many tokens and requests each AI model can consume over time. They prevent a single tenant, API key, or user from overwhelming the upstream LLM provider and driving up your costs.
+
+## How Rate Limiting Works
+
+The gateway enforces three independent limits, all configurable on a per-policy basis:
+
+| Limit | Window | What It Counts |
+| --- | --- | --- |
+| `tokensPerMinute` | Sliding 60 seconds | Total input and output tokens across all requests during the window |
+| `tokensPerHour` | Sliding 3600 seconds | Total input and output tokens across all requests during the window |
+| `requestsPerMinute` | Sliding 60 seconds | Number of individual API requests, regardless of token count |
+
+The gateway uses sliding windows, not fixed windows. A request at second 59 does not get a free pass just because the window resets at second 60. Each new request shifts the window boundary forward, so traffic bursts are smoothed naturally over time.
+
+When all three limits are set to zero, rate limiting is disabled and all requests pass through unchecked.
+
+## Scoping Limits
+
+The `scope` field determines which entity the limits apply to. Each scope creates separate rate limit counters:
+
+| Scope | Counters Keyed By |
+| --- | --- |
+| `apiKey` | One set of limits per API key. Each tenant or application using the gateway has its own quota. |
+| `model` | One set of limits per model name. All traffic to `gpt-4o` shares a single global quota. |
+| `user` | One set of limits per end-user identifier passed through the request. |
+
+The default scope is `apiKey`. Choose `model` when you want to cap total model usage across all tenants. Choose `user` when you want to limit individual end users within a multi-tenant deployment.
+
+## Burst Configuration
+
+The `burst` field is a multiplier that temporarily expands each limit window. A burst of `1.5` on a policy with `tokensPerMinute: 1000` allows up to 1500 tokens in a single minute window. The burst multiplies every limit in the policy equally: the minute limit, the hour limit, and the request limit all get the same multiplier.
+
+Burst is useful when traffic is spiky but you do not want to permanently raise the quota. Setting burst to `1.0` (the default) disables bursting and enforces the exact configured limits. Values below `1.0` are clamped to `1.0` internally.
+
+## On-Limit Behavior
+
+The `onLimit` field controls what happens when a request exceeds the rate limit:
+
+| Value | Behavior |
+| --- | --- |
+| `reject` | The gateway returns an HTTP 429 response immediately with the `X-RateLimit-Retry-After-Seconds` header telling the client how long to wait. This is the default. |
+| `queue` | The gateway queues the request internally and releases it once quota becomes available. Queued requests count against the limit for the next window. |
+| `warn` | The request proceeds normally, but the gateway logs a rate limit warning. Useful during testing or for monitoring before enforcing hard limits. |
+
+## Two-Phase Enforcement
+
+Rate limiting operates in two phases. Before proxying a request, the gateway checks the `requestsPerMinute` limit against the configured scope key. If the request limit is exhausted, the request is rejected or queued immediately, before any upstream call is made.
+
+After the response returns from the LLM provider, the gateway reads the `usage` field in the OpenAI-format response to extract the actual token count (prompt tokens plus completion tokens). It records these tokens against both the `tokensPerMinute` and `tokensPerHour` counters for the scope key. If the response causes either token limit to be exceeded, subsequent requests are blocked until quota replenishes.
+
+A request that passes the pre-check can still trigger a rate limit after the response, because the token count is not known until the response arrives. The post-response enforcement gates *future* requests, not the current one.
+
+## Integration With AIService
+
+Token policies are declared as separate `TokenPolicy` CRD resources and referenced from `AIService` through the `tokenPolicyRef` field. A single policy can be shared across multiple `AIService` resources, or each service can point to its own policy.
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: gpt-4o-limit
+  namespace: nantian-demo
+spec:
+  tokensPerMinute: 1000
+  tokensPerHour: 50000
+  requestsPerMinute: 60
+  scope: apiKey
+  burst: 1.2
+  onLimit: reject
+---
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-service
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  tokenPolicyRef:
+    name: gpt-4o-limit
+```
+
+This configuration limits each API key to 1000 tokens per minute (1200 with burst), 50,000 tokens per hour (60,000 with burst), and 60 requests per minute (72 with burst). Exceeded limits return a 429.
+
+An `AIService` without a `tokenPolicyRef` has no rate limiting. The gateway skips both the pre-request and post-response limit checks.
+
+## Metrics
+
+Rate limit hits are tracked through the `ntgw_ai_token_rate_limit_hits_total` Prometheus counter, labeled by `model` and `scope`. This lets you build dashboards that show which models are hitting limits the most and whether the bottleneck is at the model level or at the API key level.
+
+A separate `ntgw_ai_tenant_denied_total` counter with `reason="quota_exceeded"` tracks denials from tenant-level quota enforcement, which is a distinct mechanism from the rate limiter.

@@ -1,0 +1,93 @@
+---
+title: Request Mirroring
+description: "Send copies of live production traffic to a shadow or canary backend for testing and validation without affecting real users."
+---
+
+Request mirroring (also called traffic shadowing) sends a copy of live traffic to a secondary backend while the primary request continues to the production backend. The mirrored copy's response is discarded. The client never sees the mirror traffic, and mirror failures never affect the primary response.
+
+## How Request Mirroring Works
+
+When the gateway proxies a request, it checks whether the matched HTTPRoute has a `RequestMirror` filter attached to a backend rule. If a mirror filter is present and the sampling decision selects this request, the gateway forks the request into two paths:
+
+1. The primary path proceeds to the selected production backend as normal. The client receives this response.
+2. The mirror path sends a copy of the same request (same headers, same body, same method) to a different backend, the shadow backend. The mirror response is fully consumed and then discarded.
+
+The mirror is fire-and-forget. If the shadow backend is slow, the primary response is not delayed. If the shadow backend returns an error, the primary response is unaffected. If the shadow backend times out, the gateway drops the mirror connection and moves on.
+
+## Configure Request Mirroring
+
+Mirroring is configured as a filter on an HTTPRoute's backend rule. The `RequestMirror` filter type carries a `backendRef` pointing to the shadow backend and either a `percent` (0 to 100) or a `fraction` for fine-grained sampling:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: production-route
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: nantian-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: production-service
+          port: 8080
+      filters:
+        - type: RequestMirror
+          requestMirror:
+            backendRef:
+              name: canary-service
+              namespace: nantian-demo
+              port: 8080
+            percent: 5
+```
+
+This configuration mirrors 5% of requests that match the `/api` path prefix to the `canary-service` backend. The remaining 95% of requests go only to `production-service`. Both backends receive identical copies of the mirrored requests.
+
+## Sampling Options
+
+The percentage of traffic to mirror is controlled by one of two fields:
+
+| Field | Type | Example | Use Case |
+| --- | --- | --- | --- |
+| `percent` | u32 (0-100) | `percent: 10` mirrors 10% of requests. | Simple percentage-based sampling. |
+| `fraction` | { `numerator`, `denominator` } | `fraction: { numerator: 1, denominator: 1000 }` mirrors 1 in 1000 requests. | Precise fractional sampling when your traffic volume is very high. |
+
+When both `percent` and `fraction` are set, `fraction` takes precedence. When both are absent or zero, no requests are mirrored. A value of `percent: 100` mirrors every request.
+
+The sampling decision is made per-request, independently, based on a random number generator seeded per-request. Over thousands of requests, the actual mirror rate converges to the configured percentage. For low-traffic routes, individual bursts may deviate from the target rate.
+
+## Mirror Request Execution
+
+Mirrored requests are executed as subrequests within the gateway's connection pool. The gateway enforces a concurrency budget for mirror traffic to prevent mirroring from exhausting backend connections. The default budget is 1024 concurrent mirror subrequests across the entire data plane process. You can adjust this with `configureRequestMirrorBudget` in the data plane configuration.
+
+When the mirror budget is exhausted, new mirrors are dropped on the floor. No error is returned to the caller. A warning is logged once every 256 drops. Mirrors are also dropped if the mirror body channel is full (one body chunk ahead of consumption is the limit), which prevents a slow shadow backend from buffering unbounded request bodies in memory.
+
+For requests without a body (GET, HEAD, DELETE), the mirror subrequest sends the headers and waits for the shadow backend to respond, then discards the response. The wait is capped at 100 milliseconds. If the shadow backend does not respond within that window, the mirror times out and the background task is abandoned.
+
+## Performance Impact
+
+Mirror traffic shares the gateway's connection pool and CPU with primary traffic. At high mirror percentages, the overhead is measurable:
+
+- Each mirrored request consumes one backend connection from the pool while it is inflight.
+- Body mirroring copies request body bytes for the shadow path. Large bodies (uploads, streaming) amplify memory and network costs.
+- Mirror subrequests use I/O threads that would otherwise handle primary requests.
+
+Start with a low mirror percentage (1% to 5%) and increase gradually while monitoring the gateway's resource usage and latency. The 100ms mirror wait timeout means that slow shadow backends do not block primary connections, but they can still consume connection slots.
+
+Mirrors do not affect the primary response latency path. The primary response is sent to the client before the gateway waits for any mirror responses. The mirror wait runs in a background task after the primary response stream finishes.
+
+## Use Cases
+
+Common patterns for request mirroring:
+
+**Canary testing.** Deploy a new version of a service as a shadow backend. Mirror a fraction of production traffic to it and compare response bodies and status codes between the production and shadow instances. If the shadow diverges, you catch the regression before rolling out to users.
+
+**Staging verification.** Point mirror traffic at a staging environment that runs under realistic load but is not user-facing. Verify that database migrations, API schema changes, and infrastructure updates behave correctly under production traffic patterns.
+
+**Load testing.** Mirror traffic to a separate cluster running a load test harness. The mirror traffic acts as a reproducible, realistic workload without the overhead of generating synthetic requests.
+
+**Observability warmup.** Direct mirror traffic into a new observability pipeline (tracing backend, log aggregator) to validate that your instrumentation captures the right spans and metrics before sending primary traffic through it.
