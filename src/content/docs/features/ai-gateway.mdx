@@ -20,6 +20,43 @@ The AI Gateway feature is built around two Kubernetes resources:
 
 The runtime includes modules for OpenAI, Anthropic, and Ollama format handling, token accounting, rate limiting, prompt and PII processing, semantic cache, fallback, A/B testing, cost tracking, and multitenant context. Treat those as runtime modules unless a stable CRD field explicitly exposes the behavior you want to configure.
 
+## Capabilities
+
+The AI Gateway provides the following capabilities, each configurable via CRD:
+
+### Model Routing
+Route requests to different LLM models based on complexity classification, request attributes, or header-based selection. [Read more](/features/ai-gateway/model-routing)
+
+### Semantic Cache
+Cache LLM responses for similar prompts using embedding similarity to reduce redundant API calls and costs. [Read more](/features/ai-gateway/semantic-cache)
+
+### Prompt Guard
+Detect and block prompt injection attempts and suspicious keyword patterns before requests reach the model. [Read more](/features/ai-gateway/prompt-guard)
+
+### Content Safety
+Filter violent, hateful, self-harm, exploitation, and illegal content from both prompts and model responses. [Read more](/features/ai-gateway/content-safety)
+
+### PII Masking
+Detect and mask personally identifiable information such as email addresses, phone numbers, and credentials in prompts and responses. [Read more](/features/ai-gateway/pii-masking)
+
+### A/B Testing
+Split traffic between model variants using weighted selection to compare performance, cost, and quality across providers. [Read more](/features/ai-gateway/ab-testing)
+
+### Fallback Chains
+Configure backup models in sequence so requests cascade to fallback providers when the primary model fails or times out. [Read more](/features/ai-gateway/fallback)
+
+### Cost Tracking
+Monitor token usage and estimated cost per model, per tenant, and per route for chargeback and budget analysis. [Read more](/features/ai-gateway/cost-tracking)
+
+### Multi-Tenant
+Map multiple API keys to tenants, each with their own model allowlists, rate limits, and usage quotas. [Read more](/features/ai-gateway/multitenant)
+
+### Token Policies
+Enforce per-minute and per-hour token rate limits on AI routes, with configurable burst multipliers and rejection strategies. [Read more](/features/ai-gateway/token-policy)
+
+### Langfuse Integration
+Send traces, generations, and scores to Langfuse for LLM observability and debugging of model performance. [Read more](/features/ai-gateway/langfuse)
+
 ## Enablement
 
 Start from [Experimental Features](/configuration/experimental-features/) and make sure the required CRDs exist:
