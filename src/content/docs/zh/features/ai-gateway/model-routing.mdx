@@ -1,0 +1,155 @@
+---
+title: 模型路由
+description: "按复杂度对传入的 AI 请求进行分类，并根据分类结果路由到不同的 LLM 模型。"
+---
+
+模型路由让网关可以检查每个 AI 请求，并根据任务类型将其发送到不同的模型。一句简单的 `hello` 会转发到快速、便宜的模型。一篇 5000 字的文章则转发到能力更强的模型。路由过程对客户端透明，调用方无需知道是哪个模型在处理请求。
+
+## 分类机制
+
+模型路由将每个请求分为三个复杂度等级。分类依据是请求中所有消息的总字符数：
+
+| 复杂度 | 阈值 | 典型场景 |
+| --- | --- | --- |
+| Simple | 少于 200 个字符 | 问候语、单一问题、快速查询 |
+| Medium | 200 到 1999 个字符 | 解释说明、摘要、代码片段 |
+| Complex | 2000 个字符及以上 | 长篇写作、多轮对话、深度分析 |
+
+字符数统计包含所有消息内容，包括 system 消息和 user 消息。包含多个独立文本字段的多部分消息会被拼接成一个字符串进行统计。每个请求在做出路由决策前都会运行分类逻辑，不需要外部分类器或额外的 API 调用。
+
+## 配置路由
+
+路由规则将每个复杂度等级映射到一个或多个模型目标。每条路由包含 `model` 名称、`weight` 权重（用于同等级内的排序），以及可选的 `maxTokens` 上限来控制该路由的输出长度。网关会选择已分类复杂度下权重最高的路由。
+
+通过 `AIService` 资源配置模型路由：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: smart-router
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  modelRouting:
+    routes:
+      simple:
+        - model: gpt-3.5-turbo
+          weight: 100
+      medium:
+        - model: gpt-4o-mini
+          weight: 100
+          maxTokens: 4096
+      complex:
+        - model: gpt-4o
+          weight: 100
+```
+
+在这个例子中，传入的 `"hello"`（少于 200 个字符）被路由到最便宜的 `gpt-3.5-turbo`。请求代码审查的段落（200 到 1999 个字符）命中 `gpt-4o-mini`，并带有 4096 token 的输出上限。2000 个字符及以上的请求则落到完整的 `gpt-4o` 模型。
+
+## 按路由覆盖模型
+
+每个复杂度路由可以独立覆盖模型。如果你只想重定向复杂请求，其余请求保持默认，可以只声明 `complex` 路由：
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: claude-3-opus
+          weight: 100
+          maxTokens: 8192
+```
+
+少于 2000 字符的请求继续使用 `spec.model` 中指定的默认模型。2000 字符及以上的请求被拦截并改为发送到 `claude-3-opus`。
+
+你也可以只为某一个或两个复杂度等级定义路由。任何没有显式路由的复杂度等级会回退到默认的 provider 模型。
+
+## 基于权重的排序
+
+当同一复杂度等级存在多条路由时，网关按权重降序排列，并选择第一条。`weight: 100` 的路由优先于 `weight: 50` 的路由。这让你可以在同一复杂度等级中定义主模型和一个或多个备用目标。
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: gpt-4o
+          weight: 100
+        - model: claude-3-sonnet
+          weight: 50
+        - model: gpt-4o-mini
+          weight: 25
+```
+
+这里 `gpt-4o` 总是作为复杂请求的首选。其他两个模型根据权重排在其后的回退链中。
+
+## 与回退链集成
+
+模型路由与网关的回退机制协同工作。当路由到的模型返回错误、超时或不可用时，网关可以回退到同复杂度等级中的下一条路由。结合基于权重的排序，你可以在一个配置中同时获得模型选择和容错能力。
+
+一个三层带回落的路由配置：
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      complex:
+        - model: gpt-4o
+          weight: 100
+        - model: claude-3-sonnet
+          weight: 50
+        - model: gpt-4o-mini
+          weight: 25
+    fallback:
+      enabled: true
+      maxAttempts: 3
+      retryOnStatus: [429, 500, 502, 503]
+```
+
+网关首先尝试 `gpt-4o`。如果它返回服务端错误或触发限流，则尝试按权重排名的下一个模型：`claude-3-sonnet`。如果也失败了，再轮到 `gpt-4o-mini`。所有路由都耗尽后，网关向调用方返回错误。
+
+## A/B 模型测试
+
+基于权重的路由同样支持在同一复杂度等级中对不同模型进行 A/B 测试。在同一复杂度等级下定义两条不同权重的路由来按比例分流：
+
+```yaml
+spec:
+  modelRouting:
+    routes:
+      medium:
+        - model: gpt-4o-mini
+          weight: 90
+        - model: claude-3-haiku
+          weight: 10
+```
+
+对于中等复杂度的请求，90% 的流量流向 `gpt-4o-mini`，10% 流向 `claude-3-haiku`。在调整分流比例或做出永久切换之前，请监控两个模型的成本、延迟和质量指标。
+
+## 可观测性
+
+模型路由决策通过 AI Gateway 指标上报。每个请求携带与路由相关的标签，展示分类出的复杂度等级和最终选定的模型。利用这些指标可以：
+
+- 追踪流量在不同复杂度等级之间随时间分布的变化。
+- 识别利用率过高或过低的复杂度等级。
+- 对比处理同一复杂度等级的不同模型之间的延迟和错误率。
+- 验证 A/B 分流是否达到了预期的比例。
+
+Admin API 也会暴露当前路由表，无需查看 Pod 日志或单个响应的 header 即可验证配置。
+
+## 生产环境建议
+
+- 从默认阈值（200、2000 字符）开始，监控几天流量分布后再调整。你的工作负载可能集中在与你预期不同的字符数区间。
+- 将每条路由的 `maxTokens` 上限与各模型的成本结构和上下文窗口对齐。为简单请求的 `gpt-3.5-turbo` 设置较低的 token 上限可以显著降低成本。
+- 在投入生产之前，通过故意触发失败来测试回退链。确认每个回退模型在相同的 prompt 下都能正常工作。
+- 利用内置指标验证复杂路由只在真正复杂的输入上触发。如果太多请求落到昂贵模型上，考虑提高 Complex 阈值。
+- 进行 A/B 测试时，确保测试窗口足够长以收集有统计意义的数据（每个模型至少数千个请求）。
+
+## 相关页面
+
+- [AI Gateway 概览](/features/ai-gateway/)
+- [实验功能](/configuration/experimental-features/)
+- [流量管理](/features/traffic-management/)
+- [安全与可观测性](/features/security-observability/)

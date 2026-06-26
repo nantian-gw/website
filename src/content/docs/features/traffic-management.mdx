@@ -87,9 +87,169 @@ When `keyType: Header` is used, set `headerName`.
 - Treat `BackendLBPolicy` as experimental and verify generated data plane behavior before relying on it.
 - Use the [Production Installation](/installation/production/) guide for high-availability deployment patterns.
 
+## Header-Based Routing
+
+Use HTTP headers to route traffic when path or host matching is not enough:
+
+- Match on exact header values or prefix patterns.
+- Route specific `User-Agent` or `x-api-version` headers to different backends.
+- Configuration uses standard Gateway API `HTTPRoute` header match conditions.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: header-routing
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - matches:
+        - headers:
+            - name: x-api-version
+              value: v2
+      backendRefs:
+        - name: api-canary
+          port: 8080
+    - backendRefs:
+        - name: api-stable
+          port: 8080
+```
+
+Requests carrying `x-api-version: v2` are routed to the canary backend. Everything else falls through to the stable backend, which acts as the catch-all rule.
+
+### Common Header Routing Patterns
+
+- **API versioning:** Route based on `x-api-version`, `Accept-Version`, or similar custom headers.
+- **Client type routing:** Send mobile clients to a mobile-optimized backend via `User-Agent` matching.
+- **Feature flags:** Gate experimental backend access behind a feature-flag header.
+
+When combining header matches with path or query matches, all conditions must be satisfied for the rule to apply.
+
+## Weighted Traffic Splitting
+
+Weighted traffic splitting distributes requests across multiple backends using `backendRefs.weight`:
+
+- Assign a weight between 0 and 100 to each `backendRef` entry.
+- Weights are resolved as proportional distribution: a backend with weight 20 receives roughly 20% of traffic.
+- The total of all weights does not need to sum to 100.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: weighted-split
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: api-prod
+          port: 8080
+          weight: 90
+        - name: api-canary
+          port: 8080
+          weight: 10
+```
+
+### Use Cases
+
+- **Canary deployments:** Route a small percentage to a new version and monitor before ramping up.
+- **Blue-green rollouts:** Gradually shift traffic from the old stack to the new stack.
+- **A/B testing:** Split traffic between two variants and compare metrics.
+
+### Best Practices
+
+- Start with small canary percentages (1-5%) until health signals are visible in metrics and dashboards.
+- Combine weighted routing with observability to compare latency, error rate, and backend behavior during a rollout.
+- Use `BackendLBPolicy` for session-affinity when stateful workloads need sticky routing across weighted backends.
+- A `backendRef` with weight `0` receives no traffic but remains valid for a zero-weight canary pattern.
+
+### Limitations
+
+- Weight distribution is approximate at the data plane level. Short evaluation windows may show variance.
+- Weights apply per-rule, not per-route. Route-level splits require separate rules.
+- Backends must belong to the same namespace as the route unless `ReferenceGrant` is configured.
+
+## Request Mirroring
+
+Request mirroring sends a copy of live traffic to a secondary backend without affecting the primary response:
+
+- Mirror requests are fire-and-forget. The response from the mirrored backend is discarded.
+- Primary request flow is never delayed by mirror behavior.
+- A mirror budget controls the maximum fraction of traffic mirrored.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mirror-example
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: api-prod
+          port: 8080
+      filters:
+        - type: RequestMirror
+          requestMirror:
+            backendRef:
+              name: api-staging
+              port: 8080
+```
+
+Use mirroring to validate a new backend version against real traffic, warm caches in a staging environment, or replay production traffic for offline analysis. See the [Request Mirroring](/configuration/request-mirroring/) guide for detailed configuration.
+
+## Rate Limiting
+
+Nantian Gateway supports two rate-limiting models:
+
+- **Token-based rate limiting** for AI model backends, enforced through `TokenPolicy` resources. This controls token consumption rates per tenant or per API key.
+- **Request-based rate limiting** for HTTP routes, enforced through `BackendTLSPolicy` and gateway-level configuration. This controls request rates per backend or per route.
+
+Rate limits can be configured at multiple levels:
+
+- **Per backend:** One limit applies to all traffic targeting a specific backend service.
+- **Per tenant:** Separate limits for different API consumers sharing the same backend.
+- **Per route:** Granular limits scoped to individual route rules.
+
+See [Token Policy](/features/ai-gateway/#token-policy) in the AI Gateway docs and [Rate Limiting Configuration](/configuration/rate-limiting/) for operational details.
+
+## Health Checks and Failure Ejection
+
+The data plane monitors backend health through two complementary mechanisms:
+
+### Active Health Probes
+
+Active probes periodically send requests to each backend endpoint and mark it healthy or unhealthy based on the response:
+
+- Configure probe interval, timeout, and expected status codes.
+- Probes can use a dedicated health-check path or the normal request path.
+- Unhealthy endpoints are removed from the load-balancing pool until they recover.
+
+### Passive Failure Ejection
+
+Passive ejection removes backends that fail real traffic requests:
+
+- An endpoint is ejected after a configurable number of consecutive failures.
+- Recovery thresholds define how many successful probes must pass before the endpoint re-enters the pool.
+- Settings can inherit from gateway defaults or be overridden per backend.
+
+### Recovery and Inheritance
+
+- Recovery thresholds control how quickly an ejected endpoint is reinstated.
+- Backend-level health check settings inherit from gateway-level defaults unless explicitly overridden.
+- Monitor ejected endpoints through data plane metrics to catch systemic backend failures early.
+
 ## Related Pages
 
 - [Gateway API Resources](/api-reference/gateway-api/)
 - [Custom And Experimental Resources](/api-reference/crds/)
 - [Security And Observability](/features/security-observability/)
 - [Production Installation](/installation/production/)
+- [Request Mirroring](/configuration/request-mirroring/)
+- [Rate Limiting Configuration](/configuration/rate-limiting/)

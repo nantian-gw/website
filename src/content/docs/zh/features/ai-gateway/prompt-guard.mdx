@@ -1,0 +1,129 @@
+---
+title: 提示词防护
+description: "在 AI 请求中检测 prompt 注入、越狱尝试和被屏蔽的关键词，由 Nantian Gateway 提供防护。"
+---
+
+提示词防护在请求到达模型 provider 之前检查 AI 请求中的每条消息。当检测到注入模式、越狱尝试或被屏蔽的关键词时，它可以直接阻止请求、记录警告，或放行并附带记录。
+
+## 检测机制
+
+防护模块对请求中每条消息的文本内容运行一组正则表达式模式和关键词检查。system 消息和 user 消息都会被扫描。包含多个独立文本字段的多部分消息在扫描前会拼接成一个字符串。
+
+首先检查模式，然后检查关键词。一旦找到匹配，立即终止检查并产生结果，不再评估后续的模式或关键词。结果包含 `reason` 标签（如 `injection_pattern_match` 或 `blocked_keyword`）和触发匹配的具体文本。
+
+整个防护检查在数据面同步运行，不会因外部扫描器或独立服务调用而产生额外延迟。
+
+## 内置模式
+
+提示词防护在启动时预编译五种默认正则表达式模式：
+
+| 模式名称 | 检测目标 |
+| --- | --- |
+| Ignore previous instructions | "ignore all previous instructions"、"forget prior prompts"、"override above instructions" 等短语。 |
+| DAN / jailbreak | 试图让模型扮演 "DAN" 或声明自己已越狱的尝试："you are DAN"、"act as jailbroken"。 |
+| Persona switch | "different persona"、"new role"、"different character" 等请求。 |
+| Guideline bypass | "don't follow your guidelines"、"never follow the rules"、"don't follow your instructions" 等短语。 |
+| System prompt injection | 试图内联设置新 system prompt 的消息，例如 `system prompt: you are ...`。 |
+
+所有内置模式均不区分大小写。它们针对的是实际注入和越狱尝试中最常见的措辞模式。
+
+如果你想保留内置模式并在其基础上添加自定义模式，不要设置 `customPatterns` 以保持默认模式生效。指定 `customPatterns` 会完全替换内置模式。
+
+## 配置
+
+通过 `AIService` 资源配置提示词防护：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: guarded-openai
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  promptGuard:
+    enabled: true
+    mode: block
+    customPatterns:
+      - "(?i)reveal\\s+(your|the)\\s+(credentials|secrets|token)"
+      - "(?i)output\\s+the\\s+hidden\\s+prompt"
+    keywords:
+      - "malware"
+      - "phishing"
+```
+
+此配置用两条自定义模式替换了五条默认模式，并添加了两个关键词。防护设为 `block` 模式，任何匹配的请求都会被拒绝。
+
+## 自定义模式
+
+自定义模式使用 Rust 正则语法，在启动时编译。无效的模式会导致网关拒绝配置，并附上描述哪个模式失败及其原因的错误信息。
+
+模式应用于每个请求中所有消息拼接后的文本。要匹配时不区分大小写，请在模式前加 `(?i)` 前缀。要跨消息边界匹配，请构造允许 token 之间留有空白字符的正则表达式。
+
+精准的自定义模式应能精确捕获你想要阻止的注入技术，避免误报。在部署到生产环境之前，先在样本流量上测试新模式。
+
+## 关键词
+
+`keywords` 列表阻止或标记包含特定词语的请求。关键词匹配不区分大小写，在全量消息文本中做子串检查。
+
+关键词比模式更简单，但精确度更低。像 `"password"` 这样的关键词会阻止任何包含该子串的请求，即使请求是合法的（例如 "What is a password manager?"）。请谨慎使用关键词，对需要精细化检测的场景优先使用正则表达式模式。
+
+关键词在模式之后检查。如果已有正则模式匹配，则跳过该请求的关键词检查。
+
+## 模式
+
+`mode` 字段控制匹配发生时的行为：
+
+| 模式 | 行为 |
+| --- | --- |
+| `block` | 请求被拒绝，返回 HTTP 503 状态码。响应体包含原因和匹配的文本。 |
+| `warn` | 请求继续发送到 provider，但匹配被记录并在指标中以警告标签暴露。 |
+| `log` | 匹配被静默记录在网关日志中。请求继续执行，客户端无任何感知信号。 |
+
+`block` 是 `promptGuard.enabled` 设为 `true` 且未显式配置模式时的默认行为。
+
+## 被阻止请求的响应
+
+当请求在 `block` 模式下被阻止时，调用方收到 HTTP 503 响应。响应体包含一个带有防护决策的 JSON 错误对象：
+
+```json
+{
+  "error": {
+    "message": "request blocked by prompt guard",
+    "reason": "injection_pattern_match",
+    "matched": "ignore all previous instructions"
+  }
+}
+```
+
+`reason` 字段有两种值：正则模式匹配时为 `injection_pattern_match`，关键词匹配时为 `blocked_keyword: <keyword>`。`matched` 字段包含触发阻止的精确文本，有助于排查误报。
+
+## 禁用提示词防护
+
+将 `enabled` 设为 `false` 可以禁用所有防护检查，无需删除配置。这在测试期间、排查误报时，或需要临时放行所有流量以优化模式时很有用。
+
+## 指标
+
+被阻止的请求在 AI Gateway 指标中以 `prompt_guard_blocked` 标签计数。在 `warn` 模式下，匹配通过独立的警告计数器体现。利用这些指标可以：
+
+- 追踪被阻止请求量随时间的变化，识别攻击突发。
+- 通过将被阻止请求与总请求量对比，监控误报率。
+- 在从 `warn` 切换到 `block` 之前，验证新模式或关键词没有阻止合法流量。
+- 对可能表明有组织注入攻击的突然激增设置告警。
+
+## 生产环境建议
+
+- 首次部署提示词防护时，从 `mode: warn` 开始。运行几天，以便在切换到 `block` 之前审查误报模式。
+- 自定义模式应尽可能精确。过于宽泛的模式（如 `(?i)system`）可能阻止合法请求，降低用户体验。
+- 关键词是粗粒度工具。精细化检测应优先使用正则模式，将关键词保留给绝对不应出现在生产流量中的绝对屏蔽词列表。
+- 在模式或关键词变更后的一周内，密切关注 `prompt_guard_blocked` 指标。变更后的激增通常意味着新规则捕获了不该捕获的内容。
+- 如果内置模式对你的用例产生过多误报，用 `customPatterns` 替换它们，而不是完全禁用防护。
+
+## 相关页面
+
+- [AI Gateway 概览](/features/ai-gateway/)
+- [模型路由](/features/ai-gateway/model-routing/)
+- [语义缓存](/features/ai-gateway/semantic-cache/)
+- [安全与可观测性](/features/security-observability/)

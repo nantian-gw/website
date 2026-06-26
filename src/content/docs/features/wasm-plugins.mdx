@@ -84,6 +84,192 @@ The data plane runtime enforces plugin loading and execution boundaries, but san
 - Keep sandbox network and filesystem access disabled by default.
 - Watch data plane logs and metrics for plugin load failures, rejections, and latency.
 
+## Writing a Plugin
+
+Wasm plugins follow the standard WebAssembly module format and must export specific symbols that the data plane runtime invokes:
+
+### Required Exports
+
+Every plugin must export these WebAssembly symbols:
+
+- `alloc(size: i32) -> i32`: Allocates memory for data passed between the host and plugin. Returns a pointer to the allocated region.
+- `memory`: The plugin's linear memory instance, through which the host reads and writes data.
+- At least one hook function: `on_request`, `on_response`, or `on_stream_chunk`.
+
+### Hook Function Signatures
+
+Each hook function receives request metadata and headers from the host:
+
+```
+on_request(context_ptr: i32, context_len: i32) -> i32
+on_response(context_ptr: i32, context_len: i32) -> i32
+on_stream_chunk(context_ptr: i32, context_len: i32) -> i32
+```
+
+The context data is a JSON-encoded structure containing request or response headers, the backend target, and plugin configuration.
+
+### Return Values
+
+- Return `0` to allow the request to continue normally.
+- Return a non-zero HTTP status code to reject the request with that status. For example, returning `403` rejects with HTTP 403 Forbidden. The rejection message can be set via a header in the context response.
+
+### Accessing Request Data
+
+The plugin reads request headers and body through the context structure passed by the host. Response hooks receive the upstream response headers and status code. Stream chunk hooks receive individual chunk data for SSE-based streaming.
+
+### Plugin Configuration
+
+The `config` field on the `WasmPlugin` resource is passed to the plugin as a JSON string at load time:
+
+```yaml
+spec:
+  config: |
+    {"mode":"audit","log_level":"debug","allowed_roles":["admin","viewer"]}
+```
+
+The plugin parses this JSON during initialization and can use it to control behavior without recompilation.
+
+## Hook Reference
+
+### on_request
+
+Executes before the request is proxied to the upstream backend. Use this hook for:
+
+- Custom authentication and authorization checks.
+- Request validation against a schema or policy.
+- Header injection or modification (add tracing headers, tenant IDs, etc.).
+- Early rejection of malformed or unauthorized requests.
+
+### on_response
+
+Executes after receiving the upstream response, before it returns to the client. Use this hook for:
+
+- Response header manipulation (strip internal headers, add security headers).
+- Audit metadata attachment.
+- Response body validation or transformation.
+- Rate-limit accounting and logging.
+
+### on_stream_chunk
+
+Executes on each chunk of an SSE (Server-Sent Events) streaming response. Use this hook for:
+
+- Streaming content inspection and filtering.
+- Per-token processing for LLM streaming responses.
+- Chunk-level metadata injection.
+
+Keep chunk processing extremely fast. Streaming latency is amplified across every chunk, so even small delays per chunk add up quickly.
+
+### Hook Execution Order
+
+When multiple hooks are specified on a single plugin, they execute in this order:
+
+1. `onRequest` (before upstream)
+2. `onResponse` (after upstream, before client)
+3. `onStreamChunk` (per chunk, only for streaming responses)
+
+If multiple plugins are bound to the same target, each hook type runs across all matching plugins before the next hook type begins.
+
+## Sandbox Configuration
+
+The sandbox enforces resource limits on each plugin to protect the data plane from runaway or malicious modules:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `maxMemoryBytes` | integer | Maximum heap memory the plugin can allocate. Example: `67108864` for 64 MiB. |
+| `maxExecutionTimeMs` | integer | Maximum wall-clock time a single hook invocation may run. Example: `100` for 100 ms. |
+| `allowNetwork` | bool | Whether the plugin can make outbound network calls. Default: `false`. |
+| `allowFileSystem` | bool | Whether the plugin can read or write to the filesystem. Default: `false`. |
+
+```yaml
+spec:
+  sandbox:
+    maxMemoryBytes: 67108864
+    maxExecutionTimeMs: 100
+    allowNetwork: false
+    allowFileSystem: false
+```
+
+### Production Recommendations
+
+- Start with conservative limits and relax only when profiling shows need.
+- Keep `allowNetwork` and `allowFileSystem` disabled unless the plugin's documented requirements explicitly call for them.
+- Monitor plugin execution times through Wasm metrics and increase `maxExecutionTimeMs` if near-limit warnings appear in logs.
+
+## Deployment
+
+### WasmPlugin CRD
+
+The `WasmPlugin` custom resource is defined under `gateway.nantian.dev/v1alpha1`. After installing the CRD, verify it is registered:
+
+```bash
+kubectl get crd wasmplugins.gateway.nantian.dev
+```
+
+### Module Sources
+
+Choose a module source based on your deployment workflow:
+
+- **`wasm.url`:** Pull the module from an HTTP/HTTPS artifact repository. Recommended for production when combined with `sha256` verification.
+- **`wasm.configMap`:** Store the module bytes inline in a Kubernetes ConfigMap. Useful for GitOps workflows where modules are committed alongside manifests.
+- **`wasm.inline`:** Embed the module bytes directly in the `WasmPlugin` resource. Use only for small test modules due to resource size limits.
+
+```yaml
+spec:
+  wasm:
+    url: https://artifacts.example.com/plugins/request-audit-v1.2.0.wasm
+    sha256: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+```
+
+### Target Binding
+
+`targetRefs` determines which Gateway API resources execute the plugin. Supported target kinds include `HTTPRoute`, `GRPCRoute`, and `Gateway`. Start with a single `HTTPRoute`, validate behavior, then expand scope.
+
+### Plugin Versioning and Updates
+
+- Pin external modules with `sha256` to ensure the exact module version is loaded.
+- Updating a plugin creates a new deployment cycle in the data plane. Existing in-flight requests continue with the old module until they complete.
+- Test plugin updates against a canary route before rolling out to production routes.
+
+## Debugging
+
+### Common Errors
+
+| Error | Cause | Fix |
+| --- | --- | --- |
+| Missing exports | Module does not export `alloc`, `memory`, or hook functions. | Verify the module was compiled for the Nantian Wasm ABI. |
+| Execution timeout | Hook exceeded `maxExecutionTimeMs`. | Increase the timeout or optimize the hook code. |
+| Memory exceeded | Plugin exceeded `maxMemoryBytes`. | Increase the limit or reduce allocations. |
+| Module load failure | Invalid `.wasm` bytes or broken URL. | Verify module source and `sha256` checksum. |
+| Target not found | `targetRefs` points to a missing resource. | Confirm the target resource exists and is in the correct namespace. |
+
+### Log Output
+
+Plugins can write diagnostic output through the data plane's logging infrastructure. Messages appear in the data plane pod logs tagged with the plugin name and hook:
+
+```
+[wasm:request-audit][onRequest] processing request for /v1/chat/completions
+[wasm:request-audit][onRequest] audit mode: request accepted
+```
+
+Increase log verbosity in the data plane configuration to see plugin-level debug messages.
+
+### Local Testing
+
+To test plugins before cluster deployment:
+
+1. Use the Nantian CLI to build a plugin skeleton with the required exports.
+2. Compile the plugin with the `wasm32-wasi` target.
+3. Run the data plane locally in development mode with the plugin loaded via a test configuration.
+4. Send test requests and inspect log output and behavior.
+
+For a full walkthrough, see the [WASM Plugin Development Guide](/features/wasm-plugin-dev-guide/).
+
+## See Also
+
+- [WASM Plugin Development Guide](/features/wasm-plugin-dev-guide/) for a complete development walkthrough with code examples and testing patterns.
+- [Data Plane Architecture](/architecture/dataplane/) for how the plugin runtime integrates with the request lifecycle.
+- [Security And Observability](/features/security-observability/) for monitoring plugin health and performance.
+
 ## Related Pages
 
 - [Experimental Features](/configuration/experimental-features/)

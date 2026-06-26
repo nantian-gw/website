@@ -62,6 +62,125 @@ When a route behaves unexpectedly:
 
 For commands and known failure modes, see [Troubleshooting](/operations/troubleshooting/).
 
+## PII Detection and Masking
+
+The gateway can detect and mask personally identifiable information (PII) in prompts and responses before they reach AI model backends or return to clients. This feature is part of the AI Gateway security surface:
+
+- **Six built-in entity types:** email addresses, phone numbers, credit card numbers, social security numbers, IP addresses, and custom patterns.
+- **Three masking modes:**
+  - `redact` replaces detected entities with a placeholder like `[REDACTED]`.
+  - `hash` replaces entities with a one-way hash for correlation without exposure.
+  - `audit` logs detected entities without modifying the content.
+- Configuration is handled through `AIService` and `TokenPolicy` resources.
+
+See the [PII Detection](/features/ai-gateway/#pii-detection) section in the AI Gateway docs for setup instructions and field-level details.
+
+## Content Safety Filtering
+
+Content safety filtering protects against harmful or inappropriate content in both prompts and model responses:
+
+- **Five built-in content categories:**
+  - `hate` and `hate_threatening`
+  - `self_harm` and `self_harm_intent`
+  - `sexual`
+  - `violence` and `violence_graphic`
+  - `profanity`
+- **Two enforcement modes:**
+  - `block` rejects the request or response entirely when unsafe content is detected.
+  - `flag` allows the request but attaches a safety annotation for downstream handling.
+- **Custom regex patterns** can supplement built-in categories for organization-specific filtering rules.
+
+Safety filtering is configured per `AIService` and can be combined with rate limiting and PII detection for a layered security posture.
+
+## Prompt Injection Guard
+
+Prompt injection detection identifies attempts to override model instructions or extract sensitive system prompts:
+
+- **Injection detection patterns** scan for common injection techniques: delimiter injection, role-playing overrides, and instruction leakage attempts.
+- **Keyword blocking** matches against a configurable deny-list of phrases associated with known attacks.
+- **Two modes:** `block` rejects the request, while `warn` allows it but records the detection for auditing.
+
+Enable prompt injection guard through the `AIService` security configuration. Test against representative injection scenarios before enabling blocking mode in production to avoid false-positive rejections.
+
+## Metrics and Dashboards
+
+Nantian Gateway exposes operational metrics for monitoring gateway and backend health:
+
+### Prometheus Metrics
+
+- A `/metrics` endpoint is available on both control plane and data plane pods.
+- Metrics cover request rate, latency percentiles, error rates, and backend health.
+- AI Gateway adds token usage, policy decisions, and content safety counters.
+- Wasm plugins add hook execution counts, latencies, and failure rates.
+
+### Grafana Dashboards
+
+- A prebuilt Grafana dashboard is included for gateway health and traffic visualization.
+- Dashboard panels cover: request throughput, P50/P95/P99 latency, error rate by route, active backend count, and token consumption trends.
+- Import the dashboard JSON from the [Grafana Dashboard](/operations/grafana/) page.
+
+### Key Metrics
+
+| Metric | Signal |
+| --- | --- |
+| Request rate | Traffic volume per route and backend. |
+| Latency (P50, P95, P99) | Response time distribution. |
+| Error rate (4xx, 5xx) | Client and server-side failure rates. |
+| Token usage | AI model consumption per tenant. |
+| Backend ejection count | Passive failure detection activity. |
+
+### Alerting
+
+Use Prometheus alerting rules or Grafana alerting to surface:
+
+- Elevated error rates above a configured threshold.
+- Backend ejection spikes indicating upstream failures.
+- Certificate expiry approaching within N days.
+- Token usage anomalies or policy enforcement spikes.
+
+See [Observability Configuration](/configuration/observability/) for setup and [Metrics Reference](/operations/metrics/) for the full metric catalog.
+
+## Tracing
+
+Distributed tracing follows requests from the gateway listener through to upstream backends:
+
+- **OpenTelemetry integration** exports spans to any compatible collector (Jaeger, Tempo, Datadog, etc.).
+- **Trace sampling** is configurable: sample a fraction of requests, sample error traces only, or use parent-based sampling.
+- **Span structure** includes two primary span types:
+  - `controlplane.reconciler`: spans for Gateway API resource translation and xDS generation.
+  - `dataplane.upstream`: spans for request handling, filter execution, and backend proxying.
+
+Configure tracing through the observability section of the gateway configuration. For setup details, see [Observability Configuration](/configuration/observability/).
+
+## Access Logging
+
+Access logs record every request processed by the data plane in a structured JSON format:
+
+- **Format:** Each log line is a JSON object with consistent field names.
+- **Log fields include:**
+  - `method`, `path`, `host`: request identifiers.
+  - `status`, `latency_ms`, `upstream`: response and routing information.
+  - `tls_version`, `client_ip`, `user_agent`: connection metadata.
+  - `route_name`, `gateway_name`: Gateway API resource attribution.
+- **Non-blocking log mode:** Log writes do not block the request path. Under extreme load, the data plane drops log lines rather than adding latency.
+
+```json
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "host": "api.example.com",
+  "status": 200,
+  "latency_ms": 342,
+  "upstream": "llm-backend.nantian-demo.svc:8080",
+  "tls_version": "1.3",
+  "client_ip": "10.0.1.42",
+  "route_name": "llm-route",
+  "gateway_name": "public-gateway"
+}
+```
+
+Access logs are written to stdout by default and can be collected by any Kubernetes log aggregator.
+
 ## Related Pages
 
 - [TLS / mTLS Configuration](/configuration/tls/)
@@ -69,3 +188,4 @@ For commands and known failure modes, see [Troubleshooting](/operations/troubles
 - [Metrics Reference](/operations/metrics/)
 - [Grafana Dashboard](/operations/grafana/)
 - [Troubleshooting](/operations/troubleshooting/)
+- [AI Gateway](/features/ai-gateway/)
