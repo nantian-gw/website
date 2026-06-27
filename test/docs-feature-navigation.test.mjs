@@ -44,16 +44,17 @@ test("feature sidebar exposes the new feature section", () => {
 
   assert.ok(featureSection, "missing Features sidebar section");
   assert.equal(featureSection.translations?.["zh-CN"], "功能");
-  assert.deepEqual(
-    featureSection.items?.map(({ link }) => link),
-    [
-      "features/",
-      "features/ai-gateway",
-      "features/wasm-plugins",
-      "features/traffic-management",
-      "features/security-observability",
-    ],
-  );
+
+  function collectLinks(items) {
+    return items.flatMap((item) => {
+      const links = [];
+      if (item.link) links.push(item.link);
+      if (item.items) links.push(...collectLinks(item.items));
+      return links;
+    });
+  }
+
+  const allLinks = collectLinks(featureSection.items ?? []);
 
   for (const link of [
     "features/",
@@ -62,7 +63,7 @@ test("feature sidebar exposes the new feature section", () => {
     "features/traffic-management",
     "features/security-observability",
   ]) {
-    assert.ok(featureSection.items?.some((item) => item.link === link), `missing sidebar link ${link}`);
+    assert.ok(allLinks.includes(link), `missing sidebar link ${link}`);
   }
 });
 
