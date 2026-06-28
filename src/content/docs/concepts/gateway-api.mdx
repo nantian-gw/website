@@ -7,6 +7,17 @@ The Kubernetes Gateway API is a specification for configuring HTTP and TCP routi
 
 This page explains the Gateway API resource model and how Nantian Gateway implements it.
 
+```mermaid
+graph TD
+    GC[GatewayClass] -->|defines| G[Gateway]
+    G -->|listens on| L[Listener :80]
+    L -->|routes to| HR[HTTPRoute]
+    HR -->|backendRef| SVC[Service]
+    RG[ReferenceGrant] -.->|allows cross-ns| HR
+    BTL[BackendTLSPolicy] -->|secures| SVC
+    BLP[BackendLBPolicy] -->|configures| SVC
+```
+
 ## Why Gateway API?
 
 Before the Gateway API, Kubernetes provided the Ingress resource for exposing HTTP services. Ingress served its purpose but had significant limitations:

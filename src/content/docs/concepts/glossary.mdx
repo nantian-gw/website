@@ -1,0 +1,20 @@
+---
+title: Glossary
+description: "Definitions for key terms used throughout Nantian Gateway and the Kubernetes Gateway API."
+---
+
+This page defines the core terminology used in Nantian Gateway documentation and the broader Kubernetes Gateway API ecosystem. Refer back here when you encounter an unfamiliar term.
+
+| Term | Definition |
+|------|-----------|
+| GatewayClass | Cluster-scoped resource defining a gateway controller implementation. Infrastructure providers configure GatewayClass to register their controller with the cluster. |
+| Gateway | Request entry point that defines listeners (ports and protocols). Cluster operators create Gateway resources to specify *where* traffic enters the cluster. |
+| HTTPRoute | HTTP request routing rules that match requests by host, path, headers, or query parameters and forward them to backend services. Application developers manage HTTPRoute resources. |
+| GRPCRoute | gRPC request routing rules that match by service name and method name. Provides the same role separation as HTTPRoute but for gRPC workloads. |
+| BackendRef | Reference to a backend Service that receives traffic matched by a route rule. A BackendRef specifies the Service name, port, and optional weight for traffic splitting. |
+| ReferenceGrant | A policy resource that allows cross-namespace BackendRef references. Without a ReferenceGrant, a route can only reference Services in the same namespace. |
+| BackendTLSPolicy | Policy resource that configures TLS settings for connections between the gateway and backend Services. Controls certificate verification, trusted CAs, and hostname validation. |
+| BackendLBPolicy | Policy resource that configures load balancing algorithm, circuit breaker thresholds, and session persistence for backend connections. |
+| Listener | Port and protocol configuration on a Gateway resource. Each listener defines what traffic the gateway accepts, including optional TLS settings and hostname restrictions. |
+| IR (Intermediate Representation) | Nantian Gateway's internal routing model that translates Gateway API resources into a normalized format understood by the data plane. The control plane generates IR from Kubernetes resources, and the data plane converts IR into proxy configuration. |
+| xDS | gRPC streaming protocol used by Envoy and Nantian Gateway for dynamic configuration distribution. The control plane streams configuration updates to data plane instances over bidirectional xDS connections, enabling real-time route changes without restarts. |
