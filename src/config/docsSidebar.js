@@ -1,13 +1,11 @@
 export const docsSidebar = [
   {
-    label: 'Concepts',
-    translations: { 'zh-CN': '概念' },
+    label: 'Getting Started',
+    translations: { 'zh-CN': '快速开始' },
     items: [
-      { label: 'Core Concepts', link: 'concepts/', translations: { 'zh-CN': '核心概念' } },
-      { label: 'Gateway API', link: 'concepts/gateway-api', translations: { 'zh-CN': 'Gateway API' } },
-      { label: 'Gateway API Support', link: 'concepts/gateway-api-support', translations: { 'zh-CN': 'Gateway API 支持矩阵' } },
-      { label: 'Split-Plane Architecture', link: 'concepts/split-plane', translations: { 'zh-CN': '分离式平面架构' } },
-      { label: 'Intermediate Representation (IR)', link: 'concepts/ir', translations: { 'zh-CN': '中间表示 (IR)' } },
+      { label: 'Prerequisites', link: 'getting-started/prerequisites', translations: { 'zh-CN': '环境要求' } },
+      { label: 'Quick Start (5 min)', link: 'getting-started/quick-start', translations: { 'zh-CN': '5 分钟部署' } },
+      { label: 'Your First Route', link: 'getting-started/first-route', translations: { 'zh-CN': '第一个路由' } },
     ],
   },
   {
@@ -17,6 +15,17 @@ export const docsSidebar = [
       { label: 'What is Nantian Gateway', link: 'overview/', translations: { 'zh-CN': '什么是 Nantian Gateway' } },
       { label: 'Comparison', link: 'overview/comparison', translations: { 'zh-CN': '项目对比' } },
       { label: 'Use Cases', link: 'overview/use-cases', translations: { 'zh-CN': '适用场景' } },
+    ],
+  },
+  {
+    label: 'Concepts',
+    translations: { 'zh-CN': '概念' },
+    items: [
+      { label: 'Core Concepts', link: 'concepts/', translations: { 'zh-CN': '核心概念' } },
+      { label: 'Gateway API', link: 'concepts/gateway-api', translations: { 'zh-CN': 'Gateway API' } },
+      { label: 'Gateway API Support', link: 'concepts/gateway-api-support', translations: { 'zh-CN': 'Gateway API 支持矩阵' } },
+      { label: 'Split-Plane Architecture', link: 'concepts/split-plane', translations: { 'zh-CN': '分离式平面架构' } },
+      { label: 'Intermediate Representation (IR)', link: 'concepts/ir', translations: { 'zh-CN': '中间表示 (IR)' } },
     ],
   },
   {
@@ -58,18 +67,6 @@ export const docsSidebar = [
       { label: 'Request Mirroring', link: 'guides/request-mirroring', translations: { 'zh-CN': '请求镜像' } },
       { label: 'WASM Plugin Development', link: 'guides/wasm-plugin-dev', translations: { 'zh-CN': 'WASM 插件开发' } },
     ],
-  },
-  {
-    label: 'Getting Started',
-    translations: { 'zh-CN': '快速开始' },
-    items: [
-      { label: 'Prerequisites', link: 'getting-started/prerequisites', translations: { 'zh-CN': '环境要求' } },
-      { label: 'Quick Start (5 min)', link: 'getting-started/quick-start', translations: { 'zh-CN': '5 分钟部署' } },
-      { label: 'Your First Route', link: 'getting-started/first-route', translations: { 'zh-CN': '第一个路由' } },
-    ],
-  },
-  {
-    label: 'Installation',
     translations: { 'zh-CN': '安装' },
     items: [
       { label: 'Overview', link: 'installation/', translations: { 'zh-CN': '概述' } },
