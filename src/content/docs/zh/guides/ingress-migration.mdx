@@ -1,0 +1,47 @@
+---
+title: 从 Ingress 迁移到 Gateway API
+description: "将 Kubernetes Ingress 资源迁移到 Nantian Gateway Gateway API HTTPRoute 的分步指南。"
+slug: ingress-migration
+---
+
+import VersionNote from '../../../components/VersionNote.astro';
+
+<VersionNote locale="zh-CN" />
+
+如果你正在使用 Kubernetes 内置的 Ingress 资源运行工作负载，迁移到 Gateway API 可以带来更丰富的路由能力、更好的角色分离以及跨实现通用的社区标准配置模型。
+
+本指南介绍了从 Ingress 概念到 Gateway API 资源的映射、分步迁移流程以及并排示例。
+
+## 为什么需要迁移？
+
+Kubernetes Ingress 资源为社区做出了贡献，但它存在已知的不足：
+
+- **单一资源模型**：基础架构运维和应用开发者共享同一对象，容易造成配置冲突
+- **基于 annotation 的功能**：每个 Ingress Controller 对于相同行为（重写、CORS、速率限制）使用不同的 annotation
+- **匹配能力有限**：仅支持主机和路径匹配，不支持基于头部、查询参数或方法的匹配
+- **不支持流量拆分**：灰度发布和 A/B 测试需要额外工具
+- **缺少标准化的跨命名空间引用**：访问其他命名空间的 Service 依赖于特定 Controller 的行为
+
+Gateway API 通过多资源、角色导向的模型解决了上述所有问题。Nantian Gateway 完全支持 Gateway API 规范，迁移后你可以获得所有这些能力，而无需更换网关实现。
+
+## 概念映射
+
+| Ingress 概念 | Gateway API 等效 | 说明 |
+|-------------|-----------------|------|
+| Ingress Controller | GatewayClass + 控制器 | GatewayClass 为集群注册 Nantian Gateway 作为可用控制器 |
+| Ingress | Gateway + HTTPRoute | Gateway 定义入口点（端口、协议、TLS），HTTPRoute 定义路由规则 |
+| Ingress 规则 | HTTPRoute 规则 | 每条 Ingress 规则对应 HTTPRoute 中的一条路由规则 |
+| `spec.rules[].host` | `spec.hostnames` | Gateway 监听器或 HTTPRoute 上的主机名匹配 |
+| `spec.rules[].http.paths[]` | `spec.rules[].matches[]` | 路径匹配，支持更丰富的匹配类型 |
+| `spec.tls[]` | Gateway 监听器的 `tls` 字段 | TLS 配置作用于 Gateway 级别，而非路由级别 |
+| `nginx.ingress.kubernetes.io/*` | 标准字段 / BackendLBPolicy | 大部分 annotation 功能已有对应的标准 CRD 字段 |
+
+## 迁移步骤
+
+详见英文版文档获取完整的命令行示例和验证步骤。
+
+## 相关资源
+
+- [HTTPRoute 和 GRPCRoute](/guides/grpc-routes)
+- [负载均衡](/guides/load-balancing)
+- [TLS / mTLS 配置](/configuration/tls)

@@ -1,0 +1,24 @@
+---
+title: 术语表
+description: "Nantian Gateway 和 Kubernetes Gateway API 文档中关键术语的定义。"
+---
+
+import VersionNote from '../../../components/VersionNote.astro';
+
+<VersionNote locale="zh-CN" />
+
+此页面定义了 Nantian Gateway 文档和更广泛的 Kubernetes Gateway API 生态系统中使用的核心术语。遇到不熟悉的术语时，可返回此处查阅。
+
+| 术语 | 定义 |
+|------|------|
+| GatewayClass | 集群范围资源，定义网关控制器实现。基础设施提供商通过配置 GatewayClass 在集群中注册其控制器。 |
+| Gateway | 定义监听器（端口和协议）的请求入口点。集群运维人员创建 Gateway 资源来指定流量*在何处*进入集群。 |
+| HTTPRoute | HTTP 请求路由规则，通过主机、路径、头部或查询参数匹配请求，并将其转发到后端服务。应用开发者管理 HTTPRoute 资源。 |
+| GRPCRoute | gRPC 请求路由规则，通过服务名和方法名进行匹配。提供与 HTTPRoute 相同的角色分离，但用于 gRPC 工作负载。 |
+| BackendRef | 对接收路由规则匹配流量的后端 Service 的引用。BackendRef 指定 Service 名称、端口和可选的流量拆分权重。 |
+| ReferenceGrant | 一种策略资源，允许跨命名空间的 BackendRef 引用。没有 ReferenceGrant，路由只能引用同一命名空间内的 Service。 |
+| BackendTLSPolicy | 配置网关与后端 Service 之间连接 TLS 设置的策略资源。控制证书验证、受信任的 CA 和主机名验证。 |
+| BackendLBPolicy | 配置后端连接负载均衡算法、熔断器阈值和会话保持的策略资源。 |
+| Listener | Gateway 资源上的端口和协议配置。每个 Listener 定义网关接受的流量，包括可选的 TLS 设置和主机名限制。 |
+| IR (Intermediate Representation) | Nantian Gateway 的内部路由模型，将 Gateway API 资源转换为数据面可理解的标准格式。控制面从 Kubernetes 资源生成 IR，数据面将 IR 转换为代理配置。 |
+| xDS | Envoy 和 Nantian Gateway 用于动态配置分发的 gRPC 流式协议。控制面通过双向 xDS 连接将配置更新流式传输到数据面实例，实现实时的路由变更而无需重启。 |
