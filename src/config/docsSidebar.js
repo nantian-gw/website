@@ -67,6 +67,9 @@ export const docsSidebar = [
       { label: 'Request Mirroring', link: 'guides/request-mirroring', translations: { 'zh-CN': '请求镜像' } },
       { label: 'WASM Plugin Development', link: 'guides/wasm-plugin-dev', translations: { 'zh-CN': 'WASM 插件开发' } },
     ],
+  },
+  {
+    label: 'Installation',
     translations: { 'zh-CN': '安装' },
     items: [
       { label: 'Overview', link: 'installation/', translations: { 'zh-CN': '概述' } },

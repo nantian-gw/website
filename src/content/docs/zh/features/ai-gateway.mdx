@@ -25,36 +25,47 @@ AI Gateway 功能围绕两个 Kubernetes 资源构建：
 AI Gateway 提供以下能力，每项均可通过 CRD 配置：
 
 ### 模型路由
+
 根据复杂度分类、请求属性或 header 选择，将请求路由到不同的 LLM 模型。[了解更多](/features/ai-gateway/model-routing)
 
 ### 语义缓存
+
 利用嵌入向量相似度，对语义相近的 prompt 缓存 LLM 响应，减少重复的 API 调用和成本。[了解更多](/features/ai-gateway/semantic-cache)
 
 ### 提示词防护
+
 在请求到达模型之前，检测并拦截 prompt 注入攻击和可疑的关键词模式。[了解更多](/features/ai-gateway/prompt-guard)
 
 ### 内容安全
+
 过滤 prompt 和模型响应中的暴力、仇恨、自残、剥削和非法内容。[了解更多](/features/ai-gateway/content-safety)
 
 ### PII 脱敏
+
 检测并遮蔽 prompt 和响应中的个人身份信息，如电子邮件地址、电话号码和凭证。[了解更多](/features/ai-gateway/pii-masking)
 
 ### A/B 测试
+
 通过加权选择在模型变体之间分流，对比各 provider 的性能、成本和质量。[了解更多](/features/ai-gateway/ab-testing)
 
 ### 回退链
+
 按顺序配置备用模型，当主模型失败或超时时，请求自动级联到回退 provider。[了解更多](/features/ai-gateway/fallback)
 
 ### 成本追踪
+
 按模型、租户和路由监控 token 用量和预估成本，用于计费和预算分析。[了解更多](/features/ai-gateway/cost-tracking)
 
 ### 多租户
+
 将多个 API key 映射到租户，每个租户拥有独立的模型白名单、速率限制和用量配额。[了解更多](/features/ai-gateway/multitenant)
 
 ### Token 策略
+
 对 AI 路由实施每分钟和每小时的 token 速率限制，支持可配置的突发倍数和拒绝策略。[了解更多](/features/ai-gateway/token-policy)
 
 ### Langfuse 集成
+
 将 trace、generation 和 score 发送到 Langfuse，用于 LLM 可观测性和模型性能调试。[了解更多](/features/ai-gateway/langfuse)
 
 ## 启用方式
