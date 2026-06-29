@@ -121,6 +121,7 @@ test('versioned English and Chinese docs stay path-mirrored', () => {
 test('current and versioned docs only differ by the approved drift set', () => {
   const expectedCurrentOnly = [
     'concepts/gateway-api-support.mdx',
+    'concepts/glossary.mdx',
     'concepts/ir.mdx',
     'configuration/backend-lb-policy.mdx',
     'configuration/cert-manager.mdx',
@@ -137,6 +138,7 @@ test('current and versioned docs only differ by the approved drift set', () => {
     'features/ai-gateway/token-policy.mdx',
     'guides/circuit-breaker.mdx',
     'guides/grpc-routes.mdx',
+    'guides/ingress-migration.mdx',
     'guides/load-balancing.mdx',
     'guides/request-mirroring.mdx',
     'guides/retry.mdx',
