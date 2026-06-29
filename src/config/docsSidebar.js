@@ -95,6 +95,7 @@ export const docsSidebar = [
       { label: 'Observability', link: 'configuration/observability', translations: { 'zh-CN': '可观测性' } },
       { label: 'Tuning', link: 'configuration/tuning', translations: { 'zh-CN': '性能调优' } },
       { label: 'Backend LB Policy', link: 'configuration/backend-lb-policy', translations: { 'zh-CN': '后端负载均衡策略' } },
+      { label: 'Route Policy', link: 'configuration/route-policy', translations: { 'zh-CN': '路由策略' } },
     ],
   },
   {

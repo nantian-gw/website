@@ -1,0 +1,197 @@
+---
+title: RoutePolicy
+description: "CRD reference for RoutePolicy. Configure per-route timeout, body limit, proxy buffering, and connection keepalive settings."
+---
+
+The `RoutePolicy` CRD provides per-route overrides for HTTP traffic behavior, bringing nginx‑ingress annotation parity to the Gateway API model. It is a Gateway API local policy that attaches to `HTTPRoute` resources via `targetRefs`, with three‑level namespace → gateway → route inheritance.
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: RoutePolicy
+metadata:
+  name: large-uploads
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: file-upload-route
+  default:
+    timeout:
+      request: 120s
+      backendRequest: 90s
+      connect: 30s
+      nextUpstream: 10s
+    bodyLimit:
+      maxRequestBodyBytes: 52428800
+      requestBodyBufferBytes: 131072
+      maxRequestHeaderBytes: 65536
+    proxy:
+      requestBuffering: true
+      responseBuffering: false
+      bufferSize: 4096
+      bufferCount: 8
+    connection:
+      keepaliveRequests: 1000
+      keepaliveTime: 3600s
+      keepaliveTimeout: 75s
+      upstreamKeepalivePoolSize: 320
+      upstreamKeepaliveIdle: 60s
+```
+
+## Inheritance Model
+
+RoutePolicy uses a three‑level priority system. Higher levels override lower levels:
+
+| Priority | targetRef | Scope |
+| --- | --- | --- |
+| 3 (highest) | `kind: HTTPRoute` | Applies to a single HTTPRoute. |
+| 2 | `kind: Gateway` | Default for all routes attached to that Gateway. |
+| 1 (lowest) | `targetRefs: []` (empty) | Default for all routes in the policy's namespace. |
+
+All fields are optional. Unset fields cascade down: if a route‑level policy omits `timeout.connect`, the gateway‑level value is used. If no policy provides a value, the dataplane global default applies.
+
+When two policies at the same level target the same resource, neither applies (the route falls back to the next level).
+
+## Target Selection
+
+The `targetRefs` field specifies which resources the policy binds to:
+
+| Field | Description |
+| --- | --- |
+| `group` | API group of the target. Must be `gateway.networking.k8s.io` for Gateway and HTTPRoute targets. |
+| `kind` | `Gateway` for gateway‑level defaults, or `HTTPRoute` for per‑route overrides. |
+| `name` | Name of the target resource in the same namespace as the policy. |
+
+Leave `targetRefs` empty to create a namespace‑level default. Only one namespace‑level `RoutePolicy` may exist per namespace.
+
+## Policy Fields
+
+All fields are optional. Omit a section to let the next inheritance level or the global default apply.
+
+### timeout
+
+Overrides the dataplane timeout defaults for requests on the targeted routes.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `request` | duration | `60s` | Maximum duration for the entire request‑response cycle. Maps to `nginx.ingress.kubernetes.io/proxy-read-timeout`. |
+| `backendRequest` | duration | `15s` | Maximum duration for a single backend request attempt. Maps to `nginx.ingress.kubernetes.io/proxy-send-timeout`. |
+| `connect` | duration | `5s` | Maximum duration to establish a TCP connection to the backend. Maps to `nginx.ingress.kubernetes.io/proxy-connect-timeout`. |
+| `nextUpstream` | duration | — | Maximum duration spent finding a viable upstream during retries. Maps to `nginx.ingress.kubernetes.io/proxy-next-upstream-timeout`. |
+
+### bodyLimit
+
+Restricts request body and header sizes on a per‑route basis.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maxRequestBodyBytes` | uint64 | `10485760` (10 MiB) | Maximum request body size in bytes. Requests exceeding this receive HTTP 413. Maps to `nginx.ingress.kubernetes.io/proxy-body-size`. |
+| `requestBodyBufferBytes` | uint64 | `131072` (128 KiB) | Size of the buffer used to read the request body before writing to a temporary file. Maps to `nginx.ingress.kubernetes.io/client-body-buffer-size`. |
+| `maxRequestHeaderBytes` | uint64 | `65536` (64 KiB) | Maximum combined size of all request headers. Maps to `nginx.ingress.kubernetes.io/client-header-buffer-size`. |
+
+### proxy
+
+Controls HTTP proxy buffering behavior.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `requestBuffering` | bool | `true` | Buffer the entire client request body before proxying. Maps to `nginx.ingress.kubernetes.io/proxy-request-buffering`. |
+| `responseBuffering` | bool | `true` | Buffer the backend response before sending to the client. Maps to `nginx.ingress.kubernetes.io/proxy-buffering`. |
+| `bufferSize` | uint64 | `4096` | Size of each response buffer in bytes. Maps to `nginx.ingress.kubernetes.io/proxy-buffer-size`. |
+| `bufferCount` | uint32 | `8` | Number of response buffers. Maps to `nginx.ingress.kubernetes.io/proxy-buffers-number`. |
+
+### connection
+
+Controls keepalive behavior for client‑facing and upstream connections.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `keepaliveRequests` | uint32 | `1000` | Maximum number of requests allowed on a single keepalive connection. Maps to `nginx.ingress.kubernetes.io/keepalive-requests`. |
+| `keepaliveTime` | duration | `3600s` (1 h) | Maximum lifetime of a keepalive connection. |
+| `keepaliveTimeout` | duration | `75s` | Maximum idle time before closing a keepalive connection. Maps to `nginx.ingress.kubernetes.io/keepalive-timeout`. |
+| `upstreamKeepalivePoolSize` | uint32 | `320` | Maximum number of idle upstream keepalive connections to maintain. Maps to `nginx.ingress.kubernetes.io/upstream-keepalive-connections`. |
+| `upstreamKeepaliveIdle` | duration | `60s` | Maximum idle time before closing an upstream keepalive connection. Maps to `nginx.ingress.kubernetes.io/upstream-keepalive-time`. |
+
+## Nginx Ingress Migration
+
+If you are migrating from nginx‑ingress, the following table maps annotations to `RoutePolicy` fields:
+
+| nginx‑ingress annotation | RoutePolicy field |
+| --- | --- |
+| `nginx.ingress.kubernetes.io/proxy-body-size` | `default.bodyLimit.maxRequestBodyBytes` |
+| `nginx.ingress.kubernetes.io/client-body-buffer-size` | `default.bodyLimit.requestBodyBufferBytes` |
+| `nginx.ingress.kubernetes.io/client-header-buffer-size` | `default.bodyLimit.maxRequestHeaderBytes` |
+| `nginx.ingress.kubernetes.io/proxy-read-timeout` | `default.timeout.request` |
+| `nginx.ingress.kubernetes.io/proxy-send-timeout` | `default.timeout.backendRequest` |
+| `nginx.ingress.kubernetes.io/proxy-connect-timeout` | `default.timeout.connect` |
+| `nginx.ingress.kubernetes.io/proxy-next-upstream-timeout` | `default.timeout.nextUpstream` |
+| `nginx.ingress.kubernetes.io/proxy-request-buffering` | `default.proxy.requestBuffering` |
+| `nginx.ingress.kubernetes.io/proxy-buffering` | `default.proxy.responseBuffering` |
+| `nginx.ingress.kubernetes.io/proxy-buffer-size` | `default.proxy.bufferSize` |
+| `nginx.ingress.kubernetes.io/proxy-buffers-number` | `default.proxy.bufferCount` |
+| `nginx.ingress.kubernetes.io/keepalive-requests` | `default.connection.keepaliveRequests` |
+| `nginx.ingress.kubernetes.io/keepalive-timeout` | `default.connection.keepaliveTimeout` |
+| `nginx.ingress.kubernetes.io/upstream-keepalive-connections` | `default.connection.upstreamKeepalivePoolSize` |
+| `nginx.ingress.kubernetes.io/upstream-keepalive-time` | `default.connection.upstreamKeepaliveIdle` |
+
+## Examples
+
+### Per‑route timeout override
+
+Increase the request timeout for a slow backend:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: RoutePolicy
+metadata:
+  name: slow-backend-timeout
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: slow-report-route
+  default:
+    timeout:
+      request: 300s
+```
+
+### File upload size limit
+
+Restrict upload size on a specific route:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: RoutePolicy
+metadata:
+  name: upload-limit
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: upload-route
+  default:
+    bodyLimit:
+      maxRequestBodyBytes: 52428800  # 50 MiB
+```
+
+### Namespace‑level defaults
+
+Set default timeout for all routes in a namespace:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: RoutePolicy
+metadata:
+  name: ns-defaults
+  namespace: team-a
+spec:
+  default:
+    timeout:
+      request: 60s
+      connect: 10s
+    connection:
+      keepaliveRequests: 500
+```
