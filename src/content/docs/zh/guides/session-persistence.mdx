@@ -1,5 +1,131 @@
 ---
-title: Session Persistence
+title: 会话保持
+description: "通过基于 Cookie 或请求头的粘性会话，将同一用户会话的请求路由到同一后端实例。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/guides/session-persistence)。
+会话保持（也称为粘性会话）确保同一用户会话的所有请求被路由到同一个后端实例。当后端在本地存储状态时，这是必需的，例如内存中的购物车，或与特定进程绑定的 WebSocket 连接。
+
+## 会话保持的工作原理
+
+用户首次发起请求时，网关使用标准的负载均衡算法将请求路由到一个后端实例。如果该路由配置了会话保持，网关会在响应中附带一个会话标识符。在后续来自同一用户的请求中，网关读取该标识符，并将请求路由到处理原始会话的同一后端实例。
+
+会话标识符是一个经过签名的令牌，编码了后端名称、端点地址以及可选的过期时间。签名机制可防止篡改：如果客户端修改了标识符，签名校验将失败，网关会将其视为新会话，路由到一个新的后端实例。
+
+## 基于 Cookie 的会话保持
+
+当 `sessionType` 为 `Cookie`（默认值）时，网关在首次响应中设置一个 Cookie。该 Cookie 包含经过签名的会话令牌。Cookie 名称通过 `sessionName` 字段配置。如果传入请求中已存在该 Cookie，网关会校验其签名并将请求路由到记录的后端。
+
+Cookie 携带一个可选的 `absoluteTimeout`，用于限制会话的生命周期。当超时到达时，会话被丢弃，下一个请求将路由到一个新的后端实例。如果未设置绝对超时，会话将无限期持续。
+
+Cookie 的生命周期由 `cookieConfig.lifetimeType` 控制：
+
+| 生命周期类型 | Cookie 过期行为 | 说明 |
+| --- | --- | --- |
+| `Session` | 浏览器会话（无 `Expires`/`Max-Age`） | 关闭浏览器时删除 Cookie。这是默认值。 |
+| `Permanent` | 由 `absoluteTimeout` 设置 | Cookie 包含与配置的超时匹配的 `Max-Age` 属性。需要设置 `absoluteTimeout`。 |
+
+## 基于请求头的会话保持
+
+当 `sessionType` 为 `Header` 时，网关不会设置 Cookie。相反，它会在响应中设置一个请求头，其名称由 `sessionName` 配置。客户端应在后续请求中回显该请求头的值。此模式适用于不处理 Cookie 的 API 客户端，或 Cookie 不常用的 gRPC 服务。
+
+基于请求头的会话与基于 Cookie 的会话具有相同的签名、超时和路由保证。唯一的区别在于传输机制。
+
+## 通过 BackendLBPolicy 配置
+
+会话保持通过 `BackendLBPolicy` CRD 的 `sessionPersistence` 字段进行配置：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: cart-sticky
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: shopping-cart-service
+  sessionPersistence:
+    sessionName: ROUTEID
+    sessionType: Cookie
+    absoluteTimeout: 3600s
+    idleTimeout: 600s
+    cookieConfig:
+      lifetimeType: Session
+```
+
+此策略以 `shopping-cart-service` 后端为目标。请求被路由到一个后端实例，网关设置一个名为 `ROUTEID` 的 Cookie，其中包含经过签名的会话令牌。会话 Cookie 在浏览器会话期间有效。3600 秒（1 小时）的绝对超时限制了最大会话生命周期，即使浏览器未关闭也是如此。如果用户空闲 600 秒（10 分钟），该会话将有资格被过期清理。
+
+当 `targetRefs` 包含多个 Service 时，每个 Service 都将获得自己的会话保持配置。一个 `BackendLBPolicy` 可以对一个 Service 应用基于 Cookie 的会话保持，对另一个 Service 应用基于请求头的会话保持，只要它们各有独立的策略即可。
+
+## 会话密钥
+
+会话令牌使用共享密钥进行签名以确保完整性。网关支持三种配置密钥的方式：
+
+| 方式 | 配置 | 适用场景 |
+| --- | --- | --- |
+| 内联密钥 | 数据面配置中的 `sharedSecret` | 使用预共享密钥的小型部署 |
+| 基于文件的密钥 | `sharedSecretFile` 指向文件路径 | 需要密钥轮换的部署（文件每 250ms 重新读取一次） |
+| 自动生成 | 无需配置 | 仅限开发环境和单副本部署 |
+
+对于多副本数据面部署，请在所有副本上配置一致的 `sharedSecret` 或 `sharedSecretFile`。如果每个副本自动生成不同的密钥，由副本 A 签名的会话令牌将在副本 B 上校验失败，导致流量在副本之间切换时用户丢失会话。
+
+## 何时使用会话保持
+
+会话保持在以下场景中是合适的选择：
+
+- 后端将状态存储在本地内存中，而不是共享数据库或缓存中。
+- 你运行的是一个必须固定到一个实例上的 WebSocket 或长轮询服务。
+- 后端依赖未跨实例复制的文件系统本地数据。
+- 你正在逐步迁移服务，需要将用户固定到特定的后端版本。
+
+会话保持是一种权衡。它会将同一会话的流量集中到单个后端，从而降低负载均衡的效果。如果某个后端实例宕机，固定到该实例的所有会话都会丢失，直到建立新的会话。仅对有粘性路由真正需求的后端使用此功能。
+
+## 局限性
+
+会话保持在数据面重启后无法保持。网关将会话到后端的映射存储在内存中。当数据面进程重启时，所有会话状态都会丢失。携带重启前有效会话令牌的传入请求会被视为未知，并路由到一个新的后端实例。用户将自动分配一个新会话，但绑定到旧后端实例的任何状态都会丢失。
+
+会话令牌对客户端是不透明的。客户端不应尝试解析或修改 Cookie 值。任何修改都会使签名失效，导致网关创建一个新会话。
+
+## 故障排查：会话不断断开
+
+如果用户反馈意外退出登录或丢失会话状态，最常见的原因是**缺少会话保持配置**。与 nginx-ingress 可以通过注解启用粘性会话（`nginx.ingress.kubernetes.io/affinity: cookie`）不同，nantian-gw 需要显式创建 `BackendLBPolicy`。
+
+### 排查清单
+
+1. **检查是否已有 BackendLBPolicy**。列出命名空间中的策略：
+   ```bash
+   kubectl get backendlbpolicies -n your-namespace
+   ```
+   如果没有看到以你的后端 Service 为目标的策略，则说明会话未处于粘性状态，每个请求可能会落在不同的后端 Pod 上。
+
+2. **确认策略以正确的 Service 为目标**。`targetRefs.name` 必须与你的 Service 名称完全匹配：
+   ```bash
+   kubectl describe backendlbpolicy <name> -n your-namespace
+   ```
+
+3. **检查多副本部署**。如果你运行了多个数据面副本，请配置共享密钥：
+   ```yaml
+   # 数据面配置
+   sessionPersistence:
+     sharedSecret: "your-32-byte-secret"
+   ```
+   没有此项配置，由副本 A 签名的会话 Cookie 会被副本 B 拒绝。
+
+4. **确认 Cookie 是否被正确设置**。检查响应头：
+   ```bash
+   curl -v https://your-app.example.com 2>&1 | grep -i set-cookie
+   ```
+   你应该看到一个 `Set-Cookie` 响应头，其名称为你配置的 `sessionName`。
+
+5. **检查 absoluteTimeout 和 idleTimeout**。如果其中任何一项设置得太短，会话会过早过期。建议从 `absoluteTimeout: 1h` 和 `idleTimeout: 15m` 开始，然后根据应用需求进行调整。
+
+### 从 Nginx Ingress 迁移
+
+| nginx-ingress 注解 | nantian-gw 等效配置 |
+|---|---|
+| `nginx.ingress.kubernetes.io/affinity: cookie` | 创建包含 `sessionPersistence.type: Cookie` 的 `BackendLBPolicy` |
+| `nginx.ingress.kubernetes.io/session-cookie-name` | `sessionPersistence.sessionName` |
+| `nginx.ingress.kubernetes.io/session-cookie-expires` | `sessionPersistence.absoluteTimeout` |
+| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `sessionPersistence.cookieConfig.lifetimeType: Permanent` |
+| `nginx.ingress.kubernetes.io/session-cookie-path` | 不适用（Cookie 路径默认为 `/`） |
