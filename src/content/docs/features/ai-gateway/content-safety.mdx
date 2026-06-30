@@ -11,15 +11,7 @@ Content safety is part of the AI Gateway feature set and uses `gateway.nantian.d
 
 ## What Content Safety Detects
 
-The filter ships with built-in patterns and keywords for five categories:
-
-| Category | Detects |
-| --- | --- |
-| `violence` | Instructions for killing, murder, torture, bomb-making, weapon manufacturing |
-| `hate` | Ethnic cleansing, racial purity, white supremacy, genocide denial |
-| `self_harm` | Suicide methods, self-harm guides, instructions to end one's life |
-| `exploitation` | Child abuse, human trafficking, forced labour, modern slavery |
-| `illegal` | Drug manufacturing instructions, phishing tutorials, hacking guides |
+The filter ships with built-in patterns and keywords for five categories: `violence`, `hate`, `self_harm`, `exploitation`, and `illegal`.
 
 Each category includes pre-compiled regex patterns that execute on every message. The patterns are compiled once on startup and reused across all requests, so there is no runtime regex compilation overhead after the filter initialises.
 
