@@ -86,3 +86,46 @@ Session persistence is tradeoff. It reduces the effectiveness of load balancing 
 Session persistence does not survive data plane restarts. The gateway stores session-to-backend mappings in memory. When a data plane process restarts, all session state is lost. Incoming requests that carry a valid session token from before the restart are rejected as unknown and routed to a new backend instance. The user will be assigned a new session automatically, but any state tied to the old backend instance is gone.
 
 Session tokens are opaque to the client. The client should not attempt to parse or modify the cookie value. Any modification will invalidate the signature and cause the gateway to create a new session.
+
+## Troubleshooting: Sessions Keep Dropping
+
+If users report being unexpectedly logged out or losing session state, the most common cause is **missing session persistence configuration**. Unlike nginx-ingress which can enable sticky sessions with an annotation (`nginx.ingress.kubernetes.io/affinity: cookie`), nantian-gw requires an explicit `BackendLBPolicy`.
+
+### Checklist
+
+1. **Check if you have a BackendLBPolicy**. List policies in your namespace:
+   ```bash
+   kubectl get backendlbpolicies -n your-namespace
+   ```
+   If you don't see one targeting your backend Service, sessions are not sticky and every request may land on a different backend Pod.
+
+2. **Verify the policy targets the correct Service**. The `targetRefs.name` must match your Service name exactly:
+   ```bash
+   kubectl describe backendlbpolicy <name> -n your-namespace
+   ```
+
+3. **Check for multi-replica deployments**. If you run multiple dataplane replicas, configure a shared secret:
+   ```yaml
+   # dataplane config
+   sessionPersistence:
+     sharedSecret: "your-32-byte-secret"
+   ```
+   Without this, a session cookie signed by replica A will be rejected by replica B.
+
+4. **Verify the cookie is being set**. Check response headers:
+   ```bash
+   curl -v https://your-app.example.com 2>&1 | grep -i set-cookie
+   ```
+   You should see a `Set-Cookie` header with the `sessionName` you configured.
+
+5. **Check absoluteTimeout and idleTimeout**. If either is too short, sessions expire prematurely. Start with `absoluteTimeout: 1h` and `idleTimeout: 15m` and adjust based on your application's needs.
+
+### Migrating from Nginx Ingress
+
+| nginx-ingress annotation | nantian-gw equivalent |
+|---|---|
+| `nginx.ingress.kubernetes.io/affinity: cookie` | Create a `BackendLBPolicy` with `sessionPersistence.type: Cookie` |
+| `nginx.ingress.kubernetes.io/session-cookie-name` | `sessionPersistence.sessionName` |
+| `nginx.ingress.kubernetes.io/session-cookie-expires` | `sessionPersistence.absoluteTimeout` |
+| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `sessionPersistence.cookieConfig.lifetimeType: Permanent` |
+| `nginx.ingress.kubernetes.io/session-cookie-path` | Not applicable (cookie path is `/` by default) |
