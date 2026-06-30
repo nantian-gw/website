@@ -1,5 +1,119 @@
 ---
-title: Content Safety
+title: 内容安全
+description: "使用内置正则表达式模式和可配置的强制执行模式，检测并过滤 AI 提示词和响应中的有害内容。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/features/ai-gateway/content-safety)。
+内容安全过滤会在 AI 请求消息到达模型提供商之前扫描其中的有害内容，并可以同时检查模型响应。过滤器使用跨五个预定义类别的编译正则表达式模式和关键词匹配。
+
+:::caution[实验性]
+内容安全是 AI 网关功能集的一部分，使用 `gateway.nantian.dev/v1alpha1` 资源。配置安全规则前请启用 `featureMode: experimental` 和 `controlplane.config.features.enableAiGateway: true`。
+:::
+
+## 内容安全可检测的内容
+
+过滤器内置了五个类别的模式和关键词：
+
+| 类别 | 检测内容 |
+| --- | --- |
+| `violence` | 杀人、谋杀、酷刑、炸弹制作、武器制造的指令 |
+| `hate` | 种族清洗、种族纯粹论、白人至上主义、否认种族灭绝 |
+| `self_harm` | 自杀方法、自残指南、结束生命的指令 |
+| `exploitation` | 虐待儿童、人口贩卖、强迫劳动、现代奴隶制度 |
+| `illegal` | 制毒指导、钓鱼教程、黑客指南 |
+
+每个类别包含预编译的正则表达式模式，在每条消息上执行。这些模式在启动时编译一次，并在所有请求中复用，因此过滤器初始化后不会产生运行时正则表达式编译开销。
+
+## 强制执行模式
+
+过滤器支持两种强制执行模式，由 `block_mode` 字段控制：
+
+| 模式 | 行为 |
+| --- | --- |
+| **拦截**（`block_mode: true`） | 内容匹配任何模式时拒绝请求。返回包含匹配类别和文本的 `Block` 判定。 |
+| **标记**（`block_mode: false`） | 记录 `Flag` 判定但不拦截。适用于仅审计部署场景，你可以在强制执行之前收集违规数据。 |
+
+当 `enabled` 设置为 `false` 时，过滤器对所有请求返回 `Pass`，不产生运行时开销。你可以在不删除配置的情况下切换此开关。
+
+## 自定义模式
+
+你可以用自定义正则表达式规则覆盖内置模式。使用 `customPatterns` 提供类别到正则表达式的映射列表：
+
+```yaml
+contentSafety:
+  enabled: true
+  blockMode: true
+  customPatterns:
+    - category: violence
+      pattern: "(?i)how\\s+to\\s+harm\\s+(animals|children)"
+    - category: illegal
+      pattern: "(?i)(sell|buy)\\s+(stolen\\s+)?(data|credentials|passwords)"
+```
+
+当 `customPatterns` 非空时，内置正则表达式模式会被完全替换。当 `customKeywords` 非空时，内置关键词列表也会被替换。保持字段为空以保留默认值。
+
+## 配置
+
+内容安全在 `AIService` 资源的 `contentSafety` 字段中配置：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: safe-gpt4
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  contentSafety:
+    enabled: true
+    blockMode: true
+    customPatterns: []
+    customKeywords:
+      - category: violence
+        keyword: "harm animals"
+      - category: illegal
+        keyword: "sell stolen credentials"
+```
+
+## 请求被拦截时的表现
+
+当过滤器拦截一条请求时，数据平面返回包含违规详细信息的错误响应。响应内容包括：
+
+- HTTP 状态码 `400` 或 `403`
+- 标识匹配类别的消息
+- 触发过滤器的具体文本
+
+拦截请求的错误返回体示例：
+
+```json
+{
+  "error": {
+    "message": "Content safety violation: blocked content in category 'violence'",
+    "type": "content_safety_violation",
+    "details": {
+      "category": "violence",
+      "matched": "how to build a bomb"
+    }
+  }
+}
+```
+
+标记的内容不会产生错误。判定结果记录在指标和日志中，但请求正常发往模型提供商。
+
+## 可观测性
+
+内容安全违规事件出现在 AI 网关指标的 `content_safety` 标签维度下。你可以查询：
+
+- 按类别（`violence`、`hate`、`self_harm`、`exploitation`、`illegal`）的违规次数
+- 按模型（`AIService` 上的 model 字段）的违规次数
+- 按判定结果（`block` 与 `flag`）的违规次数
+
+将这些指标与标准的[故障排查](/operations/troubleshooting/)工作流结合使用，可以识别哪些模型和应用程序产生最多的安全事件。
+
+## 相关页面
+
+- [AI 网关](/features/ai-gateway/)
+- [PII 脱敏](/features/ai-gateway/pii-masking/)
+- [安全与可观测性](/features/security-observability/)
+- [实验性功能](/configuration/experimental-features/)

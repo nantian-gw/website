@@ -1,5 +1,176 @@
 ---
-title: gRPC Routes
+title: gRPC 路由
+description: "根据服务名和方法名路由 gRPC 流量。使用 Nantian Gateway 配置匹配规则、后端服务以及基于 Header 的路由。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/guides/grpc-routes)。
+Nantian Gateway 支持 Gateway API 的 `GRPCRoute` 资源用于路由 gRPC 流量。与通过路径和 Header 进行匹配的 `HTTPRoute` 不同，`GRPCRoute` 根据 gRPC 服务名和方法名来路由请求。这让你能够精确控制 gRPC 调用到达后端的方式。
+
+## 前置条件
+
+集群需要安装支持 `GRPCRoute` 的 Gateway API CRD。Nantian Gateway 的 Helm Chart 在设置 `gatewayAPI.installCRDs: true` 且 `gatewayAPI.channel: experimental` 时会自动处理。
+
+除了 CRD 之外，还需要一个 `GatewayClass` 和至少一个监听你所使用的 gRPC 协议的 `Gateway`。通常这意味着 Gateway listener 使用 `protocol: HTTP`（gRPC 基于 HTTP/2）或涉及 TLS 时使用 `protocol: HTTPS`。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: public-gateway
+  namespace: nantian-demo
+spec:
+  gatewayClassName: nantian
+  listeners:
+    - name: grpc
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: grpc-cert
+      allowedRoutes:
+        namespaces:
+          from: Same
+```
+
+## 服务与方法匹配
+
+`GRPCRoute` 的规则通过检查请求路径来匹配 gRPC 请求。gRPC 使用固定格式的路径 `/{service-name}/{method-name}`，Gateway API 将其转换为结构化的匹配字段。
+
+`.service` 字段匹配 gRPC 服务名，`.method` 匹配方法名。两者都通过 `type` 字段支持精确匹配和前缀匹配。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-demo
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - matches:
+        - method:
+            service: helloworld.Greeter
+            method: SayHello
+      backendRefs:
+        - name: greeter-service
+          port: 50051
+    - matches:
+        - method:
+            service: helloworld.Greeter
+      backendRefs:
+        - name: greeter-fallback
+          port: 50051
+```
+
+在这个例子中，`SayHello` 调用被路由到 `greeter-service`，而 `helloworld.Greeter` 上的其他方法则路由到 `greeter-fallback`。规则按从上到下的顺序评估，首个匹配到服务和方法名的规则生效。
+
+通配符 `*` 可以匹配任意服务或方法，等同于省略该字段：
+
+```yaml
+matches:
+  - method:
+      service: "*"
+```
+
+## 基于 Header 的匹配
+
+`GRPCRoute` 支持与 `HTTPRoute` 相同的 Header 匹配语法。你可以使用 Header 匹配来进一步细化路由决策，例如根据 gRPC metadata 中携带的租户 Header 或 API 版本 Header 进行路由。
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: helloworld.Greeter
+          method: SayHello
+        headers:
+          - name: x-tenant-id
+            value: premium
+    backendRefs:
+      - name: greeter-premium
+        port: 50051
+```
+
+Header 值遵循 Gateway API 的匹配语义：默认使用 `Exact`；使用 Gateway API 实验版 channel 时，`RegularExpression` 也可用。
+
+## BackendRefs 与权重分流
+
+`GRPCRoute` 使用 `backendRefs` 的方式与 `HTTPRoute` 相同。你可以通过名称和端口引用 Kubernetes Service，也可以通过权重将流量分配到多个后端。
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: orders.OrderService
+          method: CreateOrder
+    backendRefs:
+      - name: orders-v1
+        port: 50051
+        weight: 80
+      - name: orders-v2
+        port: 50051
+        weight: 20
+```
+
+权重总和必须在 1 到 1,000,000 之间。权重为 0 的后端仅在其他后端都不健康时才会接收流量。
+
+## 通过 BackendLBPolicy 实现负载均衡
+
+`GRPCRoute` 和 `HTTPRoute` 一样集成了 `BackendLBPolicy`。你可以将 `BackendLBPolicy` 绑定到 gRPC 服务上，以控制负载均衡策略和配置每个后端的断路控制。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: greeter-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: greeter-service
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-session-id
+  circuitBreaker:
+    maxInflightRequests: 200
+```
+
+当 `GRPCRoute` 的 backendRef 指向一个被 `BackendLBPolicy` 所引用的 Service 时，数据平面将该策略的负载均衡策略和断路限制应用到 gRPC 流量。关于 `maxInflightRequests` 的详细信息，请参阅[断路控制指南](/guides/circuit-breaker/)。
+
+## 过滤器与请求修改
+
+`GRPCRoute` 支持的过滤器包括请求 Header 修改、响应 Header 修改和 URL 重写。由于 gRPC 不兼容单向镜像语义，因此不支持在 gRPC 路由上进行请求镜像。
+
+```yaml
+rules:
+  - matches:
+      - method:
+          service: helloworld.Greeter
+    filters:
+      - type: RequestHeaderModifier
+        requestHeaderModifier:
+          add:
+            - name: x-routed-by
+              value: nantian-gw
+    backendRefs:
+      - name: greeter-service
+        port: 50051
+```
+
+## 生产环境检查清单
+
+- 确认已安装 Gateway API 实验版 CRD，且 `GRPCRoute` 可用。
+- 验证 Gateway listener 协议与你的 gRPC 传输方式（HTTP/2 或 TLS）一致。
+- 规则按从最具体到最不具体的顺序排列，首个匹配的规则生效。
+- 使用 `BackendLBPolicy` 为 gRPC 后端实现一致的负载均衡和断路控制。
+- 在路由生产流量之前，使用 `grpcurl` 或 `grpc_health_probe` 等工具测试 gRPC 健康状态。
+
+## 相关页面
+
+- [流量管理](/features/traffic-management/)
+- [断路控制](/guides/circuit-breaker/)
+- [重试配置](/guides/retry/)
+- [Gateway API 资源](/api-reference/gateway-api/)

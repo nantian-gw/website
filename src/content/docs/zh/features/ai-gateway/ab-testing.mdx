@@ -1,5 +1,92 @@
 ---
-title: A/B Testing
+title: A/B 测试
+description: "按权重将 AI 流量分流到不同的模型变体，在生产环境中直接对比性能、成本或质量，无需单独部署。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/features/ai-gateway/ab-testing)。
+A/B 测试通过加权随机选择将 AI 请求路由到不同的模型变体。每个实验定义一组带权重的变体，数据面会根据随机抽样的结果逐请求选择变体。
+
+:::caution[实验性]
+A/B 测试属于 AI Gateway 功能集，使用 `gateway.nantian.dev/v1alpha1` 资源。在配置实验前需启用 `featureMode: experimental` 和 `controlplane.config.features.enableAiGateway: true`。
+:::
+
+## A/B 测试的工作原理
+
+引擎使用累积权重选择法。对于每个进站请求，引擎生成一个 `[0.0, 1.0)` 范围内的随机浮点数，然后遍历变体列表。第一个累积权重超过随机值的变体被选中。
+
+每个实验包含以下字段：
+
+| 字段 | 描述 |
+| --- | --- |
+| `experimentId` | 实验的唯一标识符，通常为 `exp_` 加上一个 UUID |
+| `variants` | 待路由的加权模型变体列表 |
+
+每个变体包含：
+
+| 字段 | 描述 |
+| --- | --- |
+| `name` | 人类可读的标签，如 `control` 或 `treatment-a` |
+| `model` | 该变体被选中时使用的模型名称 |
+| `weight` | 概率权重，范围 `0.0` 到 `1.0`；所有权重之和应为 `1.0` |
+| `config` | 附加到该变体的任意 JSON 配置 |
+
+## 创建实验
+
+在 `AIService` 资源中定义实验。以下示例将流量按 70/30 的比例分流到两个模型变体：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: ab-test-gpt
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  abTesting:
+    experimentId: exp_a1b2c3d4e5f6
+    variants:
+      - name: control
+        model: gpt-4o
+        weight: 0.7
+      - name: treatment-a
+        model: gpt-4-turbo
+        weight: 0.3
+```
+
+在这个配置下，约 70% 的请求发送到 `gpt-4o`，30% 发送到 `gpt-4-turbo`。随着请求量增加，实际分布会收敛到配置的权重比例。
+
+## 权重选择行为
+
+引擎以可预测的方式处理边界情况：
+
+- **权重之和等于 1.0**：标准加权随机。`weight` 值直接作为概率使用。
+- **权重之和小于 1.0**：最后一个变体会接管最后一个累积权重之后的所有剩余概率质量。两个变体各 0.3 的分割会给变体 A 30%，变体 B 70%。
+- **所有权重均为 0**：无条件返回第一个变体。这被视为一种退化情况。
+- **单个变体权重为 1.0**：所有流量都路由到该变体。
+- **未知的实验 ID**：`select_variant()` 返回 `None`，调用方应回退到 `AIService` 的默认模型。
+
+回退规则确保未被覆盖的概率质量不会丢弃请求。在生产环境上线前，务必验证你的权重是否产生预期的分发结果。
+
+## 实验生命周期
+
+使用已有的 `experimentId` 注册实验会替换该 ID 下之前的任何实验。利用这一点来更新权重或更换变体，而无需创建新的实验标识符。
+
+要生成唯一的实验 ID，引擎提供了一个工具方法，生成 `exp_` 加上无连字符的 UUID。你无需手动管理碰撞风险。
+
+## 可观测性
+
+每次变体选择都通过 AI Gateway 的指标可见。通过查询带有变体 `name` 标签的指标来追踪各变体的行为：
+
+- 每个变体的请求数
+- 每个变体的延迟分布
+- 每个变体的 token 消耗
+- 每个变体的错误率
+
+使用这些指标来对比变体，决定应该升级哪个模型。结合[运维指标](/operations/metrics/)获取实验管道的端到端可观测性。
+
+## 相关页面
+
+- [AI Gateway](/features/ai-gateway/)
+- [流量管理](/features/traffic-management/)
+- [运维指标](/operations/metrics/)
+- [实验性功能](/configuration/experimental-features/)

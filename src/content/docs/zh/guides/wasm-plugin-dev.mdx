@@ -1,5 +1,220 @@
 ---
-title: WASM Plugin Development
+title: Wasm 插件开发
+description: "构建、加载和部署用于请求和响应处理的 WebAssembly 插件。编译插件、配置沙箱限制并绑定到后端。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/guides/wasm-plugin-dev)。
+Nantian Gateway 支持用于在数据平面中扩展请求和响应处理的 WebAssembly（Wasm）插件。你用 Rust 编写插件，编译为 `.wasm` 文件，然后通过 `WasmPlugin` CRD 进行部署。网关将模块加载到沙箱化的 Wasmtime 运行时中，并在代理管线的配置点调用你的 Hook 函数。
+
+## 插件生命周期
+
+插件从开发到执行经历四个阶段：
+
+1. **编译**插件为目标 `wasm32-unknown-unknown` 的 `.wasm` 二进制文件。
+2. **部署**二进制文件，通过 URL、Kubernetes ConfigMap 或在 `WasmPlugin` spec 中以内联 base64 的方式提供。
+3. **加载**模块。数据平面使用 Wasmtime 编译模块并注册导出的 Hook 函数。
+4. **运行时执行**。在代理通过绑定目标的请求时，网关调用你的 Hook 函数。
+
+`WasmPlugin` CRD 引用插件应拦截的目标资源（如 `HTTPRoute` 或 `Service`）。数据平面监视 `WasmPlugin` 的变更，动态加载或卸载插件，无需重启数据平面即可添加或更新插件。
+
+## 必需的导出符号
+
+每个插件模块必须至少导出以下三个符号：
+
+| 导出 | 类型 | 用途 |
+| --- | --- | --- |
+| `memory` | WebAssembly 内存 | 用于主机与插件之间传递数据的共享内存。 |
+| `alloc` | 函数 `(len: i32) -> i32` | 在模块内存中分配缓冲区。返回一个指针。 |
+| Hook 函数 | 函数 `(ptr: i32, len: i32) -> i32` | `on_request`、`on_response`、`on_stream_chunk` 中的一个或多个。 |
+
+Hook 函数接收一个指向 JSON 编码上下文的指针和长度。它们必须返回一个整数状态码。网关按以下方式解释返回值：
+
+| 返回值 | 含义 |
+| --- | --- |
+| `1` | `Continue`。让请求或响应正常继续。 |
+| 任何负数 | `Reject`。以该值的绝对值作为 HTTP 状态码阻止请求或响应。例如，`-403` 以 403 Forbidden 拒绝。 |
+
+### Rust 中的 Hook 签名
+
+插件的 Hook 函数应遵循以下签名：
+
+```rust
+#[no_mangle]
+pub extern "C" fn on_request(ptr: i32, len: i32) -> i32 {
+    // 从 (ptr, len) 处的内存读取上下文
+    // 执行逻辑
+    // 返回 1 表示继续，返回负数表示拒绝
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn on_response(ptr: i32, len: i32) -> i32 {
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn on_stream_chunk(ptr: i32, len: i32) -> i32 {
+    1
+}
+```
+
+只导出插件需要的 Hook。一个仅修改响应 Header 的插件导出 `on_response`。一个阻止请求的插件导出 `on_request`。你可以导出任意组合。
+
+## 插件配置
+
+插件通过 `WasmPlugin` spec 的 `config` 字段接收配置。该值是一个原始字符串，通常是 JSON，在加载时传递给插件。用于传递 API 密钥、规则或功能标志等需要在初始化期间读取的配置。
+
+```yaml
+spec:
+  config: |
+    {"mode":"audit","allowedHosts":["internal.example.com"]}
+```
+
+## 沙箱限制
+
+数据平面在具有可配置资源限制的沙箱中运行插件。这些限制防止单个插件消耗过多的 CPU、内存或 I/O 资源：
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `maxMemoryBytes` | 16 MiB（16777216） | 最大堆内存。超过此限制的分配会失败。 |
+| `maxExecutionTimeMs` | 10 ms | 每次 Hook 调用的最大墙上时间。超过此值会触发沙箱超时，Hook 被视为拒绝。 |
+| `allowNetwork` | false | 为 true 时，插件可以发起外部网络调用。出于安全考虑默认禁用。 |
+| `allowFileSystem` | false | 为 true 时，插件可以访问主机文件系统。默认禁用。 |
+
+基于 epoch 的超时机制在后台线程上以毫秒为间隔递增。当 Hook 的执行时间超过 `maxExecutionTimeMs` 时，Wasmtime 引擎会中断 guest 程序，网关拒绝该请求。
+
+## 模块来源
+
+`WasmPlugin` 支持三种方式提供 `.wasm` 二进制文件：
+
+### URL
+
+网关从 HTTPS URL 获取模块。适用于开发阶段或将插件托管在制品服务器的场景。
+
+```yaml
+spec:
+  wasm:
+    url: https://plugins.example.com/auth-check.v1.wasm
+    sha256: abc123...
+```
+
+### ConfigMap
+
+将模块作为二进制键存储在 Kubernetes ConfigMap 中。适用于离线集群或无外部网络环境。
+
+```yaml
+spec:
+  wasm:
+    configMap:
+      name: auth-plugin
+      key: plugin.wasm
+    sha256: abc123...
+```
+
+### 内联 Base64
+
+将整个模块以 base64 编码的字符串形式嵌入 CRD 中。最适合需要随 CRD 携带的小型插件。
+
+```yaml
+spec:
+  wasm:
+    inline: AGFzbQEAAAAB...
+    sha256: abc123...
+```
+
+`sha256` 字段是可选的，但强烈推荐。提供后，数据平面会在执行前验证加载的模块与预期哈希是否匹配。
+
+## 目标绑定
+
+`targetRefs` 字段将插件绑定到特定资源。当处理绑定目标的请求时，网关会调用插件的 Hook。
+
+```yaml
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: api-route
+```
+
+你也可以直接绑定一个 Service。当多个插件绑定同一资源时，网关按加载顺序执行它们。
+
+## 示例：一个认证插件
+
+下面是一个最小化的认证插件，检查必需的 Header，缺失时拒绝请求：
+
+```rust
+use std::alloc::{alloc, Layout};
+use std::slice;
+
+static mut CONTEXT: Vec<u8> = Vec::new();
+
+#[no_mangle]
+pub extern "C" fn alloc(len: i32) -> i32 {
+    let layout = Layout::array::<u8>(len as usize).unwrap();
+    let ptr = unsafe { alloc(layout) };
+    ptr as i32
+}
+
+fn read_context(ptr: i32, len: i32) -> &'static [u8] {
+    unsafe { slice::from_raw_parts(ptr as *const u8, len as usize) }
+}
+
+#[no_mangle]
+pub extern "C" fn on_request(ptr: i32, len: i32) -> i32 {
+    let data = read_context(ptr, len);
+    let ctx: serde_json::Value = serde_json::from_slice(data).unwrap_or_default();
+    let headers = &ctx["request"]["headers"];
+    if headers["x-api-key"].is_null() {
+        return -401;
+    }
+    1
+}
+```
+
+编译命令：
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo build --target wasm32-unknown-unknown --release
+```
+
+部署配置：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: WasmPlugin
+metadata:
+  name: auth-check
+  namespace: nantian-demo
+spec:
+  wasm:
+    url: https://plugins.example.com/auth-check.wasm
+  hooks:
+    - onRequest
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: api-route
+  sandbox:
+    maxMemoryBytes: 33554432
+    maxExecutionTimeMs: 20
+```
+
+## 调试技巧
+
+出问题时，插件会静默失败。以下是常见症状及其原因：
+
+| 症状 | 可能原因 |
+| --- | --- |
+| Hook 从未被调用。 | Hook 名称未从 Wasm 模块中导出，或 Hook 未列入 `spec.hooks`。 |
+| 插件加载但返回错误。 | 缺少 `memory` 或 `alloc` 导出。没有这两个导出，主机无法将上下文传递给插件。 |
+| 间歇性 503 并带有 `CircuitBreakerOpen`。 | `maxExecutionTimeMs` 设置过低。沙箱在 Hook 完成之前将其终止，请求被拒绝。 |
+| 插件编译成功但加载失败。 | Wasm target 错误。请使用 `wasm32-unknown-unknown`。不要使用 WASI target；沙箱提供自己的主机函数。 |
+| 插件从错误的来源加载。 | `WasmPlugin` spec 引用的 `configMap` 不存在，或 key 不匹配。 |
+
+检查数据平面日志中是否包含插件名称。网关以 `info` 级别记录加载、重载和卸载事件，以 `warn` 级别记录调用错误。
+
+## 相关页面
+
+- [实验性功能](/configuration/experimental-features/)
+- [自定义与实验性资源](/api-reference/crds/)
+- [运维与故障排查](/operations/troubleshooting/)

@@ -1,5 +1,142 @@
 ---
-title: Stream Routes
+title: 流式路由
+description: "使用 StreamRoute 路由 TCP 和 UDP 流量。配置基于端口的匹配、基于 SNI 的路由以及 TLS 透传，适用于数据库、消息队列和原生 TCP 服务。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/guides/stream-routes)。
+Nantian Gateway 支持 Gateway API 的 `TCPRoute` 和 `UDPRoute` 资源用于路由四层流量。这些资源统称为流式路由。与在七层运行的 `HTTPRoute` 或 `GRPCRoute` 不同，流式路由工作在传输层：它代理原始的 TCP 流和 UDP 数据报，不检查应用层内容。
+
+## 流式路由的不同之处
+
+HTTP 路由通过路径、Header 和查询参数匹配请求。流式路由完全没有这些。它只依赖两个字段进行匹配：
+
+| 匹配字段 | TCPRoute | UDPRoute |
+| --- | --- | --- |
+| 端口 | 支持 | 支持 |
+| SNI 主机名 | 支持（当 `mode: Terminate` 时） | 不适用 |
+
+在 L4 层面，没有 URL 重写、没有 Header 操作、没有请求或响应修改。网关原样转发字节流，双向传输。
+
+## TCPRoute：TCP 级转发
+
+`TCPRoute` 将 TCP 连接从 Gateway listener 代理到后端服务。这是最简单的路由形式：连接到达特定端口，可选携带有已知的 SNI 主机名，网关将其转发到列表中的一个后端。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: postgres-route
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: tcp-listener
+  rules:
+    - backendRefs:
+        - name: postgres-service
+          port: 5432
+```
+
+此路由将到达 `tcp-listener` 的每个 TCP 连接都发送到 `postgres-service:5432`。Gateway listener（在 Gateway 资源上配置）必须使用 `protocol: TCP` 和相同的端口号。
+
+### 按端口匹配
+
+当一个 listener 处理多个端口时，可以通过规则级别的端口来缩小匹配范围：
+
+```yaml
+rules:
+  - matches:
+      - port: 6379
+    backendRefs:
+      - name: redis-primary
+        port: 6379
+  - matches:
+      - port: 5432
+    backendRefs:
+      - name: postgres-service
+        port: 5432
+```
+
+端口 6379 的连接到达 Redis；端口 5432 的连接到达 PostgreSQL。规则按从上到下评估，首个匹配的规则生效。
+
+### SNI 匹配与 TLS 透传
+
+当 Gateway listener 使用 `protocol: TLS` 且 `tls.mode: Passthrough` 时，可以从 TLS ClientHello 中获取 SNI 主机名用于匹配。这让你可以根据客户端要连接的主机名将 TLS 流量路由到不同后端，而无需在网关处终止 TLS。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TCPRoute
+metadata:
+  name: sni-routing
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: tls-passthrough
+  rules:
+    - matches:
+        - sniHostname: "api.example.com"
+          mode: Passthrough
+      backendRefs:
+        - name: api-tls-backend
+          port: 8443
+    - matches:
+        - sniHostname: "*.internal.example.com"
+          mode: Passthrough
+      backendRefs:
+        - name: internal-tls-backend
+          port: 8443
+```
+
+`mode: Passthrough` 字段告诉网关从 ClientHello 中读取 SNI 并与 `sniHostname` 进行比较。网关不解密 TLS 会话，而是将原始字节转发给选中的后端。`sniHostname` 字段支持精确匹配和通配符前缀匹配（前缀必须是一个完整的 DNS 标签后跟一个点，如 `*.internal.example.com`）。
+
+对于 `mode: Terminate`，网关先终止 TLS，然后将明文流路由到后端。SNI 匹配仍然有效，但后端收到的是未加密的流量。
+
+## UDPRoute：数据报转发
+
+`UDPRoute` 将 UDP 数据报路由到后端服务。配置与 `TCPRoute` 几乎相同，但 listener 协议必须是 `UDP`。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: UDPRoute
+metadata:
+  name: dns-route
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      sectionName: udp-listener
+  rules:
+    - backendRefs:
+        - name: coredns-service
+          port: 53
+```
+
+UDP 是无连接的，因此没有 SNI 匹配。唯一的匹配字段是 `port`。
+
+## 后端选择
+
+每条流式路由规则指定一个 `backendRefs` 列表。当规则匹配时，网关使用加权轮询（默认）或通过 `BackendLBPolicy` 为该后端配置的负载均衡策略，从列表中选择一个后端。每个 `backendRef` 支持 `weight` 字段以调整流量分配：
+
+```yaml
+backendRefs:
+  - name: postgres-primary
+    port: 5432
+    weight: 90
+  - name: postgres-readonly
+    port: 5432
+    weight: 10
+```
+
+使用这些权重，大约 90% 的连接到达主库，10% 到达只读副本。权重是相对整数；权重为 0 会将后端从选择中移除。
+
+## 何时使用流式路由
+
+当你的后端协议不适合 HTTP 模型时，流式路由是正确的选择：
+
+**数据库。** PostgreSQL、MySQL、Redis、MongoDB。它们通过 TCP 使用自己的有线协议。流式路由为你提供连接级负载均衡、TLS 连接的 SNI 路由以及后端健康检查。
+
+**消息队列。** Kafka、RabbitMQ、NATS。这些协议是二进制的且是有状态的。网关代理 TCP 连接而不解释协议。
+
+**自定义 TCP 服务。** 任何通过 TCP 或 UDP 使用非 HTTP 协议的服务：DNS（UDPRoute）、syslog、监控代理、游戏服务器。
+
+**TLS 透传。** 当你希望后端自行处理 TLS 终止时，配置一个使用 `protocol: TLS` 和 `mode: Passthrough` 的 listener，然后通过流式路由的 SNI 匹配来选择正确的后端。

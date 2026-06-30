@@ -1,5 +1,132 @@
 ---
-title: Load Balancing
+title: 负载均衡
+description: "配置 Nantian Gateway 如何在后端之间分配流量。包含轮询、加权路由、一致性哈希、随机和最少请求策略。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/guides/load-balancing)。
+对于每个请求，Nantian Gateway 会从每条路由的 `backendRefs` 列表中选择一个后端。负载均衡策略控制这个选择过程。默认情况下，网关使用简单的轮询方式进行均匀分配。你可以通过 `BackendLBPolicy` 按后端覆盖此行为。
+
+## 可用策略
+
+| 策略 | 行为 | 适用场景 |
+| --- | --- | --- |
+| `RoundRobin`（默认） | 按顺序循环遍历后端 | 通用场景、均匀分配 |
+| `ConsistentHash` | 通过哈希键将请求映射到后端 | 有状态路由：同一客户端始终到达同一后端 |
+| `LeastRequest` | 将请求发送到当前正在处理请求数最少的后端 | 后端响应时间各不相同 |
+| `Random` | 均匀随机选择一个后端 | 简单、低开销分配 |
+
+所有策略都遵循每个 `BackendRef` 上的 `weight` 字段。权重较高的后端会获得更多流量。权重适用于 RoundRobin、Random 和 LeastRequest。ConsistentHash 使用哈希结果，因此权重不相关。
+
+## 轮询（默认）
+
+在没有配置 `BackendLBPolicy` 的情况下，网关使用加权轮询分配流量。每个后端根据其权重按比例获得流量份额。`weight: 0` 的后端完全不会被选中。
+
+默认策略无需任何配置，适用于 HTTP、gRPC 和流式路由。
+
+## 加权路由
+
+你可以通过为各个 `BackendRef` 条目设置权重来控制流量分配。权重是相对整数，网关会在同一规则的所有后端之间进行归一化处理。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: weighted-demo
+  namespace: nantian-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+  rules:
+    - backendRefs:
+        - name: canary-v2
+          port: 8080
+          weight: 30
+        - name: stable-v1
+          port: 8080
+          weight: 70
+```
+
+此处 `stable-v1` 接收 70% 的流量，`canary-v2` 接收 30%。在灰度发布过程中，可以逐步调整权重来迁移流量。
+
+加权路由可以与任何负载均衡策略自然结合。例如，当权重与 `LeastRequest` 结合使用时，网关会先应用权重分配，然后在每个后端内选择负载最少的实例。
+
+## 一致性哈希
+
+一致性哈希路由将共享相同哈希键的请求发送到同一个后端。当你需要请求亲和性但不需要粘性会话时，这非常有用：某个租户的请求始终落在同一个后端，或者来自同一源 IP 的请求保持固定到某个实例。
+
+通过 `BackendLBPolicy` 配置一致性哈希，设置 `loadBalancing` 字段即可：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: tenant-hash
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: tenant-service
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-tenant-id
+```
+
+该策略将请求 Header `x-tenant-id` 的值做哈希计算来选择后端。所有 `x-tenant-id: acme-corp` 的请求都会到达同一个后端，无需显式的会话状态即可实现租户级别的局部性。
+
+### 哈希键类型
+
+`keyType` 字段控制网关对什么内容进行哈希：
+
+| 键类型 | 哈希内容 | 适用场景 |
+| --- | --- | --- |
+| `SourceIP` | 客户端源 IP 地址 | 将某个调用方固定到特定后端实例 |
+| `Header` | 指定 HTTP Header 的值（需要 `headerName`） | 租户路由、用户级亲和性 |
+| `Hostname` | 请求中的 `Host` Header | 基于域名的分片 |
+
+使用 `Header` 键类型时，`headerName` 字段是必需的。网关在查找前会将 Header 名称规范化为小写。如果请求中没有该 Header，网关会将空字符串作为哈希输入，这意味着所有缺少该 Header 的请求将哈希到同一个后端。
+
+一致性哈希使用环形算法。后端集合的小幅变化（添加或移除一个后端）只会重新分配原本映射到该后端的键，从而将对其余后端的干扰降到最低。
+
+### 按路由配置一致性哈希
+
+你可以通过一个 `BackendLBPolicy` 将一致性哈希应用于多条路由，只需让它们指向同一个 `Service`。如果不同路由需要为同一个后端使用不同的哈希键，则需要单独的 `BackendLBPolicy` 资源。首个（按创建时间、然后按名称排序）绑定到该后端的策略生效。冲突解决规则详见 [BackendLBPolicy 参考文档](/configuration/backend-lb-policy/)。
+
+## 最少请求
+
+`LeastRequest` 选择当前正在处理请求数最少的后端。当后端处理速度不同，或某个后端暂时比其他后端慢时，这个策略非常有效。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: least-req-lb
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: slow-backend
+  loadBalancing:
+    type: LeastRequest
+```
+
+正在处理请求的计数由数据平面按后端跟踪。计数器在网关向后端发送请求时递增，在响应完成、失败或超时时递减。与不健康实例的连接被视为正在处理请求数无限大，因此在健康恢复之前永远不会被选中。
+
+## 随机
+
+`Random` 对每个请求均匀随机选择一个后端。它的 CPU 开销是所有策略中最低的，适用于后端同构且不需要任何亲和性或自适应行为的场景。
+
+## 策略对比
+
+| 策略 | 遵循权重 | 请求亲和性 | 自适应负载 | 开销 |
+| --- | --- | --- | --- | --- |
+| RoundRobin | 是 | 否 | 否 | 极低 |
+| ConsistentHash | 否 | 是（按键） | 否 | 中等 |
+| LeastRequest | 是 | 否 | 是 | 中等 |
+| Random | 是 | 否 | 否 | 极低 |
+
+## 查看当前策略
+
+管理 API 公开了每个后端应用的负载均衡配置。可通过数据平面管理端口（默认 `19080`）的 `/snapshots` 端点查询。快照中的每个 `BackendCluster` 都包含一个 `loadBalancing` 字段，显示解析后的策略。如果该字段不存在，则后端使用加权轮询。

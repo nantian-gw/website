@@ -1,5 +1,112 @@
 ---
 title: BackendLBPolicy
+description: "BackendLBPolicy CRD 参考文档。按后端 Service 配置会话保持、负载均衡和熔断器。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/configuration/backend-lb-policy)。
+`BackendLBPolicy` CRD 将会话保持、负载均衡和熔断器这三个后端级别的流量管理功能整合到单个策略资源中。它是一个 Gateway API 本地策略，这意味着它仅作用于同一命名空间内的特定后端。
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: BackendLBPolicy
+metadata:
+  name: orders-lb-policy
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: orders-service
+  sessionPersistence:
+    sessionName: orders-session
+    type: Cookie
+    absoluteTimeout: 30m
+    idleTimeout: 10m
+    cookie:
+      lifetimeType: Session
+  loadBalancing:
+    type: ConsistentHash
+    consistentHash:
+      keyType: Header
+      headerName: x-tenant-id
+  circuitBreaker:
+    maxInflightRequests: 200
+```
+
+## 目标选择
+
+`targetRefs` 字段指定策略所应用的后端。每个条目均为 `LocalPolicyTargetReference`：
+
+| 字段 | 描述 |
+| --- | --- |
+| `group` | 目标的 API 组。核心 `Service` 为空字符串。 |
+| `kind` | 必须为 `Service`。 |
+| `name` | 与策略位于同一命名空间中的 Service 名称。 |
+
+策略不能针对其他命名空间中的 Service。单个策略可通过在 `targetRefs` 中列出多个条目来同时针对多个 Service。
+
+## 策略字段
+
+三个功能（会话保持、负载均衡、熔断器）均为可选。省略某个字段则网关对该功能保持默认行为。一个空的 `BackendLBPolicy`（三个字段全部缺失）不会产生任何效果。
+
+### sessionPersistence
+
+配置基于 Cookie 的会话亲和性。来自同一客户端的请求在会话期间将路由到同一后端。
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `sessionName` | string | 用于标识会话的名称。 |
+| `type` | string | 会话保持类型。目前仅支持 `Cookie`。 |
+| `absoluteTimeout` | duration | 会话的最大生命周期，无论是否有活动。 |
+| `idleTimeout` | duration | 会话在此无活动时长后过期。 |
+| `cookie.lifetimeType` | string | `Session`（浏览器会话）或 `Permanent`（持久化 Cookie）。 |
+
+### loadBalancing
+
+覆盖目标后端的默认加权轮询策略。
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `type` | string | 策略：`RoundRobin`、`ConsistentHash`、`LeastRequest` 或 `Random`。 |
+| `consistentHash.keyType` | string | 哈希键来源：`SourceIP`、`Header` 或 `Hostname`。当 `type` 为 `ConsistentHash` 时必须指定。 |
+| `consistentHash.headerName` | string | 用于哈希的请求头名称。当 `keyType` 为 `Header` 时必须指定。 |
+
+省略 `type` 时，后端使用加权轮询。`consistentHash` 块仅在 `ConsistentHash` 策略下生效，其他策略会忽略该配置。
+
+### circuitBreaker
+
+限制并发进行中的请求数，保护后端免于过载。
+
+| 字段 | 类型 | 描述 |
+| --- | --- | --- |
+| `maxInflightRequests` | int32 | 允许的最大并发请求数。省略或设为 0 表示禁用（应用网关级默认值）。 |
+
+当进行中的请求数达到此限制时，后续请求将立即被拒绝并返回 `503 Service Unavailable` 响应。
+
+## 策略优先级
+
+多个 `BackendLBPolicy` 资源可能针对同一后端。此时网关通过确定的优先级顺序解决冲突：
+
+1. **创建时间戳。** 先创建的策略优先。
+2. **名称。** 若时间戳相同，`metadata.name` 按字母顺序靠前的策略优先。
+3. **命名空间。** 若时间戳和名称均相同，命名空间按字母顺序靠前的策略优先。
+
+这是针对每个后端的首次匹配优先规则。网关不会合并策略。每个后端仅有一个获胜策略，由 `PolicyPrecedes` 函数确定。
+
+已解析的策略会出现在数据平面快照中，分别对应 `BackendCluster.loadBalancing`、`BackendCluster.sessionPersistence` 和 `BackendCluster.circuitBreaker` 字段。可通过数据平面管理 API 的 `/snapshots` 端点查看这些字段。
+
+## 状态条件
+
+网关在 `status.conditions` 中报告策略解析状态：
+
+| 条件类型 | 含义 |
+| --- | --- |
+| `Accepted` | 策略已成功解析并应用。 |
+| `Conflicted` | 另一针对同一后端的策略优先级更高。 |
+| `Invalid` | 策略包含无效配置。 |
+| `TargetNotFound` | `targetRef` 中指定的 Service 不存在。 |
+
+可通过 `status.conditions` 排查策略为何未生效。条件为 `Conflicted` 的策略是有效的，但被更早创建的策略覆盖；请检查哪个策略胜出，然后删除旧策略或调整目标选择。
+
+## 检查已应用的策略
+
+查询数据平面管理 API（端口 `19080`）可查看哪些策略处于活跃状态。`/snapshots` 端点返回完整的 IR 快照。找到与你的服务匹配的 `BackendCluster` 条目，检查其中的 `sessionPersistence`、`loadBalancing` 和 `circuitBreaker` 字段。仅当该后端已解析出 `BackendLBPolicy` 时，这些字段才会出现。

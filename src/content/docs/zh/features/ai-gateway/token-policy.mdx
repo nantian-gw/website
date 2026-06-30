@@ -1,5 +1,97 @@
 ---
-title: Token Policies
+title: 令牌策略
+description: "在 Nantian AI 网关中，通过基于令牌的速率限制来控制每个 AI 模型和每个租户的请求速率。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/features/ai-gateway/token-policy)。
+令牌策略让你控制每个 AI 模型在一段时间内可以消耗多少令牌和请求。它们防止单个租户、API 密钥或用户压垮上游 LLM 提供商并推高你的成本。
+
+## 速率限制的工作原理
+
+网关强制执行三种独立的限制，全部可按策略配置：
+
+| 限制项 | 时间窗口 | 统计内容 |
+| --- | --- | --- |
+| `tokensPerMinute` | 滑动 60 秒 | 窗口内所有请求的输入和输出令牌总数 |
+| `tokensPerHour` | 滑动 3600 秒 | 窗口内所有请求的输入和输出令牌总数 |
+| `requestsPerMinute` | 滑动 60 秒 | 独立 API 请求的数量，不计令牌数 |
+
+网关使用滑动窗口，而非固定窗口。第 59 秒发起的请求不会因为窗口在第 60 秒重置而获得豁免。每个新请求都会将窗口边界向前推移，因此流量突发会随时间自然平滑。
+
+当三个限制全部设为零时，速率限制将被禁用，所有请求直接放行。
+
+## 限制作用域
+
+`scope` 字段决定限制应用到的实体。每个作用域创建独立的速率限制计数器：
+
+| 作用域 | 计数器键值 |
+| --- | --- |
+| `apiKey` | 每个 API 密钥一组限制。使用网关的每个租户或应用程序拥有独立配额。 |
+| `model` | 每个模型名称一组限制。所有流向 `gpt-4o` 的流量共享一个全局配额。 |
+| `user` | 每个通过请求传递的最终用户标识符一组限制。 |
+
+默认作用域为 `apiKey`。当你需要限制所有租户的总模型用量时，选择 `model`。当你想在多租户部署中限制单个最终用户时，选择 `user`。
+
+## 突发配置
+
+`burst` 字段是一个乘数，用于临时扩展每个限制窗口。在 `tokensPerMinute: 1000` 的策略上设置 `1.5` 的突发值，允许单分钟窗口内最多使用 1500 个令牌。突发会等比例乘以策略中的每个限制：分钟限制、小时限制和请求限制都获得相同的乘数。
+
+突发在流量有尖峰但你不想永久提高配额时很有用。将突发设为 `1.0`（默认值）会禁用突发，严格执行所配置的限制。低于 `1.0` 的值会被内部钳位到 `1.0`。
+
+## 超限行为
+
+`onLimit` 字段控制请求超出速率限制时的行为：
+
+| 值 | 行为 |
+| --- | --- |
+| `reject` | 网关立即返回 HTTP 429 响应，并附带 `X-RateLimit-Retry-After-Seconds` 头告知客户端需等待多长时间。这是默认行为。 |
+| `queue` | 网关在内部将请求排队，等配额可用后释放。排队请求计入下一个窗口的限制。 |
+| `warn` | 请求正常继续，但网关记录一条速率限制警告。在测试期间或强制执行硬限制之前的监控阶段使用。 |
+
+## 两阶段执行
+
+速率限制分两个阶段运行。代理请求之前，网关会根据配置的作用域键检查 `requestsPerMinute` 限制。如果请求限制已耗尽，请求会被立即拒绝或排队，不会进行任何上游调用。
+
+LLM 提供商返回响应后，网关读取 OpenAI 格式响应中的 `usage` 字段，提取实际令牌数（提示令牌加补全令牌）。它将此令牌数计入作用域键对应的 `tokensPerMinute` 和 `tokensPerHour` 计数器。如果响应导致任一令牌限制超出，后续请求将被阻止，直到配额恢复。
+
+通过前置检查的请求仍可能在响应后触发速率限制，因为令牌数要到响应返回时才能知道。响应后的限制执行门控的是*后续*请求，而非当前请求。
+
+## 与 AIService 集成
+
+令牌策略作为独立的 `TokenPolicy` CRD 资源声明，通过 `tokenPolicyRef` 字段被 `AIService` 引用。单个策略可以被多个 `AIService` 资源共享，每个服务也可以指向自己的策略。
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: gpt-4o-limit
+  namespace: nantian-demo
+spec:
+  tokensPerMinute: 1000
+  tokensPerHour: 50000
+  requestsPerMinute: 60
+  scope: apiKey
+  burst: 1.2
+  onLimit: reject
+---
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-service
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  tokenPolicyRef:
+    name: gpt-4o-limit
+```
+
+此配置将每个 API 密钥限制为每分钟 1000 个令牌（突发时 1200 个）、每小时 50,000 个令牌（突发时 60,000 个）以及每分钟 60 个请求（突发时 72 个）。超出限制返回 429。
+
+没有 `tokenPolicyRef` 的 `AIService` 不受速率限制。网关会跳过请求前和响应后的所有限制检查。
+
+## 指标
+
+速率限制命中通过 `ntgw_ai_token_rate_limit_hits_total` Prometheus 计数器追踪，标签为 `model` 和 `scope`。这让你能够构建仪表盘，显示哪些模型最常触发限制，以及瓶颈是在模型级别还是在 API 密钥级别。
+
+一个独立的 `ntgw_ai_tenant_denied_total` 计数器（`reason="quota_exceeded"`）追踪租户级别配额执行导致的拒绝，这是与速率限制器不同的机制。

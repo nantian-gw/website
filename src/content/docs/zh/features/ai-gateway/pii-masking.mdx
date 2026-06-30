@@ -1,5 +1,103 @@
 ---
-title: PII Masking
+title: PII 脱敏
+description: "在 AI 提示词和响应到达模型提供商或客户端之前，检测并脱敏其中的个人身份信息。"
 ---
 
-本文档的中文翻译正在准备中。请参考 [英文版本](/features/ai-gateway/pii-masking)。
+PII 脱敏会扫描 AI 请求和响应内容中的个人身份信息（Personally Identifiable Information），并根据可配置的脱敏模式替换检测到的实体。检测器使用针对每种实体类型编译的正则表达式模式。
+
+:::caution[实验性]
+PII 脱敏是 AI 网关功能集的一部分，使用 `gateway.nantian.dev/v1alpha1` 资源。配置 PII 规则前请启用 `featureMode: experimental` 和 `controlplane.config.features.enableAiGateway: true`。
+:::
+
+## PII 脱敏可检测的内容
+
+脱敏器内置了八种实体类型的正则表达式模式：
+
+| 实体类型 | 匹配内容 | 示例 |
+| --- | --- | --- |
+| `email` | 电子邮件地址 | `user@example.com` |
+| `phone` | 电话号码（中国大陆手机格式） | `13800138000` |
+| `credit_card` | 信用卡号码模式（13-16 位数字） | `4111-1111-1111-1111` |
+| `id_card` | 身份证号码（17 位数字 + 校验位） | `110101199001011234` |
+| `url` | HTTP 和 HTTPS URL | `https://internal.example.com` |
+| `ip_address` | IPv4 地址 | `192.168.1.100` |
+| `person` | 人名模式 | 通过关键词或自定义模式检测 |
+| `address` | 物理地址模式 | 通过关键词或自定义模式检测 |
+
+`person` 和 `address` 类型在实体枚举中已定义，但没有内置的正则表达式模式。当你需要姓名或地址脱敏时，通过 `customEntities` 进行配置。
+
+## 脱敏模式
+
+脱敏器支持三种替换模式，每种模式为检测到的实体生成不同的输出：
+
+| 模式 | 替换结果 | 示例（检测到 email） |
+| --- | --- | --- |
+| **Mask（遮蔽）** | `[实体类型]` 方括号 | `[email]` |
+| **Redact（编校）** | 字面量 `[REDACTED]` | `[REDACTED]` |
+| **Anonymize（匿名化）** | `<实体类型>` 尖括号 | `<email>` |
+
+选择与你的可观测性和审计要求相匹配的模式。Mask 模式在替换结果中保留了实体类型，有助于你了解什么被移除了。Redact 模式提供统一占位符，不包含类型信息。Anonymize 模式使用易于区分的尖括号格式。
+
+当脱敏功能禁用（`enabled: false`）时，检测器直接返回原始文本，零运行时开销。
+
+## 配置
+
+PII 脱敏在 `AIService` 资源的 `piiMasking` 字段中配置：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: private-gpt4
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  piiMasking:
+    enabled: true
+    mode: mask
+```
+
+如需自定义实体检测，按实体类型提供额外的正则表达式模式：
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: private-gpt4-custom
+  namespace: nantian-demo
+spec:
+  provider: openai
+  format: openai
+  model: gpt-4o
+  piiMasking:
+    enabled: true
+    mode: redact
+    customEntities:
+      - entityType: person
+        pattern: "(Mr|Ms|Dr)\\s+[A-Z][a-z]+\\s+[A-Z][a-z]+"
+      - entityType: address
+        pattern: "\\d+\\s+[A-Za-z]+\\s+(Street|Road|Avenue|Lane)"
+```
+
+自定义模式与内置模式一起添加。两组模式在每条消息上都运行，重叠的匹配项会被去重，最长的匹配项优先。
+
+## 脱敏工作原理
+
+脱敏器先运行 `detect()` 找到所有实体匹配项，然后从左到右替换它们。重叠的匹配项通过保留每个位置最长的匹配来解析。例如，如果 URL 中包含嵌入的 IP 地址，则只替换 URL，IP 地址不会被替换。
+
+`mask()` 方法返回三个值：
+
+- 脱敏后的文本字符串
+- 被替换的实体数量
+- 由 `(原文, 替换值)` 对组成的列表，用于审计日志
+
+你可以使用审计对来验证哪些 PII 被移除了，而无需将原始敏感数据记录到主要日志存储中。
+
+## 相关页面
+
+- [AI 网关](/features/ai-gateway/)
+- [内容安全](/features/ai-gateway/content-safety/)
+- [安全与可观测性](/features/security-observability/)
+- [实验性功能](/configuration/experimental-features/)
