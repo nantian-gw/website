@@ -26,6 +26,7 @@ export const docsSidebar = [
       { label: 'Gateway API Support', link: 'concepts/gateway-api-support', translations: { 'zh-CN': 'Gateway API 支持矩阵' } },
       { label: 'Split-Plane Architecture', link: 'concepts/split-plane', translations: { 'zh-CN': '分离式平面架构' } },
       { label: 'Intermediate Representation (IR)', link: 'concepts/ir', translations: { 'zh-CN': '中间表示 (IR)' } },
+      { label: 'Glossary', link: 'concepts/glossary', translations: { 'zh-CN': '术语表' } },
     ],
   },
   {
@@ -66,6 +67,7 @@ export const docsSidebar = [
       { label: 'Session Persistence', link: 'guides/session-persistence', translations: { 'zh-CN': '会话保持' } },
       { label: 'Request Mirroring', link: 'guides/request-mirroring', translations: { 'zh-CN': '请求镜像' } },
       { label: 'WASM Plugin Development', link: 'guides/wasm-plugin-dev', translations: { 'zh-CN': 'WASM 插件开发' } },
+      { label: 'Migrating from Ingress', link: 'guides/ingress-migration', translations: { 'zh-CN': '从 Ingress 迁移' } },
     ],
   },
   {
