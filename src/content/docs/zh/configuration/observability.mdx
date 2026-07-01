@@ -91,6 +91,32 @@ OpenTelemetry 链路追踪为可选功能，可在数据面配置中启用：
 
 `sampleRate` 控制生成追踪的请求比例。`0.1` 表示追踪 10% 的请求。生产环境建议从较低的采样率开始，根据可观测性需求和存储容量逐步调整。
 
+## Sentry 错误追踪
+
+数据面支持 Sentry 错误追踪，提供完整的 APM 能力：错误/panic 捕获、性能追踪、事件面包屑和版本追踪。
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `log.sentry.enabled` | bool | `false` | 启用 Sentry 错误追踪 |
+| `log.sentry.dsn` | string | `""` | Sentry DSN（数据源名称） |
+| `log.sentry.environment` | string | `""` | 环境名称（`production`、`staging`、`development`） |
+| `log.sentry.sampleRate` | float | `1.0` | 事件采样率（0.0 至 1.0） |
+| `log.sentry.tracesSampleRate` | float | `0.01` | 性能事务采样率（0.0 至 1.0） |
+| `log.sentry.attachStacktrace` | bool | `true` | 在错误事件中附加堆栈跟踪 |
+| `log.sentry.sendDefaultPii` | bool | `false` | 发送个人身份信息 |
+| `log.sentry.debug` | bool | `false` | 启用 Sentry SDK 调试日志 |
+
+Sentry 默认处于关闭状态。要启用，请将 `log.sentry.enabled` 设为 `true` 并提供有效的 `log.sentry.dsn`。DSN 可从 Sentry 项目设置中获取。
+
+启用后，数据面会捕获：
+
+- **错误和 panic** — 所有 Rust panic 和未处理错误都会被捕获并上报
+- **性能追踪** — 请求处理中的事务和 span
+- **事件面包屑** — 导致错误的上下文事件
+- **版本追踪** — 将事件与部署的数据面版本关联
+
+Sentry 是追踪事件的额外消费者，不会替代现有的 OpenTelemetry 链路追踪。
+
 ## Prometheus 采集
 
 配置 Prometheus 采集数据面指标：

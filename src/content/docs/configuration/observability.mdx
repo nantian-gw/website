@@ -1,9 +1,9 @@
 ---
 title: Observability
-description: "Configure metrics, tracing, access logging, and OpenTelemetry export for the Nantian Gateway control plane and data plane."
+description: "Configure metrics, tracing, access logging, Sentry error tracking, and OpenTelemetry export for the Nantian Gateway control plane and data plane."
 ---
 
-Nantian Gateway emits structured logs, Prometheus metrics, and optional OpenTelemetry traces from both the control plane and data plane. This page covers the configuration of each observability signal.
+Nantian Gateway emits structured logs, Prometheus metrics, and optional OpenTelemetry traces from both the control plane and data plane. The data plane also supports Sentry error tracking. This page covers the configuration of each observability signal.
 
 ## Logging
 
@@ -91,6 +91,32 @@ OpenTelemetry tracing is optional and can be enabled in the data plane configura
 When enabled, the data plane propagates trace context headers and exports spans to the configured OTLP collector. Traces include the full request lifecycle: TLS handshake, route matching, header transformation, upstream request, and response.
 
 The `sampleRate` controls the fraction of requests that generate traces. A rate of `0.1` traces 10% of requests. For production, start with a low sampling rate and increase based on observability requirements and storage capacity.
+
+## Sentry Error Tracking
+
+The data plane supports Sentry error tracking for full APM: error/panic capture, performance tracing, breadcrumbs, and release tracking.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `log.sentry.enabled` | bool | `false` | Enable Sentry error tracking |
+| `log.sentry.dsn` | string | `""` | Sentry DSN (Data Source Name) |
+| `log.sentry.environment` | string | `""` | Environment name (`production`, `staging`, `development`) |
+| `log.sentry.sampleRate` | float | `1.0` | Event sampling rate (0.0 to 1.0) |
+| `log.sentry.tracesSampleRate` | float | `0.01` | Performance transaction sampling rate (0.0 to 1.0) |
+| `log.sentry.attachStacktrace` | bool | `true` | Attach stack traces to error events |
+| `log.sentry.sendDefaultPii` | bool | `false` | Send personally identifiable information |
+| `log.sentry.debug` | bool | `false` | Enable Sentry SDK debug logging |
+
+Sentry is disabled by default. To enable, set `log.sentry.enabled` to `true` and provide a valid `log.sentry.dsn`. The DSN is available from your Sentry project settings.
+
+When enabled, the data plane captures:
+
+- **Errors and panics** — all Rust panics and unhandled errors are captured and reported
+- **Performance traces** — transactions and spans from request processing
+- **Breadcrumbs** — context events leading up to errors
+- **Release tracking** — correlates events with the deployed data plane version
+
+Sentry is an additional consumer of tracing events and does not replace existing OpenTelemetry tracing.
 
 ## Prometheus Scraping
 
