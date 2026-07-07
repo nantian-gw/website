@@ -19,11 +19,11 @@ const highlights = isZh
       },
       {
         title: 'Gateway API 原生支持',
-        desc: '全面实现 Kubernetes Gateway API v1.5.1 规范，声明 55 项一致性特性。支持 GatewayClass、Gateway、HTTPRoute、GRPCRoute、TLSRoute 等核心资源，与 Envoy Gateway、Istio 等主流实现保持 API 兼容，迁移成本极低。',
+        desc: '全面实现 Kubernetes Gateway API v1.5.1 规范，声明 54 项一致性特性。支持 GatewayClass、Gateway、HTTPRoute、GRPCRoute、TLSRoute 等核心资源，与 Envoy Gateway、Istio 等主流实现保持 API 兼容，迁移成本极低。',
       },
       {
         title: '极致性能与资源效率',
-        desc: 'Rust 数据面无 GC、零成本抽象，单核吞吐可达数万 QPS。相比传统 Go/Java 网关，内存占用降低 60-80%，启动时间缩短至毫秒级。内置连接池复用、零拷贝转发、异步 I/O 等优化，在生产环境中经过大规模验证。',
+        desc: 'Rust 数据面无 GC、零成本抽象，单核吞吐可达数万 QPS。内存占用低（~15MB 基线），启动时间毫秒级。内置连接池复用、零拷贝转发、异步 I/O 等优化，在生产环境中经过大规模验证。',
       },
       {
         title: '实验性 AI 网关能力',
@@ -45,11 +45,11 @@ const highlights = isZh
       },
       {
         title: 'Native Gateway API Support',
-        desc: 'Full implementation of Kubernetes Gateway API v1.5.1 with 55 declared conformance features. Supports GatewayClass, Gateway, HTTPRoute, GRPCRoute, TLSRoute, and more. API-compatible with Envoy Gateway, Istio, and other major implementations for minimal migration cost.',
+        desc: 'Full implementation of Kubernetes Gateway API v1.5.1 with 54 declared conformance features. Supports GatewayClass, Gateway, HTTPRoute, GRPCRoute, TLSRoute, and more. API-compatible with Envoy Gateway, Istio, and other major implementations for minimal migration cost.',
       },
       {
         title: 'Extreme Performance & Efficiency',
-        desc: 'The Rust data plane delivers tens of thousands of QPS per core with no GC and zero-cost abstractions. Memory usage is 60-80% lower than traditional Go/Java gateways, with millisecond startup times. Built-in connection pooling, zero-copy forwarding, and async I/O are battle-tested in production.',
+        desc: 'The Rust data plane delivers tens of thousands of QPS per core with no GC and zero-cost abstractions. Low memory footprint (~15MB baseline) with millisecond startup times. Built-in connection pooling, zero-copy forwarding, and async I/O are battle-tested in production.',
       },
       {
         title: 'Experimental AI Gateway',
@@ -83,13 +83,13 @@ const perfTitle = isZh ? '性能基准' : 'Performance Benchmarks';
 const perfItems = isZh
   ? [
       '单核吞吐量可达 30,000+ QPS，延迟 P99 低于 5ms',
-      '内存占用仅 15MB 起，较同类 Go 网关降低 80%',
+      '内存占用仅 15MB 起，启动时间 < 50ms',
       '启动时间 < 50ms，支持热重载配置与插件',
       '支持 10,000+ 并发连接，零拷贝转发无性能损耗',
     ]
   : [
       '30,000+ QPS per core with P99 latency under 5ms',
-      'Memory footprint starts at 15MB — 80% lower than comparable Go gateways',
+      'Memory footprint starts at 15MB with startup time under 50ms',
       'Startup time under 50ms with hot-reload for config and plugins',
       '10,000+ concurrent connections with zero-copy forwarding',
     ];
