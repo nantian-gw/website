@@ -15,7 +15,7 @@ description: "关于安装、架构、功能、运维和项目状态的常见问
 
 ### Nantian Gateway 和 Envoy Gateway 有什么区别？
 
-最核心的区别有两个：一是数据面语言（Rust vs C++），二是 AI 网关能力。Nantian Gateway 把 AI 提供方路由、Token 计数、限流和 PII 脱敏直接做在数据面里，不需要额外部署 AI 代理。如果你不需要 AI 网关能力，两者在 Gateway API 实现上的差异主要在特性覆盖面上——Nantian Gateway 声明支持 v1.5.1 的 55 个特性，Envoy Gateway 目标是 v1.2.x 约 40 个特性。
+最核心的区别有两个：一是数据面语言（Rust vs C++），二是 AI 网关能力。Nantian Gateway 把 AI 提供方路由、Token 计数、限流和 PII 脱敏直接做在数据面里，不需要额外部署 AI 代理。如果你不需要 AI 网关能力，两者在 Gateway API 实现上的差异主要在特性覆盖面上——Nantian Gateway 声明支持 v1.5.1 的 54 个特性，Envoy Gateway 目标是 v1.2.x 约 40 个特性。
 
 详细的对比分析见 [项目对比](/zh/overview/comparison/) 页面。
 
