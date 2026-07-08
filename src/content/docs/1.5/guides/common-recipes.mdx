@@ -1,0 +1,405 @@
+---
+title: Common Recipes
+description: "Step-by-step recipes for common Nantian Gateway configurations: HTTPS with cert-manager, path-based routing, traffic splitting, gRPC, and CORS."
+---
+
+This page collects the most frequently requested configurations in one place. Copy, paste, and adapt these recipes to your environment.
+
+## HTTPS with cert-manager
+
+End-to-end TLS termination using Let's Encrypt.
+
+```bash
+# 1. Install cert-manager
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+
+# 2. Create a ClusterIssuer
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
+
+# 3. Create a Certificate
+kubectl apply -n nantian-gw -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gateway-tls
+spec:
+  secretName: gateway-tls
+  dnsNames:
+  - api.example.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+EOF
+
+# 4. Create Gateway with TLS
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: gateway-tls
+    allowedRoutes:
+      namespaces:
+        from: All
+EOF
+```
+
+Verify: `curl -v https://api.example.com/` should show a valid certificate.
+
+## Path-Based Routing
+
+Route different URL paths to different backends.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: path-routing
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: api-service
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /web
+    backendRefs:
+    - name: web-service
+      port: 3000
+  - matches:
+    - path:
+        type: Exact
+        value: /health
+    backendRefs:
+    - name: health-check
+      port: 9090
+```
+
+Rules are evaluated from top to bottom. The first matching rule wins.
+
+## Traffic Splitting (Canary Deployment)
+
+Send 90% of traffic to v1 and 10% to v2.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: app-v1
+      port: 8080
+      weight: 90
+    - name: app-v2
+      port: 8080
+      weight: 10
+```
+
+Weights are relative. `90` and `10` is the same as `9` and `1`. Omit weight for equal distribution.
+
+## gRPC Routing
+
+Route gRPC traffic by service and method name.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: grpc-routing
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - method:
+        service: echo.Echo
+        method: UnaryEcho
+    backendRefs:
+    - name: grpc-echo
+      port: 9090
+  - matches:
+    - method:
+        service: echo.Echo
+    backendRefs:
+    - name: grpc-echo
+      port: 9090
+```
+
+```yaml
+# Gateway must allow gRPC on the listener
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All
+      kinds:
+      - kind: GRPCRoute
+      - kind: HTTPRoute
+```
+
+## CORS Configuration
+
+Allow cross-origin requests from a specific domain.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cors-api
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: CORS
+      cors:
+        allowOrigins:
+        - "https://app.example.com"
+        allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        allowHeaders:
+        - Content-Type
+        - Authorization
+        exposeHeaders:
+        - X-Request-Id
+        allowCredentials: true
+        maxAge: 3600
+    backendRefs:
+    - name: api-service
+      port: 8080
+```
+
+The CORS filter handles preflight `OPTIONS` requests automatically — no backend changes needed.
+
+## Header-Based Routing
+
+Route requests to different backends based on request headers.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: header-routing
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - headers:
+      - name: X-Version
+        value: v2
+    backendRefs:
+    - name: app-v2
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: app-v1
+      port: 8080
+```
+
+Use this pattern for A/B testing, feature flags, or canary releases based on header values.
+
+## URL Rewrite
+
+Rewrite the request path before forwarding to the backend.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rewrite
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /public/api
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /api
+    backendRefs:
+    - name: internal-api
+      port: 8080
+```
+
+With this configuration, `GET /public/api/users` becomes `GET /api/users` when forwarded to the backend.
+
+## Redirect
+
+Redirect HTTP to HTTPS, or permanent redirects for changed paths.
+
+```yaml
+# HTTP → HTTPS redirect
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: http-to-https
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301
+```
+
+```yaml
+# Path migration redirect
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: path-redirect
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /old-path
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /new-path
+        statusCode: 301
+```
+
+## Backend TLS with Custom CA
+
+Verify the backend's certificate against a custom CA stored in a ConfigMap.
+
+```bash
+# 1. Store the CA certificate
+kubectl create configmap backend-ca -n default --from-file=ca.crt=/path/to/ca.pem
+
+# 2. Create BackendTLSPolicy
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+  namespace: default
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: secure-backend
+  validation:
+    hostname: secure-backend.default.svc
+    caCertificateRefs:
+    - name: backend-ca
+      group: ""
+      kind: ConfigMap
+    subjectAltNames:
+    - DNS: secure-backend.default.svc
+    - DNS: secure-backend
+EOF
+```
+
+The gateway will now verify the backend's certificate against the specified CA and hostname before establishing a connection.
+
+## Request Mirroring
+
+Send a copy of production traffic to a staging backend for testing.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mirror
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+    - type: RequestMirror
+      requestMirror:
+        backendRef:
+          name: staging-backend
+          port: 8080
+        fraction:
+          numerator: 10
+          denominator: 100
+    backendRefs:
+    - name: production-backend
+      port: 8080
+```
+
+This sends 10% of requests to the staging backend. The primary backend still receives all requests. Mirror responses are discarded.
+
+## What's Next
+
+- [Your First Route](/getting-started/first-route/) — step-by-step walkthrough from zero to routing
+- [Traffic Management](/features/traffic-management/) — deeper dive into routing patterns
+- [Security Best Practices](/security/) — TLS, authentication, and network security
+- [Troubleshooting](/operations/troubleshooting/) — diagnostic commands and common issues

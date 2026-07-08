@@ -1,0 +1,172 @@
+---
+title: Performance Benchmarks
+description: "Nightly load test results for Nantian Gateway data plane throughput, latency, and resource usage."
+---
+
+Nantian Gateway runs nightly conformance and load tests against the latest build. Results are published automatically to the [platform-release](https://github.com/nantian-gw/platform-release) repository. This page summarizes the current baseline and explains how to interpret and reproduce the results.
+
+## Current Baseline (July 2026)
+
+The following results are from a 10-minute [vegeta](https://github.com/tsenart/vegeta) HTTP load test running against a data plane instance inside a Kind cluster. The test sends HTTP/1.1 GET requests at unlimited rate through the gateway to a simple echo backend.
+
+| Metric | Value |
+|--------|-------|
+| **Throughput** | 9,000–11,000 RPS |
+| **P50 latency** | 3–4 ms |
+| **P90 latency** | 6–9 ms |
+| **P99 latency** | 11–15 ms |
+| **Max latency** | 70–100 ms |
+| **Success rate** | 100% |
+| **Data plane CPU** | ~1,100 millicores |
+| **Data plane memory** | ~105 MiB |
+
+:::note
+These numbers are from a single-instance Kind deployment with 2 CPU cores allocated to the data plane. Production deployments with more resources and optimized backend services typically achieve higher throughput.
+:::
+
+## How the Benchmark Works
+
+### Test Setup
+
+1. A Kind cluster is created with a single control-plane node.
+2. Nantian Gateway is deployed via Helm using the latest `main` branch images.
+3. A simple echo backend service is deployed (an HTTP server that returns a minimal response).
+4. A Gateway and HTTPRoute are created to route all traffic to the echo backend.
+5. Vegeta runs inside the cluster as a pod, sending requests to the gateway's ClusterIP service.
+
+### Test Protocol
+
+```text
+1. Warmup: 60 seconds of unlimited-rate attack (results discarded)
+2. Measurement: 10 minutes of unlimited-rate attack (results captured)
+3. Resource sampling: CPU and memory samples taken every 60 seconds via kubelet summary API
+```
+
+### Key Configuration
+
+- **Target**: `GET /` through Gateway → dataplane → echo backend
+- **Workers**: 50 vegeta workers
+- **Rate**: Unlimited (workers send requests as fast as possible)
+- **Data plane**: 2 CPU cores (2000m limit), jemalloc allocator, LTO fat build
+- **Backend**: Minimal HTTP echo server
+
+## Reproducing the Benchmark
+
+### In a Kind Cluster
+
+```bash
+# Clone the gateway repository
+git clone https://github.com/nantian-gw/gateway.git
+cd gateway
+
+# Run the conformance + performance suite
+make conformance
+```
+
+This creates a Kind cluster, deploys Nantian Gateway, runs conformance tests, and executes the load test. Results are saved to `dist/performance.json`.
+
+### Against a Production Cluster
+
+```bash
+# Deploy the echo backend
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-bench
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: echo-bench
+  template:
+    metadata:
+      labels:
+        app: echo-bench
+    spec:
+      containers:
+      - name: echo
+        image: ghcr.io/nantian-gw/echo-bench:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests: {cpu: 500m, memory: 32Mi}
+          limits: {cpu: 2000m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-bench
+spec:
+  selector:
+    app: echo-bench
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: bench-route
+spec:
+  parentRefs:
+  - name: your-gateway
+  rules:
+  - backendRefs:
+    - name: echo-bench
+      port: 80
+EOF
+
+# Run vegeta from inside the cluster
+kubectl run vegeta-bench --restart=Never --rm -i \
+  --image=peterevans/vegeta:latest -- \
+  sh -c "printf 'GET http://your-gateway.namespace.svc:80/\n' > /tmp/t && \
+    echo 'Warmup 60s...' && \
+    vegeta attack -duration=60s -rate=0 -max-workers=100 -targets=/tmp/t > /dev/null && \
+    echo 'Measurement 120s...' && \
+    vegeta attack -duration=120s -rate=0 -max-workers=100 -targets=/tmp/t | vegeta report -type=json"
+```
+
+:::tip
+For best results, run vegeta from a pod on a different node than the gateway and backend, and use at least 4 backend replicas to avoid backend saturation.
+:::
+
+## Interpreting the Results
+
+### Throughput (RPS)
+
+The number of successful requests per second. Higher is better, but throughput alone doesn't tell the full story — a gateway that adds 100ms of latency to each request might still achieve high RPS if it has enough concurrent connections.
+
+### Latency Distribution
+
+- **P50 (median)**: Half of all requests complete faster than this value. Represents typical user experience.
+- **P90/P95**: The slowest 10% and 5% of requests. Shows how well the system handles occasional congestion.
+- **P99**: The slowest 1% of requests. Important for SLA compliance — this is the latency most of your users will *never* see.
+- **Max**: The single slowest request in the entire test. Often driven by GC pauses, connection establishment, or scheduler delays.
+
+### CPU and Memory
+
+- **Data plane CPU**: Should scale with throughput. If CPU is maxed out but throughput isn't growing with more workers, the bottleneck is CPU-bound.
+- **Data plane memory**: Should be stable. Growth over time suggests a memory leak. Nantian Gateway's Rust data plane typically stays under 150 MiB in load tests.
+
+## Performance Optimization
+
+If your throughput doesn't match the baseline:
+
+1. **Check your backend** — the echo backend must handle at least the same throughput as the gateway. Use multiple replicas and ensure each replica has enough CPU.
+2. **Check your vegeta configuration** — running vegeta from a resource-constrained pod limits how many requests it can generate. Use multiple vegeta pods in parallel for high-scale testing.
+3. **Check Gateway API resource configuration** — complex route matching (many rules, filters, or backend weights) adds processing overhead.
+4. **Check CPU allocation** — the data plane needs at least 2 CPU cores to achieve the baseline numbers. Use `resources.limits.cpu` to ensure the pod gets enough compute.
+
+For a deeper performance optimization guide, see the [Configuration Tuning](/configuration/tuning/) page.
+
+## Historical Results
+
+Full nightly results with raw vegeta and CPU/memory data are archived in the [platform-release repository](https://github.com/nantian-gw/platform-release/tree/main/results/nightly).
+
+## Related Pages
+
+- [Configuration Tuning](/configuration/tuning/) — optimization guide for data plane and upstream connections
+- [Operations Metrics](/operations/metrics/) — Prometheus metrics available from the data plane
+- [Installation Production](/installation/production/) — production deployment recommendations
+- [Comparison](/overview/comparison/) — how Nantian Gateway compares to other implementations

@@ -1,0 +1,68 @@
+---
+title: 安全最佳实践
+description: "Nantian Gateway 部署的安全指南，包括 TLS 配置、认证、网络策略和 API 保护。"
+---
+
+本页汇总了部署和运维 Nantian Gateway 的安全建议，涵盖 TLS 配置、认证、网络隔离和运维安全实践。
+
+## TLS 配置
+
+### 前端 TLS（客户端 → 网关）
+
+始终在网关边缘终止 TLS：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: my-tls-cert
+```
+
+### 后端 TLS（网关 → 后端服务）
+
+使用 BackendTLSPolicy 加密网关与后端服务之间的流量：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: my-backend
+  validation:
+    hostname: my-backend.default.svc
+    caCertificateRefs:
+    - name: backend-ca
+      kind: ConfigMap
+```
+
+## 认证
+
+管理 API 通过 Bearer Token 保护。使用加密安全的随机源生成 Token：
+
+```bash
+openssl rand -hex 32
+```
+
+## 网络策略
+
+网关组件部署在专用命名空间 `nantian-gw` 中，Helm Chart 包含默认网络策略。
+
+## 密钥管理
+
+API 密钥存储在 Kubernetes Secret 中，不要在 AIService 资源中内联。使用 External Secrets Operator 或 Vault 进行密钥同步和轮换。
+
+详细的安全指南请参考 [英文版](/security/)。
