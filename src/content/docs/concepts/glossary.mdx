@@ -5,16 +5,73 @@ description: "Definitions for key terms used throughout Nantian Gateway and the 
 
 This page defines the core terminology used in Nantian Gateway documentation and the broader Kubernetes Gateway API ecosystem. Refer back here when you encounter an unfamiliar term.
 
+## Gateway API Core Resources
+
 | Term | Definition |
 |------|-----------|
 | GatewayClass | Cluster-scoped resource defining a gateway controller implementation. Infrastructure providers configure GatewayClass to register their controller with the cluster. |
 | Gateway | Request entry point that defines listeners (ports and protocols). Cluster operators create Gateway resources to specify *where* traffic enters the cluster. |
 | HTTPRoute | HTTP request routing rules that match requests by host, path, headers, or query parameters and forward them to backend services. Application developers manage HTTPRoute resources. |
 | GRPCRoute | gRPC request routing rules that match by service name and method name. Provides the same role separation as HTTPRoute but for gRPC workloads. |
-| BackendRef | Reference to a backend Service that receives traffic matched by a route rule. A BackendRef specifies the Service name, port, and optional weight for traffic splitting. |
+| TCPRoute | Route resource for raw TCP traffic. Forwards TCP connections to backend Services without HTTP-level processing. |
+| UDPRoute | Route resource for UDP datagrams. Forwards UDP packets to backend Services. |
+| TLSRoute | Route resource for TLS-passthrough traffic. Forwards TLS connections to backend Services without terminating TLS at the gateway. |
 | ReferenceGrant | A policy resource that allows cross-namespace BackendRef references. Without a ReferenceGrant, a route can only reference Services in the same namespace. |
-| BackendTLSPolicy | Policy resource that configures TLS settings for connections between the gateway and backend Services. Controls certificate verification, trusted CAs, and hostname validation. |
-| BackendLBPolicy | Policy resource that configures load balancing algorithm, circuit breaker thresholds, and session persistence for backend connections. |
-| Listener | Port and protocol configuration on a Gateway resource. Each listener defines what traffic the gateway accepts, including optional TLS settings and hostname restrictions. |
-| IR (Intermediate Representation) | Nantian Gateway's internal routing model that translates Gateway API resources into a normalized format understood by the data plane. The control plane generates IR from Kubernetes resources, and the data plane converts IR into proxy configuration. |
-| xDS | gRPC streaming protocol used by Envoy and Nantian Gateway for dynamic configuration distribution. The control plane streams configuration updates to data plane instances over bidirectional xDS connections, enabling real-time route changes without restarts. |
+
+## Gateway API Policy Resources
+
+| Term | Definition |
+|------|-----------|
+| BackendTLSPolicy | Policy resource that configures TLS settings for connections between the gateway and backend Services. Controls certificate verification, trusted CAs, hostname validation, and TLS version constraints. |
+| BackendLBPolicy | Policy resource that configures load balancing algorithm, circuit breaker thresholds, session persistence, and connection limits for backend connections. |
+| ListenerSet | Experimental Gateway API resource that allows independent teams to attach listeners to a shared Gateway without modifying the Gateway resource itself. Each ListenerSet specifies its own listeners, TLS configuration, and allowed routes. |
+
+## Nantian Gateway Extension Resources
+
+| Term | Definition |
+|------|-----------|
+| AIService | Custom resource (`gateway.nantian.dev/v1alpha1`) that defines an AI model provider target — including endpoint URL, authentication credentials, model name, and provider type (OpenAI, Anthropic, Ollama, etc.). |
+| TokenPolicy | Custom resource (`gateway.nantian.dev/v1alpha1`) that attaches token-based rate limits or request quotas to a Gateway API target. Supports per-user, per-model, and global scopes. |
+| WasmPlugin | Custom resource (`gateway.nantian.dev/v1alpha1`) that binds a WebAssembly module to a target resource (Gateway, Route, or Backend). Plugins can intercept and modify requests and responses without restarting the gateway. |
+
+## Architecture Concepts
+
+| Term | Definition |
+|------|-----------|
+| Control Plane | The management component that watches Kubernetes resources, translates them into internal configuration, validates and reports status, and pushes configuration snapshots to data plane instances. Written in Go. |
+| Data Plane | The proxy component that handles live client traffic: TLS termination, routing, rate limiting, authentication, and request forwarding. Written in Rust using the Pingora framework. |
+| Split-Plane Architecture | Architecture pattern where the control plane and data plane run as independent processes. They communicate over gRPC (not shared memory), allowing independent scaling, separate release cycles, and different technology stacks. |
+| IR (Intermediate Representation) | Nantian Gateway's internal routing model. The control plane translates Kubernetes Gateway API resources into a normalized IR format. The data plane converts IR into actual proxy configuration. IR is the decoupling layer between *what* should happen and *how* it happens. |
+| xDS | gRPC streaming protocol used by Envoy and Nantian Gateway for dynamic configuration distribution. The control plane pushes configuration snapshots to data plane instances over bidirectional streams. Supports both State-of-the-World (full snapshot) and Delta (incremental) modes. |
+
+## Traffic Management Concepts
+
+| Term | Definition |
+|------|-----------|
+| BackendRef | Reference to a backend Service that receives traffic matched by a route rule. Specifies the Service name, namespace, port, and optional weight for traffic splitting. |
+| Listener | Port and protocol configuration on a Gateway. Each listener defines what traffic the gateway accepts, including optional TLS settings, hostname restrictions, and allowed route kinds. |
+| Hostname Intersection | Gateway API rule: a route attaches to a listener only when their hostname sets intersect. A listener with `*.example.com` accepts routes with hostnames like `api.example.com` or `www.example.com`. |
+| Traffic Splitting | Distributing requests across multiple backend Services based on weight. Defined through multiple `backendRefs` entries in a route rule, each with a numeric weight. |
+| Circuit Breaker | Protection mechanism that ejects failing backends from the load balancing pool. Configured via BackendLBPolicy with thresholds for consecutive failures, error rate, and ejection duration. |
+| Session Persistence | Ensures requests from the same client are routed to the same backend. Configured via BackendLBPolicy, supporting cookie-based and header-based affinity. |
+| Rate Limiting | Restricts the number of requests a client or route can make in a given time window. Implemented through TokenPolicy for AI workloads and HTTP admission control for general traffic. |
+| Retry Budget | Controls how many retry attempts are allowed relative to total requests. Prevents retry storms from overwhelming backend services. |
+
+## Operations Concepts
+
+| Term | Definition |
+|------|-----------|
+| Admin API | HTTP API exposed by the control plane and data plane for operational queries. Provides runtime state inspection, configuration dumping, health checks, and diagnostic information. |
+| Helm Chart | Kubernetes packaging format used to install Nantian Gateway. The chart deploys the control plane, data plane, dashboard, RBAC, Services, and a default GatewayClass. |
+| Kustomize Overlay | Repository-local deployment manifests that customize the base Kubernetes configuration for specific environments (production, Kind, hostNetwork). |
+| Nightly Pipeline | Automated CI workflow that runs Gateway API conformance tests and data plane load tests every night. Results are published to the platform-release repository. |
+
+## AI Gateway Concepts
+
+| Term | Definition |
+|------|-----------|
+| Model Provider | An AI service endpoint that the gateway proxies requests to. Each provider has a type (OpenAI, Anthropic, HuggingFace, etc.), an API base URL, and authentication credentials. |
+| Token Counting | Tracking the number of tokens consumed by AI requests and responses. Used for rate limiting and cost attribution. |
+| PII Redaction | Automatic detection and masking of personally identifiable information in AI request payloads before they reach the model provider. |
+| Prompt Caching | Storing and reusing responses for identical prompts to reduce API costs and latency. Configured through AIService cache settings. |
+
