@@ -5,6 +5,25 @@ description: "A guided map of Nantian Gateway routing, AI Gateway, Wasm extensio
 
 Nantian Gateway combines standard Kubernetes Gateway API routing with experimental extension APIs for AI traffic, token-aware policy, Wasm plugins, and backend load-balancing policy. This section gives each major capability a direct entry point.
 
+## What Can Nantian Gateway Do?
+
+| You want to... | Use this |
+|---------------|----------|
+| Route HTTP traffic by host, path, headers, or query | [HTTPRoute](/features/traffic-management/) |
+| Route gRPC traffic by service and method | [GRPCRoute](/features/traffic-management/) |
+| Handle raw TCP or UDP connections | [TCPRoute, UDPRoute](/features/traffic-management/) |
+| Pass through TLS without termination | [TLSRoute](/features/traffic-management/) |
+| Encrypt backend connections with custom CAs | [BackendTLSPolicy](/configuration/tls/#backend-tls) |
+| Distribute traffic across multiple backends | [Traffic Splitting](/features/traffic-management/#traffic-splitting) |
+| Protect backends from overload | [Circuit Breaker](/guides/circuit-breaker/) |
+| Control request rates | [Token Policy](/features/ai-gateway/#token-policy) |
+| Proxy requests to AI model providers | [AI Gateway](/features/ai-gateway/) |
+| Redact PII in AI requests | [PII Masking](/features/ai-gateway/pii-masking/) |
+| Cache AI responses for repeat prompts | [Semantic Cache](/features/ai-gateway/semantic-cache/) |
+| Extend the proxy with custom logic | [Wasm Plugins](/features/wasm-plugins/) |
+| Monitor traffic and gateway health | [Metrics & Grafana](/operations/metrics/) |
+| Reference backends across namespaces | [ReferenceGrant](/api-reference/gateway-api/) |
+
 ## Feature Map
 
 | Area | Primary APIs | Stability | Start here |
@@ -17,25 +36,32 @@ Nantian Gateway combines standard Kubernetes Gateway API routing with experiment
 
 ## Stable Gateway API Capabilities
 
-Use the standard Gateway API resources when you need portable Kubernetes-native routing:
+These resources are the default way to configure Nantian Gateway. They follow the upstream Gateway API specification and are portable across compliant implementations.
 
-- `GatewayClass` identifies the Nantian Gateway controller.
-- `Gateway` defines listeners, ports, protocols, and TLS modes.
-- `HTTPRoute` and `GRPCRoute` route application traffic with matches, filters, and weighted backends.
-- `TCPRoute`, `UDPRoute`, and `TLSRoute` handle non-HTTP and TLS passthrough workloads.
-- `BackendTLSPolicy` configures TLS validation from the gateway to backend services.
-- `ReferenceGrant` allows controlled cross-namespace references.
+| Resource | Purpose | Example |
+|----------|---------|---------|
+| `GatewayClass` | Identifies the controller | `spec.controllerName: nantian-gw` |
+| `Gateway` | Entry point with listeners | Port 80 HTTP, port 443 HTTPS with TLS |
+| `HTTPRoute` | HTTP routing rules | Path `/api` → backend `api-svc:8080` |
+| `GRPCRoute` | gRPC routing rules | Service `echo.Echo` → backend `grpc-svc:9090` |
+| `TCPRoute` | Raw TCP forwarding | Port 3306 → MySQL backend |
+| `UDPRoute` | UDP packet forwarding | Port 53 → DNS backend |
+| `TLSRoute` | TLS passthrough | SNI `*.example.com` → backend |
+| `BackendTLSPolicy` | Backend TLS validation | Verify backend cert against custom CA |
+| `ReferenceGrant` | Cross-namespace access | Allow route in `team-a` to use service in `team-b` |
 
-These resources are the default way to configure Nantian Gateway. For field-level details, see [Gateway API Resources](/api-reference/gateway-api/).
+For field-level details, see [Gateway API Resources](/api-reference/gateway-api/). For a comparison of which features are supported versus other implementations, see the [Gateway API Support Matrix](/concepts/gateway-api-support/).
 
 ## Experimental Extension Capabilities
 
-Nantian Gateway also ships experimental extension APIs:
+Nantian Gateway also ships experimental extension APIs. These are namespaced under `gateway.nantian.dev` and require explicit opt-in.
 
-- `AIService` describes an AI provider and model target.
-- `TokenPolicy` attaches token and request quotas to local Gateway API targets.
-- `WasmPlugin` loads a sandboxed Wasm module and binds it to target resources.
-- `BackendLBPolicy` selects backend load-balancing behavior and optional session persistence.
+| Resource | Purpose | Example |
+|----------|---------|---------|
+| `AIService` | AI provider/model target | Route to OpenAI GPT-4o with API key from Secret |
+| `TokenPolicy` | Token/request quotas | Limit route to 1000 requests per minute |
+| `WasmPlugin` | Sandboxed Wasm module | Add custom auth header to all requests on a Gateway |
+| `BackendLBPolicy` | Backend load balancing | Round-robin with session cookie persistence |
 
 :::caution[Experimental APIs]
 Install the required CRDs and enable the documented feature flags before creating experimental resources. Their schemas and runtime behavior can change between releases.
@@ -45,7 +71,8 @@ Read [Experimental Features](/configuration/experimental-features/) before using
 
 ## Where To Go Next
 
-- [AI Gateway](/features/ai-gateway/) for provider/model targets, token quotas, and AI observability.
-- [Wasm Plugins](/features/wasm-plugins/) for sandboxed request, response, and stream hooks.
-- [Traffic Management](/features/traffic-management/) for Gateway API routing, traffic splitting, and backend load-balancing policy.
-- [Security And Observability](/features/security-observability/) for TLS, cross-namespace controls, Admin API, metrics, Grafana, and troubleshooting.
+- [AI Gateway](/features/ai-gateway/) — provider/model targets, token quotas, and AI observability
+- [Wasm Plugins](/features/wasm-plugins/) — sandboxed request, response, and stream hooks
+- [Traffic Management](/features/traffic-management/) — Gateway API routing, traffic splitting, and backend load-balancing
+- [Security And Observability](/features/security-observability/) — TLS, cross-namespace controls, Admin API, metrics, Grafana, and troubleshooting
+- [Gateway API Support Matrix](/concepts/gateway-api-support/) — detailed feature-by-feature support comparison

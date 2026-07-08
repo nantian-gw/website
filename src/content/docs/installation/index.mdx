@@ -7,6 +7,16 @@ Nantian Gateway runs in Kubernetes as three workloads: a Go control plane, a Rus
 
 ## Installation Methods
 
+Not sure which method to use?
+
+```text
+Need production features (rollback, hooks, values)?
+  └── YES → Use Helm
+          NO → Deploying from Git? Need overlay patches?
+                  └── YES → Use Kustomize
+                          NO → Use Helm (still the simplest option)
+```
+
 | Method | Best for | Notes |
 | --- | --- | --- |
 | [Helm](/installation/helm/) | Most installations, upgrades, and value overrides. | Uses the chart repository at `https://chart.nantian.dev`. |
