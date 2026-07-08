@@ -1,0 +1,107 @@
+---
+title: 常见配置示例
+description: "Nantian Gateway 常用配置的逐步操作示例：HTTPS、路径路由、流量分割、gRPC、CORS 等。"
+---
+
+本页汇总了最常用的配置，可按需复制和调整。
+
+## HTTPS with cert-manager
+
+使用 Let's Encrypt 进行端到端 TLS 终止：
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+```
+
+Gateway 配置 TLS：
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: gateway-tls
+```
+
+## 路径路由
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: path-routing
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /api}
+    backendRefs:
+    - name: api-service
+      port: 8080
+  - matches:
+    - path: {type: PathPrefix, value: /web}
+    backendRefs:
+    - name: web-service
+      port: 3000
+```
+
+## 流量分割（金丝雀发布）
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - backendRefs:
+    - name: app-v1
+      port: 8080
+      weight: 90
+    - name: app-v2
+      port: 8080
+      weight: 10
+```
+
+## CORS
+
+```yaml
+filters:
+- type: CORS
+  cors:
+    allowOrigins: ["https://app.example.com"]
+    allowMethods: [GET, POST, PUT, DELETE]
+    allowHeaders: [Content-Type, Authorization]
+    allowCredentials: true
+    maxAge: 3600
+```
+
+更多示例请参考 [英文版](/guides/common-recipes/)。
