@@ -101,9 +101,14 @@ Admin API 可以聚合来自已连接数据面实例的响应：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `adminAuth.bearerToken` | string | `""` | Admin API 认证的静态 bearer token |
-| `adminAuth.bearerTokenFile` | string | `""` | 包含 bearer token 的文件路径 |
+| `adminAuth.authMode` | string | `"static"` | 认证模式：`"static"` 或 `"kubernetes"` |
+| `adminAuth.bearerToken` | string | `""` | Admin API 认证的静态 bearer token。仅在 `authMode` 为 `"static"` 时使用。 |
+| `adminAuth.bearerTokenFile` | string | `""` | 包含 bearer token 的文件路径。仅在 `authMode` 为 `"static"` 时使用。 |
 | `adminAuth.rateLimitRPS` | int64 | `0` | Admin API 每秒请求数限制（0 = 无限制） |
+
+**静态模式** (`authMode: "static"`，默认)：当 `bearerToken` 和 `bearerTokenFile` 均为空时，Admin API 允许读取但禁止写入。配置后，所有请求必须包含 `Authorization: Bearer <token>` 请求头。
+
+**Kubernetes 模式** (`authMode: "kubernetes"`)：通过 Kubernetes [TokenReview](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-review-v1/) API 验证 bearer token。运维人员可以使用 `kubectl create token <service-account>` 生成的 token 进行认证，无需预设静态 token。控制面 ServiceAccount 需要创建 `tokenreviews` 的权限（Helm Chart 自动授予）。
 
 `rateLimitRPS` 字段对 Admin API 应用速率限制，防止过多请求。设置为 `0` 禁用速率限制。
 
@@ -259,6 +264,7 @@ translatorLimits:
   maxSnapshotEndpoints: 0
 
 adminAuth:
+  authMode: "static"
   bearerToken: ""
   bearerTokenFile: ""
   rateLimitRPS: 0

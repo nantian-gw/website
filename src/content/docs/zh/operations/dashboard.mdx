@@ -78,14 +78,46 @@ dashboard:
 
 ## 认证
 
-仪表盘支持使用共享密钥来保护访问。设置以下配置项之一：
+仪表盘登录页面接受一个 bearer token。该 token 的来源取决于控制面的认证模式。
 
-- **`authSecret`**：一个明文字符串。使用简单，但存储在 Helm 配置值中。
-- **`authExistingSecret`**：一个已有的 Kubernetes Secret 名称，仪表盘启动时从中读取。在生产环境中使用这个来避免将密钥存储在 Helm 配置值中。
+### 静态 token 模式（默认）
 
-配置认证密钥后，仪表盘要求每次页面加载时都提供该密钥。如果同时设置了 `authSecret` 和 `authExistingSecret`，会优先使用 `authExistingSecret`。
+当 `controlplane.config.adminAuth.authMode` 为 `"static"`（默认）时，控制面接受单个预配置的 bearer token。通过控制面配置中的 `adminAuth.bearerToken` 设置。仪表盘将此 token 传递给控制面的 Admin API。
 
-两者都留空则运行无认证的仪表盘。这适用于本地开发和防火墙后面的端口转发访问，但不要在有公网访问的 Ingress 上这样做。
+### Kubernetes token 模式（生产环境推荐）
+
+当 `controlplane.config.adminAuth.authMode` 为 `"kubernetes"` 时，控制面通过 Kubernetes [TokenReview](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-review-v1/) API 验证 token。运维人员可以使用 Kubernetes ServiceAccount token 进行认证。
+
+创建一个 ServiceAccount 并将其绑定到控制面的 ClusterRole：
+
+```bash
+kubectl create sa dashboard-operator -n nantian-gw
+kubectl create clusterrolebinding dashboard-operator \
+  --clusterrole=nantian-gw-controlplane \
+  --serviceaccount=nantian-gw:dashboard-operator
+```
+
+生成 token 并在登录页面输入：
+
+```bash
+kubectl create token dashboard-operator -n nantian-gw
+```
+
+该 token 由控制面通过 Kubernetes TokenReview API 进行验证。控制面 ServiceAccount 需要创建 `tokenreviews` 的权限（Helm Chart 自动授予）。
+
+Token 具有有限的生命周期（`kubectl create token` 默认 1 小时）。旧 token 过期后创建新 token 即可。
+
+### 获取自动生成的 token（未配置 token 时）
+
+如果未设置 `authSecret`、`authExistingSecret` 或静态 `bearerToken`，且 `authMode` 为 `"static"` 且未配置 token，仪表盘以只读模式运行，无需认证。这适用于本地开发和防火墙后的端口转发访问。
+
+如果在仪表盘 Helm 配置中设置了 `authSecret` 或 `authExistingSecret`，仪表盘将其用于会话认证。Helm Chart 也会自动生成一个名为 `<release>-dashboard-auth` 的随机 Secret：
+
+```bash
+kubectl get secret -n nantian-gw nantian-gw-dashboard-auth \
+  -o jsonpath='{.data.auth-secret}' | base64 -d
+echo
+```
 
 ## 数据面访问
 

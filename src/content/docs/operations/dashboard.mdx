@@ -79,18 +79,40 @@ The dashboard doesn't serve HTTPS on its own: terminate TLS at the Ingress layer
 
 ## Authentication
 
-The dashboard supports a shared secret for protecting access. Set one of these values:
+The dashboard login page accepts a bearer token. Where that token comes from depends on the control plane's authentication mode.
 
-- **`authSecret`** — a plain string. Simple, but stored in the Helm values.
-- **`authExistingSecret`** — the name of an existing Kubernetes Secret the dashboard reads from at startup. Use this in production to avoid storing secrets in Helm values.
+### Static token mode (default)
 
-When an auth secret is configured, the dashboard requires it on every page load. If both `authSecret` and `authExistingSecret` are set, `authExistingSecret` takes precedence.
+When `controlplane.config.adminAuth.authMode` is `"static"` (the default), the control plane accepts a single pre-configured bearer token. Set it via `adminAuth.bearerToken` in the control plane configuration. The dashboard passes this token through to the control plane's Admin API.
 
-Leave both empty to run the dashboard without authentication. This is fine for local development and port-forward access behind a firewall, but don't do it on an internet-facing Ingress.
+### Kubernetes token mode (recommended for production)
 
-### Retrieving the token after deployment
+When `controlplane.config.adminAuth.authMode` is `"kubernetes"`, the control plane validates tokens against the Kubernetes [TokenReview](https://kubernetes.io/docs/reference/kubernetes-api/authentication-resources/token-review-v1/) API. This lets operators authenticate using Kubernetes ServiceAccount tokens.
 
-If you did not set `authSecret` or `authExistingSecret`, the Helm chart auto-generates a random secret named `<release>-dashboard-auth`. Retrieve it with:
+Create a ServiceAccount and bind it to the control plane's ClusterRole:
+
+```bash
+kubectl create sa dashboard-operator -n nantian-gw
+kubectl create clusterrolebinding dashboard-operator \
+  --clusterrole=nantian-gw-controlplane \
+  --serviceaccount=nantian-gw:dashboard-operator
+```
+
+Generate a token and enter it on the login page:
+
+```bash
+kubectl create token dashboard-operator -n nantian-gw
+```
+
+The token is validated by the control plane via the Kubernetes TokenReview API. The control plane ServiceAccount needs permission to create `tokenreviews` (granted automatically by the Helm chart).
+
+Tokens have a limited lifetime (default 1 hour for `kubectl create token`). Create a new token when the old one expires.
+
+### Retrieving the auto-generated token (when no token is configured)
+
+If you did not set `authSecret`, `authExistingSecret`, or a static `bearerToken`, and `authMode` is `"static"` with no token configured, the dashboard runs in read-only mode without authentication. This is fine for local development and port-forward access behind a firewall.
+
+If you set `authSecret` or `authExistingSecret` in the dashboard Helm values, the dashboard uses that for session authentication. The Helm chart also auto-generates a random secret named `<release>-dashboard-auth`:
 
 ```bash
 kubectl get secret -n nantian-gw nantian-gw-dashboard-auth \
