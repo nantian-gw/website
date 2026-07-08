@@ -202,7 +202,7 @@ spec:
               port: 8080
 ```
 
-Use mirroring to validate a new backend version against real traffic, warm caches in a staging environment, or replay production traffic for offline analysis. See the [Request Mirroring](/configuration/request-mirroring/) guide for detailed configuration.
+Use mirroring to validate a new backend version against real traffic, warm caches in a staging environment, or replay production traffic for offline analysis. See the [Request Mirroring](/guides/request-mirroring/) guide for detailed configuration.
 
 ## Rate Limiting
 
@@ -217,7 +217,7 @@ Rate limits can be configured at multiple levels:
 - **Per tenant:** Separate limits for different API consumers sharing the same backend.
 - **Per route:** Granular limits scoped to individual route rules.
 
-See [Token Policy](/features/ai-gateway/#token-policy) in the AI Gateway docs and [Rate Limiting Configuration](/configuration/rate-limiting/) for operational details.
+See [Token Policy](/features/ai-gateway/#token-policy) in the AI Gateway docs for rate limiting configuration.
 
 ## Health Checks and Failure Ejection
 
@@ -251,5 +251,5 @@ Passive ejection removes backends that fail real traffic requests:
 - [Custom And Experimental Resources](/api-reference/crds/)
 - [Security And Observability](/features/security-observability/)
 - [Production Installation](/installation/production/)
-- [Request Mirroring](/configuration/request-mirroring/)
-- [Rate Limiting Configuration](/configuration/rate-limiting/)
+- [Request Mirroring](/guides/request-mirroring/)
+- [Token Policy](/features/ai-gateway/#token-policy)
