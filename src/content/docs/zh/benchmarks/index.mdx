@@ -1,0 +1,21 @@
+---
+title: 性能基准
+description: "Nantian Gateway 数据面夜间负载测试的吞吐量、延迟和资源使用基线。"
+---
+
+Nantian Gateway 每天运行一致性测试和负载测试，基于最新构建。结果自动发布到 [platform-release](https://github.com/nantian-gw/platform-release) 仓库。
+
+## 当前基线 (2026年7月)
+
+以下结果来自对 Kind 集群中数据面实例进行的 10 分钟 [vegeta](https://github.com/tsenart/vegeta) HTTP 负载测试：
+
+| 指标 | 数值 |
+|------|------|
+| **吞吐量** | 9,000–11,000 RPS |
+| **P50 延迟** | 3–4 ms |
+| **P99 延迟** | 11–15 ms |
+| **成功率** | 100% |
+| **数据面 CPU** | ~1,100 millicores |
+| **数据面内存** | ~105 MiB |
+
+详细的测试方法、复现指南和性能优化建议请参考 [英文版](/benchmarks/)。
