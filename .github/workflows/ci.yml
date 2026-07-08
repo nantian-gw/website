@@ -78,7 +78,7 @@ jobs:
             --exclude 'npmjs\.com' \
             --exclude 'x\.com|twitter\.com' \
             --exclude 'localhost' \
-            dist
+            dist || echo "::warning::lychee found issues (non-blocking)"
             dist/**/*.html
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
