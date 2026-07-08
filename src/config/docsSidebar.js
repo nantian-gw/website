@@ -15,6 +15,7 @@ export const docsSidebar = [
       { label: 'What is Nantian Gateway', link: 'overview/', translations: { 'zh-CN': '什么是 Nantian Gateway' } },
       { label: 'Comparison', link: 'overview/comparison', translations: { 'zh-CN': '项目对比' } },
       { label: 'Use Cases', link: 'overview/use-cases', translations: { 'zh-CN': '适用场景' } },
+      { label: 'Benchmarks', link: 'benchmarks/', translations: { 'zh-CN': '性能基准' } },
     ],
   },
   {
@@ -108,6 +109,13 @@ export const docsSidebar = [
       { label: 'Control Plane', link: 'architecture/controlplane', translations: { 'zh-CN': '控制面设计' } },
       { label: 'Data Plane', link: 'architecture/dataplane', translations: { 'zh-CN': '数据面设计' } },
       { label: 'Admin API', link: 'architecture/admin-api', translations: { 'zh-CN': 'Admin API' } },
+    ],
+  },
+  {
+    label: 'Security',
+    translations: { 'zh-CN': '安全' },
+    items: [
+      { label: 'Best Practices', link: 'security/', translations: { 'zh-CN': '安全最佳实践' } },
     ],
   },
   {

@@ -1,0 +1,307 @@
+---
+title: Security Best Practices
+description: "Guidelines for securing Nantian Gateway deployments, including TLS configuration, authentication, network policies, and API protection."
+---
+
+This page consolidates security recommendations for deploying and operating Nantian Gateway. It covers TLS configuration, authentication, network isolation, and operational security practices.
+
+## TLS Configuration
+
+### Frontend TLS (Client → Gateway)
+
+Always terminate TLS at the gateway edge. The Gateway API provides two approaches:
+
+**Using a Gateway listener with TLS:**
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tls-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: my-tls-cert  # Kubernetes Secret with tls.crt and tls.key
+```
+
+**Using cert-manager for automatic certificate management:**
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gateway-tls
+  namespace: nantian-gw
+spec:
+  secretName: my-tls-cert
+  dnsNames:
+  - api.example.com
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+```
+
+See [TLS Configuration](/configuration/tls/) for complete details.
+
+### Backend TLS (Gateway → Backend Service)
+
+Encrypt traffic between the gateway and backend services using BackendTLSPolicy:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+  namespace: default
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: my-backend
+  validation:
+    hostname: my-backend.default.svc
+    caCertificateRefs:
+    - name: backend-ca
+      group: ""
+      kind: ConfigMap
+```
+
+This ensures the gateway verifies the backend's certificate against the specified CA and hostname. See [Backend TLS](/configuration/tls/#backend-tls) for details.
+
+## Authentication
+
+### Admin API Authentication
+
+The control plane and data plane admin APIs are protected by bearer token authentication. Tokens are configured via Kubernetes Secrets:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nantian-gw-controlplane-admin-auth
+  namespace: nantian-gw
+type: Opaque
+stringData:
+  token: "your-secure-random-token-here"
+```
+
+Generate tokens using a cryptographically secure random source:
+
+```bash
+openssl rand -hex 32
+```
+
+### Dashboard Authentication
+
+The dashboard uses NextAuth with a credentials provider. Login credentials are verified against the control plane's admin API. Configure authentication via Helm values:
+
+```yaml
+dashboard:
+  auth:
+    trustHost: true  # Required when behind a reverse proxy
+```
+
+For production, place the dashboard behind an OAuth2 proxy or your organization's SSO provider.
+
+## Network Security
+
+### Network Policies
+
+Restrict traffic between gateway components and external services:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nantian-gw-controlplane
+  namespace: nantian-gw
+spec:
+  podSelector:
+    matchLabels:
+      app: nantian-gw-controlplane
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: nantian-gw-dataplane
+    ports:
+    - port: 18080  # gRPC
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.169.254/32
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - port: 443  # Only allow HTTPS to external services
+```
+
+The Helm chart includes default network policies. Customize them via `networkPolicy` values.
+
+### Service Isolation
+
+Run gateway components in a dedicated namespace (`nantian-gw` by default) with restricted RBAC:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nantian-gw
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+```
+
+The control plane needs cluster-scoped permissions to watch Gateway API resources. One compromise is updating the default namespace access restrictions to limit which namespaces the gateway can route from by using `AllowedRoutes.Namespaces` on each listener:
+
+```yaml
+listeners:
+- name: http
+  port: 80
+  protocol: HTTP
+  allowedRoutes:
+    namespaces:
+      from: Selector
+      selector:
+        matchLabels:
+          gateway-access: allowed
+```
+
+## Secret Management
+
+### API Keys and Credentials
+
+For AI gateway configurations, store provider API keys in Kubernetes Secrets — never inline them in AIService resources:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-prod
+spec:
+  provider: openai
+  model: gpt-4o
+  apiKeySecretRef:
+    name: openai-api-key  # References a Kubernetes Secret
+    key: api-key
+```
+
+Rotate credentials regularly and use tools like [External Secrets Operator](https://external-secrets.io/) or [Vault](https://www.vaultproject.io/) to sync secrets from external secret stores.
+
+### TLS Certificates
+
+Store TLS certificates in Kubernetes Secrets of type `kubernetes.io/tls`. Rotate certificates before they expire. cert-manager can automate this:
+
+```bash
+# Check certificate expiry
+kubectl get certificaterequests -A
+
+# Force renewal
+kubectl annotate certificate my-tls-cert -n nantian-gw \
+  cert-manager.io/issuer-kind=ClusterIssuer \
+  cert-manager.io/issuer-name=letsencrypt-prod
+```
+
+## Rate Limiting and DDoS Protection
+
+### Per-Route Rate Limiting
+
+Use TokenPolicy to limit request rates for specific routes or backends:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: TokenPolicy
+metadata:
+  name: rate-limit-api
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: public-api
+  limits:
+  - type: requestsPerMinute
+    value: 1000
+```
+
+### Global Overload Protection
+
+Enable HTTP admission control at the listener level:
+
+```yaml
+dataplane:
+  config:
+    overload:
+      httpGlobalAdmission:
+        maxConcurrentRequests: 10000
+        maxQueuedRequests: 1000
+```
+
+This rejects requests when the global concurrency limit is exceeded, protecting backend services from overload.
+
+## Audit and Logging
+
+### Access Logs
+
+Enable access logging to capture request metadata:
+
+```yaml
+dataplane:
+  config:
+    log:
+      access:
+        enabled: true
+        format: json
+```
+
+Access logs include client IP, request method, path, status code, and latency. Use these for security auditing and incident investigation.
+
+### Admin API Auditing
+
+Admin API access is logged at the control plane level. Monitor for unusual patterns — repeated failed authentication attempts, access from unexpected IPs, or bulk data exports.
+
+## Dependency and Vulnerability Management
+
+### Keep Components Updated
+
+The control plane (Go) and data plane (Rust) dependencies are audited nightly via GitHub Actions. Subscribe to release notifications:
+
+```bash
+gh watch nantian-gw/gateway
+```
+
+### Cargo Audit and Go Vulnerability Checks
+
+The CI pipeline runs `cargo-deny` for Rust dependencies and `govulncheck` for Go. Results are in the CI logs. Enable Dependabot for automated version updates:
+
+```yaml
+# .github/dependabot.yml
+version: 2
+updates:
+- package-ecosystem: cargo
+  directory: /dataplane
+  schedule:
+    interval: weekly
+- package-ecosystem: gomod
+  directory: /gateway
+  schedule:
+    interval: weekly
+```
+
+## Related Pages
+
+- [TLS Configuration](/configuration/tls/) — complete TLS setup guide
+- [Backend TLS](/configuration/tls/#backend-tls) — securing gateway-to-backend connections
+- [Network Policies](/operations/network-policy/) — Kubernetes network policy reference
+- [Token Policy](/features/ai-gateway/#token-policy) — rate limiting configuration
+- [Installation Production](/installation/production/) — production deployment checklist

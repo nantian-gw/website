@@ -321,3 +321,33 @@ For larger proposals, open a [GitHub Discussion](https://github.com/nantian-gw/g
 ### Is there a changelog I can follow?
 
 Yes. Each release includes a detailed changelog with breaking changes, new features, and resolved issues. Find them on the [GitHub Releases](https://github.com/nantian-gw/gateway/releases) page. We follow semantic versioning: patch releases are safe upgrades, minor releases may add features but avoid breaking APIs, and major releases include breaking changes with migration guides.
+
+### What are the resource requirements for production?
+
+A minimal production deployment needs:
+
+| Component | CPU | Memory |
+|-----------|-----|--------|
+| Control plane | 100m–500m | 128–256 Mi |
+| Data plane | 1000m–2000m | 128–256 Mi |
+| Dashboard | 100m–250m | 64–128 Mi |
+
+The data plane is the resource-intensive component — its CPU usage scales with throughput. At 10,000 RPS, expect ~1.2 CPU cores. At 50,000 RPS, expect ~4–6 CPU cores. Memory stays relatively flat because the Rust data plane uses jemalloc and avoids GC pauses.
+
+### How does the control plane handle failover?
+
+The control plane can be deployed with multiple replicas. Kubernetes leader election ensures only one instance actively processes resources at a time (via controller-manager lease). Standby instances are ready to take over within seconds if the leader fails. The data plane maintains persistent gRPC streams and reconnects automatically to whichever control plane instance becomes the new leader.
+
+### Can I use Nantian Gateway alongside an existing ingress controller?
+
+Yes. Gateway API resources are namespaced and scoped to specific GatewayClasses, so different implementations can coexist. Create a `GatewayClass` for Nantian Gateway that is distinct from your existing ingress controller's class, and route-specific traffic through Nantian while keeping other traffic on the existing setup.
+
+## Next Steps
+
+- [Quick Start](/getting-started/quick-start/) — deploy Nantian Gateway in 5 minutes
+- [First Route](/getting-started/first-route/) — create your first HTTPRoute
+- [Installation](/installation/) — production deployment guides
+- [Troubleshooting](/operations/troubleshooting/) — common problems and solutions
+- [Performance Benchmarks](/benchmarks/) — throughput and latency data
+- [Comparison](/overview/comparison/) — how Nantian Gateway compares to alternatives
+- [Contributing](/contributing/) — how to get involved
