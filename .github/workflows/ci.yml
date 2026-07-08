@@ -69,7 +69,7 @@ jobs:
       - run: npm run build:ci
       - name: Check links
         run: |
-          curl -fsSL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.0/lychee-x86_64-unknown-linux-gnu.tar.gz -o lychee.tar.gz && tar xzf lychee.tar.gz
+          curl -fsSL https://github.com/lycheeverse/lychee/releases/download/lychee-v0.18.0/lychee-x86_64-unknown-linux-gnu.tar.gz -o lychee.tar.gz && tar xzf lychee.tar.gz && chmod +x lychee
           ./lychee \
             --base dist \
             --accept '200,201,204,301,302,307,308' \
