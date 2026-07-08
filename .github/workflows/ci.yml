@@ -68,16 +68,17 @@ jobs:
       - run: npm ci
       - run: npm run build:ci
       - name: Check links
-        uses: lycheeverse/lychee-action@c16cbd2e6b5d13ca90bcbcc31f36e96feada8cc9
-        with:
-          args: >
-            --base dist/
-            --accept 200,201,204,301,302,307,308
-            --exclude-mail
-            --exclude 'github\.com/nantian-gw'
-            --exclude 'npmjs\.com'
-            --exclude 'x\.com|twitter\.com'
-            --exclude 'localhost'
+        run: |
+          curl -fsSL https://github.com/lycheeverse/lychee/releases/download/v0.18.0/lychee-v0.18.0-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./lychee \
+            --base dist/ \
+            --accept 200,201,204,301,302,307,308 \
+            --exclude-mail \
+            --exclude 'github\.com/nantian-gw' \
+            --exclude 'npmjs\.com' \
+            --exclude 'x\.com|twitter\.com' \
+            --exclude 'localhost' \
+            dist/
             dist/**/*.html
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
