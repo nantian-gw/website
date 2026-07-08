@@ -69,6 +69,7 @@ export const docsSidebar = [
       { label: 'Request Mirroring', link: 'guides/request-mirroring', translations: { 'zh-CN': '请求镜像' } },
       { label: 'WASM Plugin Development', link: 'guides/wasm-plugin-dev', translations: { 'zh-CN': 'WASM 插件开发' } },
       { label: 'Migrating from Ingress', link: 'guides/ingress-migration', translations: { 'zh-CN': '从 Ingress 迁移' } },
+      { label: 'Common Recipes', link: 'guides/common-recipes', translations: { 'zh-CN': '常见配置示例' } },
     ],
   },
   {
