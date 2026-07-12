@@ -71,58 +71,54 @@ slug: zh/1.5/configuration/dataplane
 
 ## 缓冲区大小
 
-代理数据的缓冲区大小，直接影响内存使用和吞吐：
+L4 TCP 代理的缓冲区大小直接影响内存使用和吞吐：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `runtimeTuning.bufferSizes.upstreamHeaderBuffer` | int | `8192` | 上游响应头缓冲区（字节） |
-| `runtimeTuning.bufferSizes.upstreamBodyBuffer` | int | `8192` | 上游响应体缓冲区（字节） |
-| `runtimeTuning.bufferSizes.downstreamHeaderBuffer` | int | `8192` | 下游请求头缓冲区（字节） |
-| `runtimeTuning.bufferSizes.downstreamBodyBuffer` | int | `8192` | 下游请求体缓冲区（字节） |
-默认 8KB 的缓冲区对大多数 HTTP 请求头来说绰绰有余。如果上游服务返回很大的响应头（比如塞了很多自定义 header），调大 `upstreamHeaderBuffer`。如果流量以大文件传输为主，调大 body 缓冲区可以提升吞吐，但代价是每连接多用内存。
+| `runtimeTuning.tcpProxyBufferBytes` | int | `16384` | L4 TCP 代理转发使用的缓冲区大小（字节） |
+
+该缓冲区用于 `ntgw-stream` 的 L4 TCP 转发。HTTP 代理的响应缓存条目上限由 `runtimeTuning.httpCache.maxEntrySizeMb` 控制，与此处的 TCP 缓冲区相互独立。
 
 ## 超时配置
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `runtimeTuning.timeouts.connectTimeoutMs` | int | `3000` | 建立上游连接的超时，毫秒 |
-| `runtimeTuning.timeouts.keepaliveTimeoutMs` | int | `60000` | 空闲连接保持时间，毫秒 |
-`connectTimeoutMs` 控制连接后端服务的最大等待时间。如果后端在 3 秒内没响应，连接被放弃，请求返回 503。
+| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | 从客户端读取请求的超时（毫秒） |
+| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | 与上游建立连接的超时（毫秒） |
+| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | 从上游读取响应的超时（毫秒） |
+| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | 上游 keepalive 连接空闲超时（毫秒） |
 
-`keepaliveTimeoutMs` 控制空闲连接在连接池里保留多久。60 秒后空闲连接被关闭。这个值太小会导致频繁重建连接，太大则浪费连接池资源。
+`upstreamConnectionTimeoutMs` 控制连接后端服务的最大等待时间：若上游在该时间内未接受连接，则放弃该连接。`upstreamIdleTimeoutMs` 控制空闲上游连接在连接池中保留多久，太小会导致频繁重建连接，太大则占用连接池资源。
 
 ## 限流
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `rateLimiting.enabled` | bool | `false` | 是否开启全局限流 |
-| `rateLimiting.requestsPerSecond` | int | `1000` | 每秒允许的最大请求数 |
-| `rateLimiting.burstSize` | int | `100` | 允许的突发请求数 |
-这是全局限流，作用于所有进入数据面的请求，在路由规则之前生效。更细粒度的限流（比如按路由或按后端）通过 Gateway API 的 `HTTPRoute` 过滤器配置。
+| `runtimeProtection.httpGlobalRateLimitRequestsPerSecond` | int | `10000` | 全局每秒请求数上限 |
+| `runtimeProtection.httpGlobalRateLimitBurst` | int | `20000` | 全局突发允许量 |
+
+这是全局限流，作用于所有进入数据面的请求，在路由规则之前生效。更细粒度的按监听器/按路由限流由下方连接保护章节的 `runtimeProtection.httpListenerRateLimit*` 与 `httpRouteRateLimit*` 参数控制。
 
 ## 熔断
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `circuitBreaker.enabled` | bool | `false` | 是否开启熔断 |
-| `circuitBreaker.errorThreshold` | float | `0.5` | 错误率阈值（0.5 = 50%） |
-| `circuitBreaker.minRequests` | int | `20` | 触发熔断需要的最小请求数 |
-| `circuitBreaker.halfOpenMaxRequests` | int | `5` | 半开状态允许的探测请求数 |
-| `circuitBreaker.openTimeoutMs` | int | `30000` | 熔断打开后多久进入半开状态，毫秒 |
-熔断器保护后端服务不被雪崩请求压垮。当某个后端的错误率超过 `errorThreshold`，且收到的请求数超过 `minRequests`，熔断器打开。在 `openTimeoutMs` 期间，所有请求立即被拒绝。之后熔断器进入半开状态，允许少量探测请求通过。如果探测请求成功，熔断器关闭；如果失败，重新打开。
+| `runtimeProtection.httpBackendCircuitBreakerMaxRequests` | int | `4096` | 单个后端的并发在途请求数上限，超过即触发熔断 |
+
+Nantian 的熔断基于**并发在途请求数**，而非错误率：当某个后端的并发在途请求达到上限时，新请求快速失败，从而避免拖垮后端。需要按目标做更细粒度熔断时，可通过 `BackendLBPolicy` 的 `circuitBreaker.maxInflightRequests` 字段配置。
 
 ## 健康检查
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `healthCheck.intervalMs` | int | `10000` | 健康检查间隔，毫秒 |
-| `healthCheck.timeoutMs` | int | `2000` | 健康检查超时，毫秒 |
-| `healthCheck.unhealthyThreshold` | int | `3` | 连续失败多少次标记为不健康 |
-| `healthCheck.healthyThreshold` | int | `1` | 连续成功多少次标记为健康 |
-数据面对每个后端服务做主动健康检查。后端不健康时，流量被路由到其他健康的后端。当所有后端都不健康时，数据面返回 503，不把不可用的后端暴露给客户端。
+| `runtimeTuning.activeHealthCheckEnabled` | bool | `false` | 是否开启主动健康检查 |
+| `runtimeTuning.activeHealthCheckIntervalMs` | int | `5000` | 主动健康检查间隔（毫秒） |
+| `runtimeTuning.activeHealthCheckTimeoutMs` | int | `1000` | 单次健康检查的超时（毫秒） |
+| `runtimeTuning.activeHealthCheckUnhealthyThreshold` | int | `2` | 连续失败多少次标记为不健康 |
+数据面可对后端做主动健康检查（默认关闭，通过 `activeHealthCheckEnabled` 开启）。后端不健康时，流量被路由到其他健康后端；当所有后端都不健康时，数据面返回 503，不把不可用后端暴露给客户端。
 
 :::tip[健康检查和熔断的区别]
-健康检查是主动探测（数据面定期向后端发请求），熔断是被动保护（根据实际请求的失败率做决策）。两者互补：健康检查发现可以预见的故障，熔断应对突发的性能退化。
+健康检查是主动探测（数据面定期向后端发请求），熔断是被动保护（根据后端的并发在途请求数做决策）。两者互补：健康检查发现可预见的故障，熔断在后端过载时快速失败以避免雪崩。
 :::
 
 ## Admin 认证
