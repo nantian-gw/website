@@ -38,18 +38,15 @@ slug: zh/1.5/configuration/tuning
 池大小估算的实用起点：`poolSize = 后端数量 × 每后端平均并发数 × 0.5`。0.5 系数考虑了并非所有连接同时空闲的情况。监控 `upstream_keepalive_pool_hits` 和 `upstream_keepalive_pool_misses` 指标以验证或调整配置。
 :::
 
-## 缓冲区大小
+## HTTP 响应缓存
 
-缓冲区大小直接影响代理数据的内存使用和吞吐量：
+HTTP 响应缓存对每条可缓存的响应设置大小上限：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.buffer.limit` | int | `65536` | 最大缓冲区大小（字节） |
-| `runtimeTuning.buffer.initialCapacity` | int | `8192` | 初始缓冲区容量（字节） |
+| `runtimeTuning.httpCache.maxEntrySizeMb` | int | `16` | 单条缓存响应条目的最大大小（MiB） |
 
-缓冲区限制设定了单个请求或响应可缓冲的最大数据量。对于大负载工作负载（文件上传、流式响应），增加此值。内存影响为 `limit × 并发请求数`，因此提高限制会按比例增加峰值内存。
-
-`initialCapacity` 设置起始缓冲区大小。将其设置为接近预期平均负载大小可减少因重复缓冲区增长而产生的分配开销。对于响应大小可预测的 API（具有已知 schema 的 JSON API），将初始容量与典型负载大小匹配可提高吞吐量。
+超过该上限的响应不会写入缓存，而是直接透传给客户端。对于以大响应体为主的工作负载，可适当调大该值，但需注意缓存整体内存占用会相应上升。
 
 ## 超时
 
@@ -57,26 +54,16 @@ slug: zh/1.5/configuration/tuning
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.timeout.requestHeader` | duration | `"10s"` | 接收请求头的最大时间 |
-| `runtimeTuning.timeout.requestBody` | duration | `"30s"` | 接收请求体的最大时间 |
-| `runtimeTuning.timeout.responseHeader` | duration | `"60s"` | 接收上游响应头的最大时间 |
-| `runtimeTuning.timeout.responseBody` | duration | `"0s"` | 接收完整上游响应的最大时间（0 = 无限制） |
-| `runtimeTuning.timeout.idleConnection` | duration | `"300s"` | 关闭客户端连接前的最大空闲时间 |
+| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | 从客户端读取请求的最大时间（毫秒） |
+| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | 与上游建立连接的最大时间（毫秒） |
+| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | 从上游读取响应的最大时间（毫秒） |
+| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | 关闭上游 keepalive 连接前的最大空闲时间（毫秒） |
 
-将 `responseBody` 设置为 `0` 禁用响应体超时，适用于长连接（如 WebSocket 或 SSE 流）。对于标准 HTTP API，设置合理的值以防止停滞的上游连接消耗代理资源。
+需要快速失败时可调小 `upstreamConnectionTimeoutMs`；面向慢速或长耗时上游时可调大 `upstreamReadTimeoutMs`。
 
 ## TLS 调优
 
-TLS 配置影响握手延迟和 CPU 消耗：
-
-| 参数 | 类型 | 默认值 | 说明 |
-|-----------|------|---------|-------------|
-| `runtimeTuning.tls.sessionCacheSize` | int | `2048` | 用于会话恢复的 TLS 会话缓存条目数 |
-| `runtimeTuning.tls.sessionCacheLifetime` | duration | `"10m"` | 缓存的 TLS 会话生存期 |
-
-TLS 会话缓存启用会话恢复，通过复用先前协商的参数降低重复握手的 CPU 成本。当大量客户端与相同后端服务建立短连接时，此功能尤为有益。
-
-当数据面连接大量支持会话恢复的不同后端时，增加 `sessionCacheSize`。每个缓存条目消耗少量内存。
+数据面 TLS 的最低/最高协议版本通过 `runtime.tlsMinVersion` 和 `runtime.tlsMaxVersion` 配置，详见 [TLS 配置](/zh/1.5/configuration/tls/)。运行时未提供独立的 TLS 会话缓存调优参数。
 
 ## 性能分析与监控
 
