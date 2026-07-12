@@ -102,26 +102,24 @@ go build -o bin/manager ./cmd/manager
 
 # Run the control plane locally (install Nantian Gateway CRDs first)
 kubectl apply -f deploy/crds/
-./bin/manager \
-  --metrics-bind-address=:8080 \
-  --health-probe-bind-address=:8081 \
-  --xds-bind-address=:9090 \
-  --leader-elect=false
+./bin/manager --config configs/controlplane/config.yaml
 ```
 
-### Control Plane CLI Flags
+The manager binary takes a single flag, `--config` (path to the YAML config file). All runtime behavior — listen addresses, leader election, and the claimed GatewayClass — is set in that file, not through CLI flags.
 
-| Flag | Default | Description |
+### Key Control Plane Config Fields
+
+| Config field | Default | Description |
 |------|---------|-------------|
-| `--metrics-bind-address` | `:8080` | Prometheus metrics port |
-| `--health-probe-bind-address` | `:8081` | Health check and admin API port |
-| `--xds-bind-address` | `:9090` | gRPC xDS server port |
-| `--leader-elect` | `true` | Enable leader election |
-| `--leader-elect-namespace` | Current namespace | Namespace for leader election |
-| `--gateway-class-name` | `nantian-gw` | GatewayClass name to claim |
+| `grpcAddr` | `:18080` | gRPC xDS server address |
+| `adminAddr` | `:18081` | Admin API / HTTP address |
+| `metricsAddr` | `:18082` | Prometheus metrics address |
+| `healthProbeAddr` | `:18083` | Health and readiness probe address |
+
+See the [Control Plane Configuration](/1.5/configuration/controlplane) reference for the full schema, including leader election and the GatewayClass name.
 
 :::tip[Local Development Tip]
-When developing locally, set `--leader-elect=false` to skip leader election so you can run a single control plane instance directly. In production, keep the default `true`.
+For local development, run a single instance and disable leader election in your config file so the manager becomes active immediately. In production, keep leader election enabled for HA.
 :::
 
 ## Build and Run the Data Plane
@@ -139,23 +137,21 @@ cargo build
 cargo build --release
 
 # Run the data plane
-cargo run -- \
-  --node-id dataplane-dev-0 \
-  --controlplane-addr http://localhost:9090 \
-  --cluster kind \
-  --admin-bind-address 0.0.0.0:8082 \
-  --metrics-bind-address 0.0.0.0:9091
+cargo run -p ntgw-app -- --config configs/dataplane/config.yaml
 ```
 
-### Data Plane CLI Flags
+The `ntgw-app` binary also takes a single `--config` flag. The node identifier, control plane address, and admin/proxy listen addresses all come from the config file. The node ID can additionally be injected via the `NANTIAN_GW_NODE_ID` environment variable, which the Helm chart sets from the Pod name.
 
-| Flag | Default | Description |
+### Key Data Plane Config Fields
+
+| Config field | Default | Description |
 |------|---------|-------------|
-| `--node-id` | Auto-generated | Node identifier |
-| `--controlplane-addr` | `http://localhost:9090` | Control plane gRPC address |
-| `--cluster` | `kind` | Cluster name |
-| `--admin-bind-address` | `0.0.0.0:8082` | Admin API address |
-| `--metrics-bind-address` | `0.0.0.0:9091` | Prometheus metrics port |
+| `nodeId` | `dp-local` | Node identifier |
+| `xds.serverAddress` | `http://127.0.0.1:18080` | Control plane gRPC address |
+| `runtime.adminAddress` | `0.0.0.0:19080` | Admin API and metrics address |
+| `runtime.listenAddress` | `0.0.0.0:8080` | HTTP proxy listen address |
+
+See the [Data Plane Configuration](/1.5/configuration/dataplane) reference for the full schema.
 
 ## Compile Protobuf
 
@@ -229,9 +225,7 @@ Use [Delve](https://github.com/go-delve/delve) to debug Go code:
 go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Run the control plane in debug mode
-dlv debug ./cmd/manager -- \
-  --leader-elect=false \
-  --xds-bind-address=:9090
+dlv debug ./cmd/manager -- --config configs/controlplane/config.yaml
 ```
 
 VS Code users can install the Go extension and configure debug targets in `.vscode/launch.json`.
@@ -242,10 +236,10 @@ The Rust data plane supports the `RUST_LOG` environment variable to control log 
 
 ```bash
 # Enable verbose logging
-RUST_LOG=debug cargo run -- --node-id dataplane-dev-0
+RUST_LOG=debug cargo run -p ntgw-app -- --config configs/dataplane/config.yaml
 
 # View logs for a specific module only
-RUST_LOG=nantian_dataplane::proxy=trace cargo run -- --node-id dataplane-dev-0
+RUST_LOG=ntgw_http=trace cargo run -p ntgw-app -- --config configs/dataplane/config.yaml
 ```
 
 Common log levels: `error`, `warn`, `info`, `debug`, `trace`.
