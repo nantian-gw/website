@@ -92,8 +92,8 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
   config:
     grpcAddr: ":18080"
     adminAddr: ":18081"
@@ -104,7 +104,7 @@ controlplane:
       enableAiGateway: false
 ```
 
-当前 chart 默认对控制面也使用 `latest` tag，方便跟随当前公开镜像快速安装。生产环境请在 values 文件里显式改成不可变 tag 或 digest。
+chart 默认对控制面使用 `v2026.06.0` 发布 tag（`pullPolicy: IfNotPresent`）。生产环境仍建议在 values 文件里显式固定具体发布 tag 或 digest。
 
 控制面 Service 拆分如下：
 
@@ -122,11 +122,11 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "250m"
+      cpu: "1000m"
       memory: "256Mi"
     limits:
       cpu: "2000m"
@@ -162,14 +162,14 @@ dataplane:
 ```yaml
 dashboard:
   enabled: true
-  replicas: 1
+  replicas: 2
   image:
     repository: "nantian-gw/dashboard"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
 ```
 
-当前 chart 默认对 controlplane、dataplane 和 dashboard 都使用 `latest` tag。这个默认值适合快速验证安装链路，不适合作为生产环境的供应链控制策略；生产环境应在 values 文件里显式固定不可变 tag 或 digest。
+chart 默认对 controlplane、dataplane 和 dashboard 都使用 `v2026.06.0` 发布 tag（`pullPolicy: IfNotPresent`）。生产环境仍建议在 values 文件里显式固定具体发布 tag 或 digest。
 
 不需要 Web UI 时可以关闭 dashboard：
 

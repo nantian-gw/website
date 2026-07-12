@@ -25,10 +25,10 @@ kind create cluster --config gateway/deploy/kubernetes/overlays/kind/kind-config
 |---------|-------------|-----------|
 | HTTP | 30080 | 18080 |
 | HTTPS | 30443 | 18443 |
-| UDP 主 | 30000 | 5300 |
-| UDP 备 | 30001 | 5301 |
-| Admin API | 30000 | 19000 |
-| Admin API (gRPC) | 30001 | 19001 |
+| UDP 主 | 31300 | 5300 |
+| UDP 备 | 31301 | 5301 |
+| Admin API | 32000 | 19000 |
+| Admin API (gRPC) | 32001 | 19001 |
 
 部署完成后，网关可通过 `http://localhost:18080` 访问。
 
