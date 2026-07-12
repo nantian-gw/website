@@ -23,7 +23,7 @@ Nantian Gateway 在 Kubernetes 中以三个 workload 运行：Go 控制面、Rus
 | Namespace | `nantian-gw` | 1 | 当 `namespace.create: true` 时创建组件命名空间。 |
 | 控制面 Deployment | `nantian-gw-controlplane` | 2 replicas | 监听 Kubernetes 资源、翻译资源、写入状态并发布快照。 |
 | 数据面 Deployment | `nantian-gw-dataplane` | 2 replicas | 接收快照并处理运行时流量。 |
-| Dashboard Deployment | `nantian-gw-dashboard` | 1 replica | 面向用户和运维人员的 Web UI。 |
+| Dashboard Deployment | `nantian-gw-dashboard` | 2 replicas | 面向用户和运维人员的 Web UI。 |
 | GatewayClass | `nantian-gw` | 1 | 使用 controller `gateway.networking.k8s.io/nantian-gw`。 |
 
 Helm chart 会创建 `GatewayClass`，但不会创建你的应用 `Gateway` 或 `HTTPRoute`。这些资源需要在安装后由用户在应用命名空间中创建。
@@ -48,10 +48,10 @@ Helm chart 会创建 `GatewayClass`，但不会创建你的应用 `Gateway` 或 
 Chart 默认值偏保守：
 
 - 镜像使用 `global.imageRegistry: "ghcr.io"`，仓库分别是 `nantian-gw/nantian-controlplane`、`nantian-gw/dataplane` 和 `nantian-gw/dashboard`。
-- 控制面和数据面默认各运行 2 个副本；dashboard 默认 1 个副本。
+- 控制面、数据面和 dashboard 默认各运行 2 个副本。
 - Chart 默认使用 `featureMode: standard`。
 - Chart 默认不渲染 Gateway API CRD：`gatewayAPI.installCRDs: false`，`gatewayAPI.channel: standard`。
-- 当前 chart 默认对 controlplane、dataplane 和 dashboard 都使用 `latest` tag；生产环境应在 values 文件里显式固定不可变 tag 或 digest。
+- 当前 chart 默认对 controlplane、dataplane 和 dashboard 都使用 `v2026.06.0` 发布 tag（并采用 `pullPolicy: IfNotPresent`）；生产环境仍应在 values 文件里显式固定特定发布 tag 或 digest。
 - HPA 默认关闭，配置为 `hpa.enabled: false`。
 - Prometheus Operator ServiceMonitor 默认关闭，配置为 `serviceMonitor.enabled: false`。
 - NetworkPolicy 默认开启，配置为 `networkPolicies.enabled: true`。

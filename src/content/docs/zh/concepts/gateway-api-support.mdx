@@ -8,7 +8,7 @@ Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总
 
 - **默认支持** — 当 `enableExperimentalGateway=false` 时声明的功能。
 - **实验性运行时支持** — 当 `enableExperimentalGateway=true` 时声明的功能。
-- **当前状态** — Nantian Gateway 在运行时按条件启用的支持状态，数据来源为 `internal/gatewayapi/supported_features.go` 和一致性工作流。
+- **当前状态** — Nantian Gateway 在运行时按条件启用的支持状态，数据来源为 `internal/gwapi/supported_features.go` 和一致性工作流。
 
 :::note
 核心功能（`Gateway`、`HTTPRoute`、`GRPCRoute`、`Mesh`、`ReferenceGrant`、`BackendTLSPolicy`、`TLSRoute`）已完整支持，此处不再重复列出。
@@ -46,16 +46,16 @@ Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总
 | HTTPRouteHostRewrite | standard | Yes | Yes | 已支持 |
 | HTTPRoutePathRewrite | standard | Yes | Yes | 已支持 |
 | HTTPRouteRequestMirror | standard | Yes | Yes | 已支持 |
-| HTTPRouteRequestMultipleMirrors | experimental | Yes | No | 仅默认运行时 |
-| HTTPRouteRequestPercentageMirror | experimental | Yes | No | 仅默认运行时 |
+| HTTPRouteRequestMultipleMirrors | experimental | Yes | Yes | 已支持 |
+| HTTPRouteRequestPercentageMirror | experimental | Yes | Yes | 已支持 |
 | HTTPRouteRequestTimeout | standard | Yes | Yes | 已支持 |
 | HTTPRouteBackendTimeout | standard | Yes | Yes | 已支持 |
 | HTTPRouteParentRefPort | standard | Yes | Yes | 已支持 |
 | HTTPRouteNamedRouteRule | standard | Yes | Yes | 已支持 |
 | HTTPRouteCORS | experimental | Yes | Yes | 已支持 |
-| HTTPRoute303RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
-| HTTPRoute307RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
-| HTTPRoute308RedirectStatusCode | experimental | Yes | No | 仅默认运行时 |
+| HTTPRoute303RedirectStatusCode | experimental | Yes | Yes | 已支持 |
+| HTTPRoute307RedirectStatusCode | experimental | Yes | Yes | 已支持 |
+| HTTPRoute308RedirectStatusCode | experimental | Yes | Yes | 已支持 |
 | HTTPRouteBackendProtocolH2C | experimental | Yes | Yes | 已支持 |
 | HTTPRouteBackendProtocolWebSocket | experimental | Yes | Yes | 已支持 |
 | HTTPRouteBackendProtocolGRPC | experimental | No | No | 不支持 |
@@ -78,9 +78,9 @@ Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总
 
 | 功能 | 通道 | 默认 | 实验性 | 状态 |
 |------|------|------|--------|------|
-| MeshFrontend | experimental | Yes | No | 仅默认运行时 |
-| MeshConsumerRoute | experimental | Yes | No | 仅默认运行时 |
-| MeshClusterIPMatching | experimental | Yes | No | 仅默认运行时 |
+| Mesh | experimental | Yes | Yes | 已支持 |
+| MeshConsumerRoute | experimental | Yes | Yes | 已支持 |
+| MeshClusterIPMatching | experimental | Yes | Yes | 已支持 |
 | MeshConsumerNamespaceMatching | experimental | No | No | 不支持 |
 
 ### BackendLBPolicy 功能
@@ -123,6 +123,6 @@ CONFORMANCE_EXPERIMENTAL=true ALL_FEATURES=true make conformance
 
 ## 源头文件
 
-- 功能支持声明：`gateway/internal/gatewayapi/supported_features.go`
+- 功能支持声明：`gateway/internal/gwapi/supported_features.go`
 - 全功能一致性测试：`gateway/conformance/conformance_test.go`
 - CI 工作流：`gateway/.github/workflows/conformance.yml`

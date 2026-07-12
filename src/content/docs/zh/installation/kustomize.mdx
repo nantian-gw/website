@@ -13,35 +13,26 @@ Kustomize 是一种声明式、面向 patch 的部署方式。你定义一个基
 一个典型的 Nantian Gateway Kustomize 布局长这样：
 
 ```
-deploy/
+deploy/kubernetes/
 ├── base/
 │   ├── kustomization.yaml
-│   ├── namespace.yaml
-│   ├── gatewayclass.yaml
-│   ├── controlplane/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   ├── configmap.yaml
-│   │   ├── rbac.yaml
-│   │   └── pdb.yaml
-│   ├── dataplane/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   ├── configmap.yaml
-│   │   └── pdb.yaml
-│   └── dashboard/
-│       ├── deployment.yaml
-│       └── service.yaml
+│   ├── namespace-gatewayclass.yaml
+│   ├── priorityclass.yaml
+│   ├── rbac.yaml
+│   ├── controlplane.yaml
+│   ├── dataplane.yaml
+│   ├── dashboard.yaml
+│   ├── services-networkpolicy.yaml
+│   ├── aiservice-crd.yaml
+│   ├── tokenpolicy-crd.yaml
+│   └── wasmplugin-crd.yaml
 └── overlays/
-    ├── dev/
-    │   └── kustomization.yaml
-    ├── staging/
-    │   └── kustomization.yaml
+    ├── kind/
+    ├── kind-conformance/
+    ├── kind-hostnetwork/
+    ├── kind-pprof/
+    ├── observability-enabled/
     └── production/
-        ├── kustomization.yaml
-        ├── controlplane-patch.yaml
-        ├── dataplane-patch.yaml
-        └── tls-secret.yaml
 ```
 
 `base/` 目录放所有环境共享的资源定义。`overlays/` 下面每一个子目录对应一个部署环境，通过 patch 在 base 之上做增量修改。
@@ -51,38 +42,34 @@ deploy/
 base 层的 `kustomization.yaml` 声明了所有资源和公共标签：
 
 ```yaml
-# deploy/base/kustomization.yaml
+# deploy/kubernetes/base/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: nantian-gw
-
 resources:
-  - namespace.yaml
-  - gatewayclass.yaml
-  - controlplane/deployment.yaml
-  - controlplane/service.yaml
-  - controlplane/configmap.yaml
-  - controlplane/rbac.yaml
-  - controlplane/pdb.yaml
-  - dataplane/deployment.yaml
-  - dataplane/service.yaml
-  - dataplane/configmap.yaml
-  - dataplane/pdb.yaml
-  - dashboard/deployment.yaml
-  - dashboard/service.yaml
+  - namespace-gatewayclass.yaml
+  - priorityclass.yaml
+  - rbac.yaml
+  - controlplane.yaml
+  - dataplane.yaml
+  - dashboard.yaml
+  - services-networkpolicy.yaml
+  - aiservice-crd.yaml
+  - tokenpolicy-crd.yaml
+  - wasmplugin-crd.yaml
 
-commonLabels:
-  app.kubernetes.io/name: nantian-gw
-  app.kubernetes.io/part-of: nantian-gw
+generatorOptions:
+  disableNameSuffixHash: true
 
-images:
-  - name: nantian-controlplane
-    newName: ghcr.io/nantian-gw/nantian-controlplane
-    newTag: latest
-  - name: nantian-dataplane
-    newName: ghcr.io/nantian-gw/dataplane
-    newTag: latest
+configMapGenerator:
+  - name: nantian-gw-controlplane-config
+    namespace: nantian-gw
+    files:
+      - config.yaml=../../../configs/controlplane/config.yaml
+  - name: nantian-gw-dataplane-config
+    namespace: nantian-gw
+    files:
+      - config.yaml=../../../configs/dataplane/config.yaml
 ```
 
 `images` 字段是 Kustomize 内置的一项能力，不用 patch 就能把镜像名和 tag 替换掉。如果你的镜像是从公开仓库拉的，把 `newName` 删掉就行。
@@ -135,7 +122,7 @@ data:
 生产 overlay 在 base 的基础上加了更高副本数、生产级别的资源限制、反亲和策略和 TLS：
 
 ```yaml
-# deploy/overlays/production/kustomization.yaml
+# deploy/kubernetes/overlays/production/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -156,7 +143,7 @@ commonLabels:
 控制面补丁：副本数、资源限制、日志级别和 TLS：
 
 ```yaml
-# deploy/overlays/production/controlplane-patch.yaml
+# deploy/kubernetes/overlays/production/controlplane-patch.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -194,7 +181,7 @@ data:
 数据面补丁：副本数、资源限制、反亲和、TLS 传输：
 
 ```yaml
-# deploy/overlays/production/dataplane-patch.yaml
+# deploy/kubernetes/overlays/production/dataplane-patch.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:

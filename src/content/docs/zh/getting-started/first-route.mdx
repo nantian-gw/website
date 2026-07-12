@@ -273,10 +273,10 @@ curl http://localhost:18080/
 
 ### 方案 B：端口转发
 
-如果你没有配端口映射，把数据面 Service 的端口转到本地：
+如果你没有配端口映射，把数据面 Deployment 的端口转到本地（chart 不会为运行时 `:80` 监听器创建 ClusterIP Service）：
 
 ```bash
-kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:80
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 8080:80
 ```
 
 然后另开一个终端：
@@ -287,11 +287,14 @@ curl http://localhost:8080/
 
 ### 方案 C：集群内测试
 
-在集群里跑一个临时 Pod 来测试：
+chart 不会把运行时 `:80` 监听器暴露为 Service，因此先创建一个，再从临时 Pod 里 curl：
 
 ```bash
+kubectl expose deployment nantian-gw-dataplane -n nantian-gw \
+  --name nantian-gw-dataplane-runtime --port 80 --target-port 80
+
 kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
-  curl -s http://nantian-gw-dataplane.nantian-gw.svc:80/
+  curl -s http://nantian-gw-dataplane-runtime.nantian-gw.svc:80/
 ```
 
 ### 期望返回
