@@ -15,7 +15,7 @@ The two planes handle failure differently:
 
 **Data plane**: All replicas are active and share traffic. Each data plane maintains its own gRPC/xDS connection to the control plane and receives configuration snapshots independently. If a data plane pod fails, Kubernetes replaces it. The new pod connects to the control plane, receives the latest snapshot, and starts accepting traffic.
 
-**Dashboard**: Single replica. The dashboard is stateless, so losing it only affects the UI. The gateway continues routing traffic normally.
+**Dashboard**: Two replicas by default. The dashboard is stateless, so losing one affects only capacity, not availability. The gateway continues routing traffic normally.
 
 ## Minimum production HA configuration
 

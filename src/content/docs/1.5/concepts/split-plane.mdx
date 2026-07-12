@@ -79,11 +79,11 @@ The control plane and data plane communicate over [gRPC bidirectional streams](h
 Key properties of the xDS communication:
 
 * **Bidirectional** — the data plane can send acknowledgments and health reports back to the control plane
-* **Incremental** — only changed configuration is transmitted, reducing bandwidth
+* **Full-state** — each update carries a complete configuration snapshot that replaces the previous one wholesale; the data plane skips snapshots whose version it already runs
 * **Versioned** — each configuration snapshot has a version, allowing the data plane to detect and reject stale updates
 * **Atomic** — configuration snapshots are applied atomically, preventing partial configuration states
 
-When a data plane instance connects, it receives the full current configuration snapshot. Subsequent changes are delivered incrementally. If the connection is lost, the data plane reconnects and receives the latest snapshot.
+When a data plane instance connects, it receives the full current configuration snapshot. Each subsequent change is delivered as a new full snapshot with an incremented version. If the connection is lost, the data plane reconnects and receives the latest snapshot.
 
 ## Independent Scaling
 

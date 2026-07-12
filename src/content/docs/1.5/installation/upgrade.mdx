@@ -38,7 +38,7 @@ Nantian Gateway follows these compatibility rules:
 |-----------|--------------|
 | Control plane and data plane | Minor version skew tolerated (e.g., CP v0.1.0 with DP v0.1.1) |
 | Gateway API version | Must match the Gateway API CRD version installed in the cluster |
-| Kubernetes version | 1.24+ required |
+| Kubernetes version | 1.28+ required |
 
 The control plane and data plane communicate over gRPC/xDS. The protocol is designed to handle minor version differences. The control plane can push configuration to a data plane running a slightly newer or older version, as long as the xDS protocol version is compatible.
 
@@ -113,7 +113,7 @@ kubectl logs -n nantian-gw deployment/nantian-gw-controlplane | grep "data plane
 
 The upgrade process varies by component:
 
-**Dashboard**: Upgraded first (or last, depending on Deployment ordering). Since it's stateless and doesn't handle traffic, the upgrade is instant. A single replica is replaced with no impact.
+**Dashboard**: Upgraded first (or last, depending on Deployment ordering). Since it's stateless and doesn't handle traffic, the upgrade is instant. Its replicas are rolled with no impact.
 
 **Control plane**: Rolling update with `maxSurge: 1` and `maxUnavailable: 0`. The new pod starts while the old pod is still running. Once the new pod passes its readiness probe, the old pod is terminated. If the old pod was the leader, the new pod (or another standby) takes over via leader election. Data planes may briefly disconnect and reconnect to the new leader.
 

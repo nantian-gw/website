@@ -23,7 +23,7 @@ A default Helm install uses the `nantian-gw` namespace and creates these main re
 | Namespace | `nantian-gw` | 1 | Component namespace when `namespace.create: true`. |
 | Control plane Deployment | `nantian-gw-controlplane` | 2 replicas | Watches Kubernetes resources, translates them, updates status, and publishes snapshots. |
 | Data plane Deployment | `nantian-gw-dataplane` | 2 replicas | Receives snapshots and handles runtime traffic. |
-| Dashboard Deployment | `nantian-gw-dashboard` | 1 replica | Web UI for users and operators. |
+| Dashboard Deployment | `nantian-gw-dashboard` | 2 replicas | Web UI for users and operators. |
 | GatewayClass | `nantian-gw` | 1 | Uses controller `gateway.networking.k8s.io/nantian-gw`. |
 
 The Helm chart creates the `GatewayClass`; it does not create your application `Gateway` or `HTTPRoute`. Create those resources in application namespaces after installation.
@@ -48,10 +48,10 @@ The data plane runtime HTTP listener is configured as `0.0.0.0:80`. Expose this 
 The chart defaults are intentionally conservative:
 
 * Images use `global.imageRegistry: "ghcr.io"` with repositories `nantian-gw/nantian-controlplane`, `nantian-gw/dataplane`, and `nantian-gw/dashboard`.
-* Control plane and data plane each run two replicas by default; dashboard runs one replica.
+* Control plane, data plane, and dashboard each run two replicas by default.
 * The chart runs in `featureMode: standard` by default.
 * The chart does not render Gateway API CRDs by default: `gatewayAPI.installCRDs: false` and `gatewayAPI.channel: standard`.
-* The current chart default uses the `latest` tag for control plane, data plane, and dashboard; production environments should pin immutable tags or digests explicitly in their values files.
+* The chart pins the `v2026.06.0` release tag (with `pullPolicy: IfNotPresent`) for control plane, data plane, and dashboard by default; production environments should still pin a specific release tag or digest explicitly in their values files.
 * HPA is disabled by default with `hpa.enabled: false`.
 * Prometheus Operator ServiceMonitor resources are disabled by default with `serviceMonitor.enabled: false`.
 * NetworkPolicies are enabled by default with `networkPolicies.enabled: true`.

@@ -7,7 +7,7 @@ The Nantian Gateway control plane and data plane each expose an HTTP REST Admin 
 
 ## Control Plane Admin API
 
-The control plane Admin API is exposed on the control plane pod's HTTP port (default `8081`) and provides a cluster-level configuration view as well as xDS client management.
+The control plane Admin API is exposed on the control plane pod's HTTP port (default `18081`) and provides a cluster-level configuration view as well as xDS client management.
 
 ### Endpoint List
 
@@ -31,11 +31,11 @@ The control plane Admin API is exposed on the control plane pod's HTTP port (def
 
 ```bash
 # Control plane liveness check
-curl http://<controlplane-pod>:8081/healthz
+curl http://<controlplane-pod>:18081/healthz
 # Returns: 200 OK (body: "ok")
 
 # Control plane readiness check
-curl http://<controlplane-pod>:8081/readyz
+curl http://<controlplane-pod>:18081/readyz
 # Returns: 200 OK (body: "ready") or 503 Service Unavailable
 ```
 
@@ -45,7 +45,7 @@ curl http://<controlplane-pod>:8081/readyz
 
 ```bash
 # Get the current configuration snapshot version
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
+curl http://<controlplane-pod>:18081/api/v1/config/snapshot/version
 # Example response:
 # {
 #   "id": "snap-20240601-120000-abc123",
@@ -57,7 +57,7 @@ curl http://<controlplane-pod>:8081/api/v1/config/snapshot/version
 # }
 
 # Get the full configuration snapshot
-curl http://<controlplane-pod>:8081/api/v1/config/snapshot
+curl http://<controlplane-pod>:18081/api/v1/config/snapshot
 # Returns the full IR snapshot content currently being pushed to all data planes
 ```
 
@@ -67,7 +67,7 @@ The configuration snapshot endpoints return the control plane's translated inter
 
 ```bash
 # List all connected xDS clients
-curl http://<controlplane-pod>:8081/api/v1/clients
+curl http://<controlplane-pod>:18081/api/v1/clients
 
 # Example response:
 # [
@@ -84,7 +84,7 @@ curl http://<controlplane-pod>:8081/api/v1/clients
 # ]
 
 # Get details for a specific client
-curl http://<controlplane-pod>:8081/api/v1/clients/dataplane-7f8a9b-0
+curl http://<controlplane-pod>:18081/api/v1/clients/dataplane-7f8a9b-0
 ```
 
 The `clients` endpoint helps confirm whether data planes have connected successfully, which configurations they have received, and their last acknowledged status. If a data plane shows a `NACK` status for an extended period, it indicates there may be a problem with configuration delivery.
@@ -186,13 +186,13 @@ When you modify a routing configuration in Kubernetes but don't see the expected
 
 ```bash
 # 1. Check the control plane configuration snapshot version
-curl http://<controlplane>:8081/api/v1/config/snapshot/version
+curl http://<controlplane>:18081/api/v1/config/snapshot/version
 
 # 2. Check whether the data plane has received the same version
 curl http://<dataplane>:8082/api/v1/config/version
 
 # 3. If versions don't match, check xDS client status
-curl http://<controlplane>:8081/api/v1/clients
+curl http://<controlplane>:18081/api/v1/clients
 ```
 
 If the control plane snapshot version has been updated but the data plane version has not, check whether the xDS client is in `NACK` status and whether the error details contain configuration parsing failure information.
@@ -201,7 +201,7 @@ If the control plane snapshot version has been updated but the data plane versio
 
 ```bash
 # 1. Check the endpoint list for the backend cluster in the control plane
-curl http://<controlplane>:8081/api/v1/backends/default/backend-v1
+curl http://<controlplane>:18081/api/v1/backends/default/backend-v1
 
 # 2. Check the health status of backend endpoints in the data plane
 curl http://<dataplane>:8082/api/v1/stats/backends
@@ -213,7 +213,7 @@ The control plane returns the configuration translated from Kubernetes EndpointS
 
 ```bash
 # View connection status for all data planes
-curl http://<controlplane>:8081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
+curl http://<controlplane>:18081/api/v1/clients | jq '.[] | {node_id, connected_since, last_config_status}'
 
 # View xDS status for a specific data plane
 curl http://<dataplane>:8082/api/v1/xds/status

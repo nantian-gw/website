@@ -61,15 +61,15 @@ Enable the relevant experimental feature flags before creating these resources. 
 
 ## Admin API Endpoints
 
-The Admin API is served separately by the control plane (port `8081`) and each data plane proxy. It provides the following categories of endpoints:
+The Admin API is served separately by the control plane (port `18081`) and each data plane proxy. It provides the following categories of endpoints:
 
 | Category | Purpose | Example Endpoints |
 |----------|---------|-------------------|
-| **Health** | Liveness and readiness probes for Kubernetes | `/healthz`, `/readyz` |
-| **Config Inspection** | View the current configuration state and snapshot versions | `/api/v1/config/snapshot`, `/api/v1/config/snapshot/version` |
-| **Resource Listing** | Enumerate gateways, routes, and backend clusters | `/api/v1/gateways`, `/api/v1/routes`, `/api/v1/backends` |
-| **Client Management** | Inspect connected xDS clients and their status | `/api/v1/clients`, `/api/v1/clients/{node_id}` |
-| **Metrics** | Prometheus-format metrics for monitoring | `/api/v1/metrics` |
+| **Health** | Liveness and readiness probes for Kubernetes | `/livez`, `/readyz` |
+| **Config Inspection** | View the current configuration state and snapshot sync status | `/v1/snapshot`, `/v1/snapshot-sync` |
+| **Resource Listing** | Enumerate listeners, routes, and backend clusters | `/v1/listeners`, `/v1/routes`, `/v1/backends` |
+| **Client Management** | Inspect connected data plane nodes and their status | `/v1/nodes`, `/v1/nodes/{nodeId}` |
+| **Metrics** | Query metrics through the control plane proxy | `/v1/metrics/query`, `/v1/metrics/query_range`, `/v1/metrics/config` |
 
 The control plane Admin API provides a cluster-level view of all gateways, routes, and connected data planes. The data plane Admin API provides per-instance runtime state, including active listeners, connection pools, and per-backend health status. For the complete endpoint reference, see [Admin API](/1.5/api-reference/admin-api).
 
@@ -84,7 +84,7 @@ The xDS protocol is the backbone of configuration distribution in Nantian Gatewa
 * **Clusters** — upstream backend groups with connection settings, timeouts, and circuit breakers
 * **Endpoints** — individual backend IP addresses and ports discovered through service discovery
 
-**How data planes consume it:** Each data plane opens a `StreamConfiguration` RPC to the control plane, declares which resource types it subscribes to, and receives a complete configuration snapshot. The control plane pushes incremental updates whenever configuration changes. The data plane acknowledges each update with an ACK or NACK, and the control plane tracks which version each data plane is running.
+**How data planes consume it:** Each data plane opens a `StreamConfiguration` RPC to the control plane, declares which resource types it subscribes to, and receives a complete configuration snapshot. Whenever configuration changes, the control plane pushes a new full-state snapshot that replaces the previous one wholesale. The data plane acknowledges each update with an ACK or NACK, and the control plane tracks which version each data plane is running.
 
 This push-based model means configuration changes propagate to all data planes within seconds, with no polling overhead. For the protocol specification, message formats, and field definitions, see [xDS Protocol](/1.5/api-reference/xds-proto).
 
@@ -109,12 +109,13 @@ GatewayClass
        ├── GRPCRoute
        ├── TCPRoute
        ├── UDPRoute
-       ├── TLSRoute
-       └── MeshRoute (service mesh)
-              ├── AIService (AI backend config)
-              ├── TokenPolicy (token quotas)
-              ├── WasmPlugin (custom extensions)
-              └── BackendLBPolicy (load balancing policy)
+       └── TLSRoute
+
+Custom policies attach to routes or backends via targetRefs:
+  ├── AIService (AI backend config)
+  ├── TokenPolicy (token quotas)
+  ├── WasmPlugin (custom extensions)
+  └── BackendLBPolicy (load balancing policy)
 ```
 
 `GatewayClass` defines the gateway implementation type, which the Nantian Gateway control plane watches and claims. `Gateway` defines listeners (port, protocol, TLS config), and route resources (`HTTPRoute`, etc.) bind traffic rules to specific `Gateway` instances and listeners.
@@ -123,7 +124,7 @@ The four custom CRDs can be referenced at the route level or backend level, givi
 
 ## Compatibility & Versioning
 
-Nantian Gateway is based on [Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) and declares support for **55 features** across the Core, Extended, and Implementation-specific conformance levels. The specific feature gate coverage is detailed in the [Gateway API Resources](/1.5/api-reference/gateway-api) reference.
+Nantian Gateway is based on [Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) and declares support for **54 features** across the Core, Extended, and Implementation-specific conformance levels. The specific feature gate coverage is detailed in the [Gateway API Resources](/1.5/api-reference/gateway-api) reference.
 
 **Upgrade policy:** Nantian Gateway follows the Kubernetes Gateway API versioning policy. Standard resources (`GatewayClass`, `Gateway`, `HTTPRoute`, `GRPCRoute`) use the `v1` stable API and are guaranteed backward-compatible. Alpha resources (`TCPRoute`, `UDPRoute`, `TLSRoute`, `BackendTLSPolicy`) may change between releases. Custom CRDs use the `v1alpha1` API group and may evolve as the AI gateway feature set matures.
 

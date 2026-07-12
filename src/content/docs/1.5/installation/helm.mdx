@@ -92,8 +92,8 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
   config:
     grpcAddr: ":18080"
     adminAddr: ":18081"
@@ -104,7 +104,7 @@ controlplane:
       enableAiGateway: false
 ```
 
-The current chart default also uses the `latest` tag for the control plane so quick installs follow the current public image set. In production, override this with an immutable tag or digest in your values file.
+The chart pins an immutable release tag (`v2026.06.0`) with `pullPolicy: IfNotPresent` by default. In production, override this with a specific release tag or an image digest in your values file.
 
 The control plane service split is:
 
@@ -122,11 +122,11 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
   resources:
     requests:
-      cpu: "250m"
+      cpu: "1000m"
       memory: "256Mi"
     limits:
       cpu: "2000m"
@@ -162,14 +162,14 @@ dataplane:
 ```yaml
 dashboard:
   enabled: true
-  replicas: 1
+  replicas: 2
   image:
     repository: "nantian-gw/dashboard"
-    tag: "latest"
-    pullPolicy: Always
+    tag: "v2026.06.0"
+    pullPolicy: IfNotPresent
 ```
 
-The current chart default uses `latest` for control plane, data plane, and dashboard. This is convenient for quick install validation, but production environments should pin immutable tags or digests explicitly in their values files.
+The chart pins the `v2026.06.0` release tag for control plane, data plane, and dashboard by default. Production environments should still pin a specific release tag or digest explicitly in their values files.
 
 Disable the dashboard when you do not need the web UI:
 
