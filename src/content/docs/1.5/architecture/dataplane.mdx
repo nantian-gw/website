@@ -55,7 +55,7 @@ The xDS client is the data plane's only connection to the outside world for conf
 3. **Receives the initial snapshot** as a `DiscoveryResponse` containing the full IR serialized as protobuf
 4. **Applies the snapshot** to the proxy runtime atomically
 5. **Acknowledges** with an ACK (or NACK if validation fails)
-6. **Receives delta updates** as subsequent `DiscoveryResponse` messages on the same stream
+6. **Receives full-state snapshots** as subsequent `DiscoveryResponse` messages on the same stream, each replacing the previous configuration wholesale
 7. **Sends status reports** (`DataplaneStatusReport`) back to the control plane, including proxy health, active listeners, route counts, and backend connectivity
 
 The client handles reconnection transparently. If the gRPC stream breaks, the client retries with exponential backoff. During reconnection, the proxy continues serving traffic with the last known configuration.

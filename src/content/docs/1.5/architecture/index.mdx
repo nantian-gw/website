@@ -41,7 +41,7 @@ sequenceDiagram
 
 **Data plane** (Rust, `dataplane/`): Receives configuration via xDS, applies it to the proxy runtime, and handles all request traffic. It implements HTTP routing, stream (TCP/UDP) proxying, TLS termination, rate limiting, circuit breaking, and Wasm plugin execution. Each data plane instance connects to the control plane independently and maintains its own configuration stream.
 
-**Communication**: The control plane implements the `ConfigurationDiscoveryService` gRPC service defined in `proto/gateway/control/v1/`. Data planes open a bidirectional stream, receive full configuration snapshots on initial connection, then receive delta updates as the control plane rebuilds the IR. The data plane also sends status reports back over the same stream, giving the control plane visibility into proxy health and configuration state.
+**Communication**: The control plane implements the `ConfigurationDiscoveryService` gRPC service defined in `proto/gateway/control/v1/`. Data planes open a bidirectional stream, receive a full configuration snapshot on initial connection, then receive a new full-state snapshot on each subsequent change (each snapshot replaces the previous one wholesale — the wire payload is never a delta). The data plane also sends status reports back over the same stream, giving the control plane visibility into proxy health and configuration state.
 
 ## Internal representation
 
