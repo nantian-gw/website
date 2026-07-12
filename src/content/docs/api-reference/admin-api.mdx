@@ -3,7 +3,7 @@ title: Admin API
 description: "Full Admin API reference: health probes, diagnostics endpoints, resource CRUD, chatbot, metrics proxy, and AI gateway — with auth model and usage examples."
 ---
 
-The Nantian Gateway control plane exposes an HTTP REST Admin API for runtime diagnostics, configuration inspection, and operational queries. All endpoints live under the control plane's HTTP listener (default port `8081`).
+The Nantian Gateway control plane exposes an HTTP REST Admin API for runtime diagnostics, configuration inspection, and operational queries. All endpoints live under the control plane's HTTP listener (default port `18081`).
 
 ## Auth Model
 
@@ -88,11 +88,11 @@ The Nantian Gateway control plane exposes an HTTP REST Admin API for runtime dia
 
 ```bash
 # Liveness
-curl -s -o /dev/null -w "%{http_code}" http://controlplane:8081/livez
+curl -s -o /dev/null -w "%{http_code}" http://controlplane:18081/livez
 # → 200
 
 # Readiness (may return 503 before initial sync completes)
-curl -s http://controlplane:8081/readyz
+curl -s http://controlplane:18081/readyz
 # → 200 OK (or 503 if not yet ready)
 ```
 
@@ -100,56 +100,56 @@ curl -s http://controlplane:8081/readyz
 
 ```bash
 # Cluster overview
-curl http://controlplane:8081/v1/summary
+curl http://controlplane:18081/v1/summary
 
 # All routes across all gateways
-curl http://controlplane:8081/v1/routes
+curl http://controlplane:18081/v1/routes
 
 # Specific HTTPRoute detail
-curl http://controlplane:8081/v1/routes/httproute/default/my-app-route
+curl http://controlplane:18081/v1/routes/httproute/default/my-app-route
 
 # Backend cluster detail
-curl http://controlplane:8081/v1/backends/default/backend-svc
+curl http://controlplane:18081/v1/backends/default/backend-svc
 
 # Data plane node status
-curl http://controlplane:8081/v1/nodes
+curl http://controlplane:18081/v1/nodes
 ```
 
 ### Snapshot Sync Check
 
 ```bash
 # See which nodes are current vs. drifted
-curl http://controlplane:8081/v1/snapshot-sync
+curl http://controlplane:18081/v1/snapshot-sync
 ```
 
 ### Resource Management
 
 ```bash
 # List all managed resources
-curl http://controlplane:8081/v1/resources
+curl http://controlplane:18081/v1/resources
 
 # Get a specific resource
-curl http://controlplane:8081/v1/resources/httproute/default/my-app-route
+curl http://controlplane:18081/v1/resources/httproute/default/my-app-route
 
 # Create or update a resource
-curl -X POST http://controlplane:8081/v1/resources \
+curl -X POST http://controlplane:18081/v1/resources \
   -H "Content-Type: application/json" \
   -d '{"apiVersion":"gateway.networking.k8s.io/v1","kind":"HTTPRoute",...}'
 
 # Delete a resource
-curl -X DELETE http://controlplane:8081/v1/resources/httproute/default/my-app-route
+curl -X DELETE http://controlplane:18081/v1/resources/httproute/default/my-app-route
 ```
 
 ### Metrics Querying
 
 ```bash
 # Instant query
-curl -X POST http://controlplane:8081/v1/metrics/query \
+curl -X POST http://controlplane:18081/v1/metrics/query \
   -H "Content-Type: application/json" \
   -d '{"query":"up"}'
 
 # Range query over last hour
-curl -X POST http://controlplane:8081/v1/metrics/query_range \
+curl -X POST http://controlplane:18081/v1/metrics/query_range \
   -H "Content-Type: application/json" \
   -d '{"query":"rate(http_requests_total[5m])","start":"2025-01-01T00:00:00Z","end":"2025-01-01T01:00:00Z","step":"30s"}'
 ```
@@ -158,10 +158,10 @@ curl -X POST http://controlplane:8081/v1/metrics/query_range \
 
 ```bash
 # Overview
-curl http://controlplane:8081/v1/ai/overview
+curl http://controlplane:18081/v1/ai/overview
 
 # Token usage
-curl http://controlplane:8081/v1/ai/token-usage
+curl http://controlplane:18081/v1/ai/token-usage
 ```
 
 ### Authenticated Requests
@@ -169,7 +169,7 @@ curl http://controlplane:8081/v1/ai/token-usage
 When the admin token is configured, include it in the `Authorization` header:
 
 ```bash
-curl -H "Authorization: Bearer ${ADMIN_TOKEN}" http://controlplane:8081/v1/summary
+curl -H "Authorization: Bearer ${ADMIN_TOKEN}" http://controlplane:18081/v1/summary
 ```
 
 :::tip[jq]

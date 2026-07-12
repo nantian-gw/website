@@ -59,13 +59,13 @@ The control plane exposes an HTTP metrics endpoint at the configured path (defau
 
 ### Data Plane Metrics
 
-The data plane exposes metrics on a dedicated HTTP listener:
+The data plane exposes Prometheus metrics on its admin listener at `/metrics`. There is no separate metrics server to enable or configure — the endpoint shares the admin address:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `metrics.enabled` | bool | `true` | Enable the metrics endpoint |
-| `metrics.port` | int | `9100` | Port for the metrics HTTP server |
-| `metrics.path` | string | `"/metrics"` | HTTP path for the metrics endpoint |
+| `adminAddr` | string | `"127.0.0.1:19080"` | Admin listener address; serves `/metrics` alongside health endpoints |
+
+In Kubernetes, the Helm chart exposes this through the dataplane metrics Service on port `19080`.
 
 Key data plane metrics:
 
@@ -79,18 +79,22 @@ For a complete metric reference, see [Metrics Reference](/operations/metrics).
 
 ## Tracing
 
-OpenTelemetry tracing is optional and can be enabled in the data plane configuration:
+OpenTelemetry tracing is optional and is configured under `log.openTelemetry` in the data plane configuration:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `tracing.enabled` | bool | `false` | Enable OpenTelemetry tracing |
-| `tracing.endpoint` | string | `""` | OTLP collector endpoint |
-| `tracing.sampleRate` | float | `0.1` | Sampling rate (0.0 to 1.0) |
-| `tracing.serviceName` | string | `"nantian-gw"` | Service name in trace data |
+| `log.openTelemetry.enabled` | bool | `false` | Enable OpenTelemetry tracing |
+| `log.openTelemetry.endpoint` | string | `""` | OTLP collector endpoint |
+| `log.openTelemetry.protocol` | string | `"grpc"` | OTLP transport (`grpc` or `http`) |
+| `log.openTelemetry.timeoutMs` | int | `3000` | Export timeout in milliseconds |
+| `log.openTelemetry.insecure` | bool | `false` | Disable TLS when connecting to the collector |
+| `log.openTelemetry.sampleRatio` | float | `1.0` | Sampling ratio (0.0 to 1.0) |
+| `log.openTelemetry.serviceName` | string | `"nantian-dataplane"` | Service name in trace data |
+| `log.openTelemetry.serviceNamespace` | string | `""` | Service namespace in trace data |
 
-When enabled, the data plane propagates trace context headers and exports spans to the configured OTLP collector. Traces include the full request lifecycle: TLS handshake, route matching, header transformation, upstream request, and response.
+When enabled, the data plane propagates W3C trace-context headers and exports spans to the configured OTLP collector. Traces cover the request lifecycle: route matching, header transformation, upstream request, and response.
 
-The `sampleRate` controls the fraction of requests that generate traces. A rate of `0.1` traces 10% of requests. For production, start with a low sampling rate and increase based on observability requirements and storage capacity.
+`sampleRatio` controls the fraction of requests that generate traces (default `1.0` traces all requests). For high-traffic production, lower this to reduce trace volume and storage cost.
 
 ## Sentry Error Tracking
 
@@ -135,7 +139,7 @@ scrape_configs:
         regex: nantian-gw-dataplane
       - source_labels: [__meta_kubernetes_pod_container_port_number]
         action: keep
-        regex: "9100"
+        regex: "19080"
 ```
 
 ## Next Steps

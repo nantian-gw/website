@@ -15,7 +15,7 @@ Certificate management is configured under the `certs` key:
 
 ```yaml
 certs:
-  generate: false
+  generate: true
   domain: ""
   selfSigned:
     caDurationDays: 365
@@ -35,7 +35,7 @@ certs:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `certs.generate` | bool | `false` | Generate self-signed certificates at install time |
+| `certs.generate` | bool | `true` | Generate self-signed certificates at install time |
 | `certs.domain` | string | `""` | Namespace-scoped domain for the gRPC server certificate SAN. Auto-computed from release name and namespace when left empty |
 | `certs.selfSigned.caDurationDays` | int | `365` | Validity period in days for the self-signed CA certificate |
 | `certs.selfSigned.serverDurationDays` | int | `90` | Validity period in days for the self-signed server certificate |
@@ -62,9 +62,9 @@ certs:
 
 The chart creates three Secrets in the release namespace:
 
-- `nantian-gw-ca-tls`: CA certificate and key
-- `nantian-gw-server-tls`: gRPC server certificate and key
-- `nantian-gw-client-tls`: gRPC client certificate and key
+- `nantian-gw-grpc-ca`: CA certificate and key
+- `nantian-gw-grpc-server-tls`: gRPC server certificate and key
+- `nantian-gw-grpc-client-tls`: gRPC client certificate and key
 
 The domain for the server certificate's SAN field is auto-computed as `<release-name>.<namespace>.svc` unless you set `certs.domain` explicitly. This ensures the data plane can verify the server's identity when connecting to the cluster-internal gRPC service.
 
@@ -104,8 +104,8 @@ The chart creates three Certificate resources (CA, server, client) referencing y
 
 | Mode | Use case | Rotation |
 |------|----------|----------|
-| `certs.generate: false` (default) | You provide your own Secrets or don't use gRPC TLS | Manual |
-| `certs.generate: true` (self-signed) | Development, testing, ephemeral clusters | Manual (reinstall or rotate by hand) |
+| `certs.generate: false` | You provide your own Secrets or don't use gRPC TLS | Manual |
+| `certs.generate: true` (default, self-signed) | Development, testing, ephemeral clusters | Manual (reinstall or rotate by hand) |
 | `certs.certManager.enabled: true` | Production clusters with cert-manager | Automatic via cert-manager |
 
-When neither self-signed generation nor cert-manager is enabled, the chart expects you to have created the three TLS Secrets (`nantian-gw-ca-tls`, `nantian-gw-server-tls`, `nantian-gw-client-tls`) yourself. This gives you full control over the certificate lifecycle using your own PKI or tooling.
+When neither self-signed generation nor cert-manager is enabled, the chart expects you to have created the three TLS Secrets (`nantian-gw-grpc-ca`, `nantian-gw-grpc-server-tls`, `nantian-gw-grpc-client-tls`) yourself. This gives you full control over the certificate lifecycle using your own PKI or tooling.

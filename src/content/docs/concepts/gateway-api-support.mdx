@@ -12,7 +12,7 @@ Nantian Gateway targets the Kubernetes Gateway API v1.5.1 specification. This pa
 - **Current Position** — Nantian's runtime-gated support position, derived from `internal/gwapi/supported_features.go` and conformance workflows.
 
 :::note
-Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `BackendTLSPolicy`, `TLSRoute`) are fully supported and not repeated here.
+Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `BackendTLSPolicy`) are fully supported and not repeated here.
 :::
 
 ## Support Matrix
@@ -47,16 +47,16 @@ Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `B
 | HTTPRouteHostRewrite | standard | Yes | Yes | Supported |
 | HTTPRoutePathRewrite | standard | Yes | Yes | Supported |
 | HTTPRouteRequestMirror | standard | Yes | Yes | Supported |
-| HTTPRouteRequestMultipleMirrors | experimental | Yes | No | Default runtime only |
-| HTTPRouteRequestPercentageMirror | experimental | Yes | No | Default runtime only |
+| HTTPRouteRequestMultipleMirrors | experimental | Yes | Yes | Supported |
+| HTTPRouteRequestPercentageMirror | experimental | Yes | Yes | Supported |
 | HTTPRouteRequestTimeout | standard | Yes | Yes | Supported |
 | HTTPRouteBackendTimeout | standard | Yes | Yes | Supported |
 | HTTPRouteParentRefPort | standard | Yes | Yes | Supported |
 | HTTPRouteNamedRouteRule | standard | Yes | Yes | Supported |
 | HTTPRouteCORS | experimental | Yes | Yes | Supported |
-| HTTPRoute303RedirectStatusCode | experimental | Yes | No | Default runtime only |
-| HTTPRoute307RedirectStatusCode | experimental | Yes | No | Default runtime only |
-| HTTPRoute308RedirectStatusCode | experimental | Yes | No | Default runtime only |
+| HTTPRoute303RedirectStatusCode | experimental | Yes | Yes | Supported |
+| HTTPRoute307RedirectStatusCode | experimental | Yes | Yes | Supported |
+| HTTPRoute308RedirectStatusCode | experimental | Yes | Yes | Supported |
 | HTTPRouteBackendProtocolH2C | experimental | Yes | Yes | Supported |
 | HTTPRouteBackendProtocolWebSocket | experimental | Yes | Yes | Supported |
 | HTTPRouteBackendProtocolGRPC | experimental | No | No | Not supported |
@@ -79,9 +79,16 @@ Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `B
 
 | Feature | Channel | Default | Experimental | Position |
 |---------|---------|---------|--------------|----------|
-| MeshFrontend | experimental | Yes | No | Default runtime only |
-| MeshConsumerRoute | experimental | Yes | No | Default runtime only |
-| MeshClusterIPMatching | experimental | Yes | No | Default runtime only |
+| Mesh | experimental | Yes | Yes | Supported |
+| MeshClusterIPMatching | experimental | Yes | Yes | Supported |
+| MeshConsumerRoute | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteBackendRequestHeaderModification | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteNamedRouteRule | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteQueryParamMatching | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteRedirectPath | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteRedirectPort | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteRewritePath | experimental | Yes | Yes | Supported |
+| MeshHTTPRouteSchemeRedirect | experimental | Yes | Yes | Supported |
 | MeshConsumerNamespaceMatching | experimental | No | No | Not supported |
 
 ### BackendLBPolicy Features
@@ -105,7 +112,6 @@ In addition to the upstream Gateway API feature set, Nantian Gateway declares:
 |---------|-------------|
 | `TCPRoute` | TCP routing support |
 | `BackendLBSessionPersistence` | Session persistence for backend load balancing |
-| `UDPRoute` | UDP routing support |
 
 ## Enabling Experimental Features
 
@@ -124,6 +130,6 @@ CONFORMANCE_EXPERIMENTAL=true ALL_FEATURES=true make conformance
 
 ## Source of Truth
 
-- Supported feature declarations: `gateway/internal/gatewayapi/supported_features.go`
+- Supported feature declarations: `gateway/internal/gwapi/supported_features.go`
 - All-features conformance: `gateway/conformance/conformance_test.go`
 - CI workflow: `gateway/.github/workflows/conformance.yml`

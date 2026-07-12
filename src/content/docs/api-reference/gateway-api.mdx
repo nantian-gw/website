@@ -3,7 +3,7 @@ title: Gateway API Resources
 description: "Reference for standard Gateway API resources supported by Nantian: GatewayClass, Gateway, HTTPRoute, GRPCRoute, TCPRoute, UDPRoute, TLSRoute, and policies."
 ---
 
-Nantian Gateway implements the [Kubernetes Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) specification and declares support for 55 features. This page lists all supported resource types, core fields, and feature coverage.
+Nantian Gateway implements the [Kubernetes Gateway API v1.5.1](https://gateway-api.sigs.k8s.io/) specification and declares support for 54 features. This page lists all supported resource types, core fields, and feature coverage.
 
 ## Resource Inventory
 
@@ -280,7 +280,7 @@ spec:
 
 ## Feature Support Matrix
 
-Nantian Gateway declares support for 55 features in the Gateway API v1.5.1 specification. Key features are listed below by category:
+Nantian Gateway declares support for 54 features in the Gateway API v1.5.1 specification. Key features are listed below by category:
 
 ### Core Features
 
@@ -295,8 +295,8 @@ Nantian Gateway declares support for 55 features in the Gateway API v1.5.1 speci
 
 | Feature | Status |
 |---------|--------|
-| HTTPRouteQueryParamMatch | Supported |
-| HTTPRouteMethodMatch | Supported |
+| HTTPRouteQueryParamMatching | Supported |
+| HTTPRouteMethodMatching | Supported |
 | HTTPRouteRequestMirror | Supported |
 | HTTPRouteRequestTimeout | Supported |
 | HTTPRouteBackendTimeout | Supported |
@@ -321,9 +321,16 @@ Nantian Gateway declares support for 55 features in the Gateway API v1.5.1 speci
 
 | Feature | Status |
 |---------|--------|
-| MeshRoute | Supported |
-| MeshConsumerRoute | Supported |
+| Mesh | Supported |
 | MeshClusterIPMatching | Supported |
+| MeshConsumerRoute | Supported |
+| MeshHTTPRouteBackendRequestHeaderModification | Supported |
+| MeshHTTPRouteNamedRouteRule | Supported |
+| MeshHTTPRouteQueryParamMatching | Supported |
+| MeshHTTPRouteRedirectPath | Supported |
+| MeshHTTPRouteRedirectPort | Supported |
+| MeshHTTPRouteRewritePath | Supported |
+| MeshHTTPRouteSchemeRedirect | Supported |
 
 :::tip[Full Feature List]
 For the complete feature support list and implementation details for each feature, see the [Gateway API Conformance Report](https://github.com/nantian-gw/gateway).

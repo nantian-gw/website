@@ -12,35 +12,26 @@ This guide assumes you're familiar with Kustomize basics. If you haven't used it
 A typical Kustomize layout for Nantian Gateway looks like this:
 
 ```
-deploy/
+deploy/kubernetes/
 ├── base/
 │   ├── kustomization.yaml
-│   ├── namespace.yaml
-│   ├── gatewayclass.yaml
-│   ├── controlplane/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   ├── configmap.yaml
-│   │   ├── rbac.yaml
-│   │   └── pdb.yaml
-│   ├── dataplane/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   │   ├── configmap.yaml
-│   │   └── pdb.yaml
-│   └── dashboard/
-│       ├── deployment.yaml
-│       └── service.yaml
+│   ├── namespace-gatewayclass.yaml
+│   ├── priorityclass.yaml
+│   ├── rbac.yaml
+│   ├── controlplane.yaml
+│   ├── dataplane.yaml
+│   ├── dashboard.yaml
+│   ├── services-networkpolicy.yaml
+│   ├── aiservice-crd.yaml
+│   ├── tokenpolicy-crd.yaml
+│   └── wasmplugin-crd.yaml
 └── overlays/
-    ├── dev/
-    │   └── kustomization.yaml
-    ├── staging/
-    │   └── kustomization.yaml
+    ├── kind/
+    ├── kind-conformance/
+    ├── kind-hostnetwork/
+    ├── kind-pprof/
+    ├── observability-enabled/
     └── production/
-        ├── kustomization.yaml
-        ├── controlplane-patch.yaml
-        ├── dataplane-patch.yaml
-        └── tls-secret.yaml
 ```
 
 The `base/` directory contains the resource definitions shared across all environments. Each overlay in `overlays/` patches the base for a specific environment.
@@ -50,38 +41,34 @@ The `base/` directory contains the resource definitions shared across all enviro
 The base `kustomization.yaml` declares all resources and common labels:
 
 ```yaml
-# deploy/base/kustomization.yaml
+# deploy/kubernetes/base/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: nantian-gw
-
 resources:
-  - namespace.yaml
-  - gatewayclass.yaml
-  - controlplane/deployment.yaml
-  - controlplane/service.yaml
-  - controlplane/configmap.yaml
-  - controlplane/rbac.yaml
-  - controlplane/pdb.yaml
-  - dataplane/deployment.yaml
-  - dataplane/service.yaml
-  - dataplane/configmap.yaml
-  - dataplane/pdb.yaml
-  - dashboard/deployment.yaml
-  - dashboard/service.yaml
+  - namespace-gatewayclass.yaml
+  - priorityclass.yaml
+  - rbac.yaml
+  - controlplane.yaml
+  - dataplane.yaml
+  - dashboard.yaml
+  - services-networkpolicy.yaml
+  - aiservice-crd.yaml
+  - tokenpolicy-crd.yaml
+  - wasmplugin-crd.yaml
 
-commonLabels:
-  app.kubernetes.io/name: nantian-gw
-  app.kubernetes.io/part-of: nantian-gw
+generatorOptions:
+  disableNameSuffixHash: true
 
-images:
-  - name: nantian-controlplane
-    newName: ghcr.io/nantian-gw/nantian-controlplane
-    newTag: latest
-  - name: nantian-dataplane
-    newName: ghcr.io/nantian-gw/dataplane
-    newTag: latest
+configMapGenerator:
+  - name: nantian-gw-controlplane-config
+    namespace: nantian-gw
+    files:
+      - config.yaml=../../../configs/controlplane/config.yaml
+  - name: nantian-gw-dataplane-config
+    namespace: nantian-gw
+    files:
+      - config.yaml=../../../configs/dataplane/config.yaml
 ```
 
 ## Production overlay
@@ -89,7 +76,7 @@ images:
 The production overlay patches the base with higher replica counts, resource limits, TLS configuration, and stricter security contexts:
 
 ```yaml
-# deploy/overlays/production/kustomization.yaml
+# deploy/kubernetes/overlays/production/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -105,7 +92,7 @@ patches:
 ### Control plane patch
 
 ```yaml
-# deploy/overlays/production/controlplane-patch.yaml
+# deploy/kubernetes/overlays/production/controlplane-patch.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -144,7 +131,7 @@ spec:
 ### Data plane patch
 
 ```yaml
-# deploy/overlays/production/dataplane-patch.yaml
+# deploy/kubernetes/overlays/production/dataplane-patch.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -193,7 +180,7 @@ spec:
 ## Applying
 
 ```bash
-kubectl apply -k deploy/overlays/production
+kubectl apply -k deploy/kubernetes/overlays/production
 ```
 
 Kustomize merges the base with the overlay patches, builds the final manifests, and applies them to the cluster.
@@ -211,7 +198,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/your-org/nantian-gw-deploy
-    path: deploy/overlays/production
+    path: deploy/kubernetes/overlays/production
     targetRevision: main
   destination:
     server: https://kubernetes.default.svc
@@ -223,7 +210,7 @@ spec:
 ```
 
 :::tip[Patch instead of template]
-One advantage of Kustomize over Helm is that you never modify the base manifests. Every environment change is a patch, which makes it easy to see exactly what differs between dev, staging, and production. Diff two overlays with `kubectl diff -k deploy/overlays/production` and you see only the deltas.
+One advantage of Kustomize over Helm is that you never modify the base manifests. Every environment change is a patch, which makes it easy to see exactly what differs between dev, staging, and production. Diff two overlays with `kubectl diff -k deploy/kubernetes/overlays/production` and you see only the deltas.
 :::
 
 ## ConfigMap management

@@ -72,7 +72,7 @@ An IR snapshot is versioned and immutable. Each new snapshot increments the vers
 
 ## Inspecting IR via the Admin API
 
-The control plane's [Admin API](/architecture/admin-api) exposes a snapshot endpoint for inspecting the current IR:
+The control plane's [Admin API](/api-reference/admin-api) exposes a snapshot endpoint for inspecting the current IR:
 
 ```
 GET /v1/snapshot
@@ -94,7 +94,7 @@ curl -s http://localhost:18081/v1/snapshot | jq .
 
 ```json
 {
-  "version": 42,
+  "version": "42",
   "builtAt": "2026-06-19T10:15:30Z",
   "resourceCounts": {
     "listeners": 3,
@@ -111,6 +111,6 @@ Use this endpoint to verify that your Kubernetes configuration produced the expe
 
 ## Relationship to xDS
 
-The IR is what flows through the gRPC xDS channel. Each data plane opens a bidirectional stream to the control plane, requests the latest snapshot, and the control plane sends the IR as a typed protobuf message. The data plane then diffs the new IR against its current runtime state and applies only the changes: adding new listeners, updating route tables, or draining removed backends.
+The IR is what flows through the gRPC xDS channel. Each data plane opens a bidirectional stream to the control plane, requests the latest snapshot, and the control plane sends the complete IR snapshot as a typed protobuf message. The data plane then diffs the new IR against its current runtime state and applies only the changes: adding new listeners, updating route tables, or draining removed backends.
 
 This is why the IR exists: to give the data plane something it can diff and apply efficiently, without any understanding of Kubernetes itself.

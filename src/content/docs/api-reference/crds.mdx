@@ -1,6 +1,6 @@
 ---
 title: Custom And Experimental Resources
-description: "Reference for Nantian Gateway custom resource definitions: AIService, TokenPolicy, WasmPlugin, and BackendLBPolicy — schemas, fields, and examples."
+description: "Reference for Nantian Gateway custom resource definitions: AIService, TokenPolicy, WasmPlugin, BackendLBPolicy, and RoutePolicy — schemas, fields, and examples."
 ---
 
 Nantian Gateway uses standard Gateway API resources for routing. It also understands experimental extension resources when the relevant feature flags and CRDs are installed.
@@ -30,6 +30,7 @@ Read [Experimental Features](/configuration/experimental-features/) before creat
 | `spec.provider` | Yes | Provider name, such as `openai`, `anthropic`, or `ollama`. |
 | `spec.format` | No | Request/response format hint. |
 | `spec.model` | Yes | Model name used by the provider. |
+| `spec.endpoint` | No | Custom provider endpoint or base URL. |
 | `spec.auth.type` | No | Auth type understood by the runtime. |
 | `spec.auth.secret` | No | Kubernetes Secret name. |
 | `spec.auth.key` | No | Key inside the Secret. |
@@ -154,6 +155,7 @@ spec:
 | `spec.loadBalancing.consistentHash.keyType` | No | `SourceIP`, `Header`, or `Hostname`. |
 | `spec.loadBalancing.consistentHash.headerName` | No | Required when key type is `Header`. |
 | `spec.sessionPersistence` | No | Gateway API v1alpha2 session persistence object. |
+| `spec.circuitBreaker.maxInflightRequests` | No | Maximum concurrent inflight requests to the backend; excess requests are rejected. |
 
 Example:
 
@@ -173,6 +175,66 @@ spec:
     consistentHash:
       keyType: Header
       headerName: x-session-id
+```
+
+## RoutePolicy
+
+`RoutePolicy` attaches per-route defaults for timeout, body limit, proxy buffering, and connection keepalive to local Gateway API target resources.
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `spec.targetRefs` | Yes | List of `LocalPolicyTargetReference`; `group`, `kind`, and `name` are required. |
+| `spec.default.timeout.request` | No | Timeout for the entire request-response cycle. |
+| `spec.default.timeout.backendRequest` | No | Timeout for a single backend request attempt. |
+| `spec.default.timeout.connect` | No | Timeout to establish a TCP connection to the backend. |
+| `spec.default.timeout.nextUpstream` | No | Time spent finding a viable upstream during retries. |
+| `spec.default.bodyLimit.maxRequestBodyBytes` | No | Maximum request body size in bytes. |
+| `spec.default.bodyLimit.requestBodyBufferBytes` | No | Buffer size for reading the request body before spilling to a temporary file. |
+| `spec.default.bodyLimit.maxRequestHeaderBytes` | No | Maximum combined size of all request headers in bytes. |
+| `spec.default.proxy.requestBuffering` | No | Whether to buffer the client request body before proxying. |
+| `spec.default.proxy.responseBuffering` | No | Whether to buffer the backend response before sending to the client. |
+| `spec.default.proxy.bufferSize` | No | Size of each response buffer in bytes. |
+| `spec.default.proxy.bufferCount` | No | Number of response buffers to allocate. |
+| `spec.default.connection.keepaliveRequests` | No | Maximum requests on a single keepalive client connection. |
+| `spec.default.connection.upstreamKeepalivePoolSize` | No | Maximum idle upstream keepalive connections to maintain in the pool. |
+| `spec.default.connection.keepaliveTime` | No | Maximum lifetime of a keepalive client connection. |
+| `spec.default.connection.keepaliveTimeout` | No | Maximum idle time before closing a keepalive client connection. |
+| `spec.default.connection.upstreamKeepaliveIdle` | No | Maximum idle time before closing an upstream keepalive connection. |
+
+Example:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: RoutePolicy
+metadata:
+  name: echo-route-policy
+  namespace: nantian-demo
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: echo
+  default:
+    timeout:
+      request: 30s
+      backendRequest: 15s
+      connect: 2s
+      nextUpstream: 5s
+    bodyLimit:
+      maxRequestBodyBytes: 2097152
+      requestBodyBufferBytes: 65536
+      maxRequestHeaderBytes: 8192
+    proxy:
+      requestBuffering: false
+      responseBuffering: true
+      bufferSize: 16384
+      bufferCount: 4
+    connection:
+      keepaliveRequests: 1000
+      upstreamKeepalivePoolSize: 128
+      keepaliveTime: 1h
+      keepaliveTimeout: 75s
+      upstreamKeepaliveIdle: 60s
 ```
 
 ## Next Steps

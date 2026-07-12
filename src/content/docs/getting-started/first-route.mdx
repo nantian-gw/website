@@ -274,10 +274,10 @@ curl http://localhost:18080/
 
 ### Option B: Port forwarding
 
-If you didn't set up port mappings, port-forward to the data plane service:
+If you didn't set up port mappings, port-forward to the data plane deployment (the chart does not create a ClusterIP Service for the runtime `:80` listener):
 
 ```bash
-kubectl port-forward -n nantian-gw svc/nantian-gw-dataplane 8080:80
+kubectl port-forward -n nantian-gw deploy/nantian-gw-dataplane 8080:80
 ```
 
 Then in another terminal:
@@ -288,11 +288,14 @@ curl http://localhost:8080/
 
 ### Option C: Within the cluster
 
-Run a temporary pod inside the cluster to test:
+The chart does not expose the runtime `:80` listener as a Service, so create one first, then curl it from a temporary pod:
 
 ```bash
+kubectl expose deployment nantian-gw-dataplane -n nantian-gw \
+  --name nantian-gw-dataplane-runtime --port 80 --target-port 80
+
 kubectl run curl-test --image=curlimages/curl:latest -it --rm --restart=Never -- \
-  curl -s http://nantian-gw-dataplane.nantian-gw.svc:80/
+  curl -s http://nantian-gw-dataplane-runtime.nantian-gw.svc:80/
 ```
 
 ### Expected response

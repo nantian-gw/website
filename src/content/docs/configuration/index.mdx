@@ -3,7 +3,7 @@ title: Configuration Overview
 description: "How Nantian Gateway configuration files work, where defaults come from, and which control-plane and data-plane settings matter most."
 ---
 
-Nantian Gateway uses YAML configuration files rather than command-line flags or environment variables. The control plane and data plane each have their own configuration file, kept separate because they run as independent processes with distinct responsibilities.
+Nantian Gateway is configured primarily through YAML files — the manager binary takes a `--config` path, and only a few values (such as the data plane node ID) come from environment variables. The control plane and data plane each have their own configuration file, kept separate because they run as independent processes with distinct responsibilities.
 
 This chapter covers every available configuration option for both components.
 
@@ -26,7 +26,7 @@ All default values shown in this documentation come directly from the configurat
 You can override any field by including it in your configuration file. Helm users should modify `values.yaml` rather than editing the config file directly, since the chart templated the ConfigMap from Helm values.
 
 :::tip[Validation]
-The gateway performs basic validation at startup. Malformed durations, missing required fields, or conflicting options will cause a fatal error before the process starts accepting connections. Always validate your config with a dry-run before rolling it out to production.
+The gateway performs validation at startup. Malformed durations, missing required fields, or conflicting options will cause a fatal error before the process starts accepting connections. Start the process against a new config in a non-production environment first, so any such errors surface before you roll it out to production.
 :::
 
 ## Helm Deployments: Values First
@@ -109,29 +109,19 @@ features:
   enableAiGateway: false
 ```
 
-## Config validation and dry-run
+## Config validation
 
 The gateway validates all configuration at startup. Malformed durations, missing required fields, or conflicting options cause a fatal error before the process accepts any connections.
 
-You can validate a config file without starting the full gateway by using the `--dry-run` flag:
+There is no separate dry-run flag — the manager binary accepts only `--config`. To validate a configuration before deploying it, start the process against the file in a throwaway environment and confirm it reaches a ready state instead of exiting with a validation error:
 
 ```bash
-nantian-gw --config ./my-config.yaml --dry-run
+go run ./cmd/manager --config ./my-config.yaml
 ```
 
-This parses the YAML, fills in defaults, runs the validation suite, and exits. Exit code 0 means the config is valid. Any error prints a specific message pointing to the offending field.
+A configuration error surfaces immediately as a fatal log message pointing to the offending field, and the process exits non-zero. Startup validation covers syntax and semantics only; it does not verify that addresses are reachable, certificates are valid, or the Kubernetes API server is accessible — those are runtime checks.
 
-:::caution
-Dry-run checks config syntax and semantics only. It does not verify that addresses are reachable, certificates are valid, or the Kubernetes API server is accessible. Those are runtime checks.
-:::
-
-Add a dry-run step to your CI pipeline or pre-commit hook to catch config errors before they reach the cluster:
-
-```yaml
-# GitHub Actions example
-- name: Validate gateway config
-  run: nantian-gw --config deploy/production/controlplane.yaml --dry-run
-```
+In CI, catch config errors by starting the control plane against the candidate file and asserting it becomes ready (or fails fast) before promoting the change.
 
 ## Environment-specific configs
 
@@ -178,7 +168,7 @@ When deployed via Helm, the chart templates a ConfigMap from your `values.yaml` 
 During local development, the repo default is used automatically. Override it with `--config`:
 
 ```bash
-go run ./cmd/nantian-gw --config /tmp/my-config.yaml
+go run ./cmd/manager --config /tmp/my-config.yaml
 ```
 
 To verify which file was loaded, check the startup log line that includes the `"path"` field:

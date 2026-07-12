@@ -42,7 +42,7 @@ This page defines the core terminology used in Nantian Gateway documentation and
 | Data Plane | The proxy component that handles live client traffic: TLS termination, routing, rate limiting, authentication, and request forwarding. Written in Rust using the Pingora framework. |
 | Split-Plane Architecture | Architecture pattern where the control plane and data plane run as independent processes. They communicate over gRPC (not shared memory), allowing independent scaling, separate release cycles, and different technology stacks. |
 | IR (Intermediate Representation) | Nantian Gateway's internal routing model. The control plane translates Kubernetes Gateway API resources into a normalized IR format. The data plane converts IR into actual proxy configuration. IR is the decoupling layer between *what* should happen and *how* it happens. |
-| xDS | gRPC streaming protocol used by Envoy and Nantian Gateway for dynamic configuration distribution. The control plane pushes configuration snapshots to data plane instances over bidirectional streams. Supports both State-of-the-World (full snapshot) and Delta (incremental) modes. |
+| xDS | gRPC streaming protocol used by Envoy and Nantian Gateway for dynamic configuration distribution. The control plane pushes configuration snapshots to data plane instances over bidirectional streams. Each push is a full-state snapshot; the data plane skips versions it already runs. |
 
 ## Traffic Management Concepts
 
@@ -70,7 +70,7 @@ This page defines the core terminology used in Nantian Gateway documentation and
 
 | Term | Definition |
 |------|-----------|
-| Model Provider | An AI service endpoint that the gateway proxies requests to. Each provider has a type (OpenAI, Anthropic, HuggingFace, etc.), an API base URL, and authentication credentials. |
+| Model Provider | An AI service endpoint that the gateway proxies requests to. Each provider has a type (OpenAI, Anthropic, Ollama), an API base URL, and authentication credentials. |
 | Token Counting | Tracking the number of tokens consumed by AI requests and responses. Used for rate limiting and cost attribution. |
 | PII Redaction | Automatic detection and masking of personally identifiable information in AI request payloads before they reach the model provider. |
-| Prompt Caching | Storing and reusing responses for identical prompts to reduce API costs and latency. Configured through AIService cache settings. |
+| Prompt Caching | Storing and reusing responses for identical prompts to reduce API costs and latency. |

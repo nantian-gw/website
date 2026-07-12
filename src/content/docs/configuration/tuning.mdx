@@ -38,45 +38,32 @@ The upstream keepalive pool maintains idle connections to backend services. When
 A useful starting point for pool sizing: `poolSize = number_of_backends × average_concurrency_per_backend × 0.5`. The 0.5 factor accounts for the fact that not all connections are idle simultaneously. Monitor the `upstream_keepalive_pool_hits` and `upstream_keepalive_pool_misses` metrics to verify or adjust the configuration.
 :::
 
-## Buffer Sizes
+## HTTP Response Cache
 
-Buffer sizes directly affect memory usage and throughput for proxied data:
+The data plane can cache upstream responses. The entry-size limit controls the largest single response that may be stored:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.buffer.limit` | int | `65536` | Maximum buffer size in bytes |
-| `runtimeTuning.buffer.initialCapacity` | int | `8192` | Initial buffer capacity in bytes |
+| `runtimeTuning.httpCache.maxEntrySizeMb` | int | `16` | Maximum size (MiB) of a single cached response entry |
 
-The buffer limit caps the maximum amount of data buffered for a single request or response. Increase this for workloads with large payloads (file uploads, streaming responses). The memory impact is `limit × concurrent_requests`, so raising the limit increases peak memory proportionally.
-
-`initialCapacity` sets the starting buffer size. Setting this close to the expected average payload size reduces allocation overhead by avoiding repeated buffer growth. For APIs with predictable response sizes (JSON APIs with known schemas), matching the initial capacity to the typical payload size improves throughput.
+Responses larger than `maxEntrySizeMb` bypass the cache and stream directly to the client. Raise this value for workloads that serve large, cacheable payloads; lower it to bound per-entry memory use.
 
 ## Timeouts
 
-Timeout configuration prevents resource leaks and ensures the proxy does not hold connections indefinitely:
+Timeout configuration prevents resource leaks and ensures the proxy does not hold connections indefinitely. These are flat keys directly under `runtimeTuning` (there is no nested `timeout` object), and all values are in milliseconds:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.timeout.requestHeader` | duration | `"10s"` | Maximum time to receive request headers |
-| `runtimeTuning.timeout.requestBody` | duration | `"30s"` | Maximum time to receive the request body |
-| `runtimeTuning.timeout.responseHeader` | duration | `"60s"` | Maximum time to receive upstream response headers |
-| `runtimeTuning.timeout.responseBody` | duration | `"0s"` | Maximum time to receive the full upstream response (0 = no limit) |
-| `runtimeTuning.timeout.idleConnection` | duration | `"300s"` | Maximum idle time before closing a client connection |
+| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | Maximum time to read the request from the client |
+| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | Maximum time to establish a connection to the upstream |
+| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | Maximum time to read the response from the upstream |
+| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | Maximum idle time before closing an upstream keepalive connection |
 
-Setting `responseBody` to `0` disables the body timeout, which is appropriate for long-lived connections such as WebSocket or SSE streams. For standard HTTP APIs, set this to a reasonable value to prevent stalled upstream connections from consuming proxy resources.
+Lower `upstreamConnectionTimeoutMs` to fail fast when backends are unreachable; raise `upstreamReadTimeoutMs` for slow or long-running upstream endpoints.
 
-## TLS Tuning
+## TLS
 
-TLS configuration affects both handshake latency and CPU consumption:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `runtimeTuning.tls.sessionCacheSize` | int | `2048` | TLS session cache entries for resumption |
-| `runtimeTuning.tls.sessionCacheLifetime` | duration | `"10m"` | Lifetime of cached TLS sessions |
-
-TLS session caching enables session resumption, which reduces the CPU cost of repeated handshakes by reusing previously negotiated parameters. This is particularly beneficial when many clients establish short-lived connections to the same backend services.
-
-Increase `sessionCacheSize` when the data plane connects to a large number of distinct backends that support session resumption. Each cache entry consumes a small amount of memory.
+The proxy runtime does not expose TLS session-cache tuning knobs. TLS protocol version bounds (`runtime.tlsMinVersion` / `runtime.tlsMaxVersion`) and certificate/mTLS settings are covered in [TLS Configuration](/configuration/tls/).
 
 ## Profiling and Monitoring
 

@@ -256,47 +256,47 @@ Protection limits to prevent overload and resource exhaustion:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpGlobalInflightLimit` | int | `0` | Maximum concurrent in-flight HTTP requests (0 = unlimited) |
-| `runtimeProtection.httpGlobalRateLimitRequestsPerSecond` | int | `0` | Global rate limit (requests/second, 0 = unlimited) |
-| `runtimeProtection.httpGlobalRateLimitBurst` | int | `0` | Burst allowance for global rate limit |
+| `runtimeProtection.httpGlobalInflightLimit` | int | `16384` | Maximum concurrent in-flight HTTP requests (0 = unlimited) |
+| `runtimeProtection.httpGlobalRateLimitRequestsPerSecond` | int | `10000` | Global rate limit (requests/second, 0 = unlimited) |
+| `runtimeProtection.httpGlobalRateLimitBurst` | int | `20000` | Burst allowance for global rate limit |
 
 ### Listener Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpListenerInflightLimit` | int | `0` | Maximum concurrent requests per listener (0 = unlimited) |
-| `runtimeProtection.httpListenerRateLimitRequestsPerSecond` | int | `0` | Per-listener rate limit (0 = unlimited) |
-| `runtimeProtection.httpListenerRateLimitBurst` | int | `0` | Burst allowance for listener rate limit |
+| `runtimeProtection.httpListenerInflightLimit` | int | `8192` | Maximum concurrent requests per listener (0 = unlimited) |
+| `runtimeProtection.httpListenerRateLimitRequestsPerSecond` | int | `5000` | Per-listener rate limit (0 = unlimited) |
+| `runtimeProtection.httpListenerRateLimitBurst` | int | `10000` | Burst allowance for listener rate limit |
 
 ### Route Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpRouteInflightLimit` | int | `0` | Maximum concurrent requests per route (0 = unlimited) |
-| `runtimeProtection.httpRouteRateLimitRequestsPerSecond` | int | `0` | Per-route rate limit (0 = unlimited) |
-| `runtimeProtection.httpRouteRateLimitBurst` | int | `0` | Burst allowance for route rate limit |
+| `runtimeProtection.httpRouteInflightLimit` | int | `4096` | Maximum concurrent requests per route (0 = unlimited) |
+| `runtimeProtection.httpRouteRateLimitRequestsPerSecond` | int | `2000` | Per-route rate limit (0 = unlimited) |
+| `runtimeProtection.httpRouteRateLimitBurst` | int | `4000` | Burst allowance for route rate limit |
 
 ### Backend Circuit Breaker
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpBackendCircuitBreakerMaxRequests` | int | `0` | Maximum concurrent requests per backend (0 = unlimited) |
+| `runtimeProtection.httpBackendCircuitBreakerMaxRequests` | int | `4096` | Maximum concurrent requests per backend (0 = unlimited) |
 
 ### Request Size Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpMaxRequestBodyBytes` | int | `0` | Maximum request body size in bytes (0 = unlimited) |
-| `runtimeProtection.httpMaxRequestHeaderBytes` | int | `0` | Maximum request header size in bytes (0 = unlimited) |
+| `runtimeProtection.httpMaxRequestBodyBytes` | int | `10485760` | Maximum request body size in bytes (0 = unlimited) |
+| `runtimeProtection.httpMaxRequestHeaderBytes` | int | `65536` | Maximum request header size in bytes (0 = unlimited) |
 
 ### TCP/UDP Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.tcpGlobalConnectionLimit` | int | `0` | Maximum concurrent TCP connections (0 = unlimited) |
-| `runtimeProtection.tcpListenerConnectionLimit` | int | `0` | Maximum TCP connections per listener (0 = unlimited) |
-| `runtimeProtection.udpGlobalDatagramLimit` | int | `0` | Maximum concurrent UDP datagrams (0 = unlimited) |
-| `runtimeProtection.udpListenerDatagramLimit` | int | `0` | Maximum UDP datagrams per listener (0 = unlimited) |
+| `runtimeProtection.tcpGlobalConnectionLimit` | int | `32768` | Maximum concurrent TCP connections (0 = unlimited) |
+| `runtimeProtection.tcpListenerConnectionLimit` | int | `8192` | Maximum TCP connections per listener (0 = unlimited) |
+| `runtimeProtection.udpGlobalDatagramLimit` | int | `100000` | Maximum concurrent UDP datagrams (0 = unlimited) |
+| `runtimeProtection.udpListenerDatagramLimit` | int | `50000` | Maximum UDP datagrams per listener (0 = unlimited) |
 
 ## Session Persistence
 
@@ -441,22 +441,22 @@ runtimeTuning:
     userTimeoutMs: 0
 
 runtimeProtection:
-  httpGlobalInflightLimit: 0
-  httpListenerInflightLimit: 0
-  httpRouteInflightLimit: 0
-  httpBackendCircuitBreakerMaxRequests: 0
-  httpGlobalRateLimitRequestsPerSecond: 0
-  httpGlobalRateLimitBurst: 0
-  httpListenerRateLimitRequestsPerSecond: 0
-  httpListenerRateLimitBurst: 0
-  httpRouteRateLimitRequestsPerSecond: 0
-  httpRouteRateLimitBurst: 0
-  httpMaxRequestBodyBytes: 0
-  httpMaxRequestHeaderBytes: 0
-  tcpGlobalConnectionLimit: 0
-  tcpListenerConnectionLimit: 0
-  udpGlobalDatagramLimit: 0
-  udpListenerDatagramLimit: 0
+  httpGlobalInflightLimit: 16384
+  httpListenerInflightLimit: 8192
+  httpRouteInflightLimit: 4096
+  httpBackendCircuitBreakerMaxRequests: 4096
+  httpGlobalRateLimitRequestsPerSecond: 10000
+  httpGlobalRateLimitBurst: 20000
+  httpListenerRateLimitRequestsPerSecond: 5000
+  httpListenerRateLimitBurst: 10000
+  httpRouteRateLimitRequestsPerSecond: 2000
+  httpRouteRateLimitBurst: 4000
+  httpMaxRequestBodyBytes: 10485760
+  httpMaxRequestHeaderBytes: 65536
+  tcpGlobalConnectionLimit: 32768
+  tcpListenerConnectionLimit: 8192
+  udpGlobalDatagramLimit: 100000
+  udpListenerDatagramLimit: 50000
 
 sessionPersistence:
   secretKey: ""

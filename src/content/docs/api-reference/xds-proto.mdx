@@ -61,6 +61,7 @@ A request message sent by the data plane to the control plane.
 | `subscriptions` | `repeated string` | List of subscribed resource types |
 | `result_status` | `DiscoveryResultStatus` | Configuration application result: `ACK` or `NACK` |
 | `error_detail` | `string` | Error details when NACK |
+| `supported_features` | `repeated string` | Optional features this data plane supports, used for capability negotiation |
 
 ### DiscoveryResponse
 
@@ -87,6 +88,8 @@ The configuration snapshot, containing all configuration information needed by t
 | `backends` | `repeated BackendCluster` | Backend cluster list |
 | `secrets` | `repeated SecretMaterial` | TLS certificates and keys |
 | `extensions` | `Struct` | Extension configuration (Wasm plugins, etc.) |
+| `required_features` | `repeated string` | Features the control plane requires the data plane to support to safely apply this snapshot |
+| `compatibility_profile` | `string` | Named compatibility profile (e.g. `v1`, `experimental`) applied atomically |
 
 ### StatusReport
 
@@ -271,12 +274,14 @@ The control plane's acknowledgment of a status report.
 | `endpoints` | `repeated BackendEndpoint` | Endpoint list |
 | `connect_timeout` | `Duration` | Connection timeout |
 | `request_timeout` | `Duration` | Request timeout |
+| `metadata` | `map<string, string>` | Arbitrary key-value metadata |
 | `tls_validation` | `BackendTlsValidation` | Backend TLS verification |
 | `session_persistence` | `SessionPersistence` | Session persistence |
 | `load_balancing` | `LoadBalancingPolicy` | Load balancing strategy |
 | `ai_service` | `AIServiceConfig` | AI service configuration |
 | `token_policy` | `TokenPolicyConfig` | Token policy configuration |
 | `wasm_plugin` | `WasmPluginConfig` | Wasm plugin configuration |
+| `circuit_breaker` | `CircuitBreakerConfig` | Per-backend circuit breaker configuration |
 
 ### BackendEndpoint
 
@@ -286,6 +291,12 @@ The control plane's acknowledgment of a status report.
 | `port` | `uint32` | Endpoint port |
 | `healthy` | `bool` | Health status |
 | `zone` | `string` | Availability zone |
+
+### CircuitBreakerConfig
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `max_inflight_requests` | `uint32` | Maximum concurrent inflight requests to this backend; excess requests are rejected immediately with a 503. Set to 0 to disable circuit breaking. |
 
 ## Extension Configuration
 
@@ -298,6 +309,14 @@ The control plane's acknowledgment of a status report.
 | `model` | `string` | Model name |
 | `auth` | `AIServiceAuthConfig` | Authentication configuration |
 | `timeout` | `Duration` | Request timeout |
+
+### AIServiceAuthConfig
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `string` | Authentication type: `bearer`, `api-key`, or `basic` |
+| `secret_ref` | `string` | Reference to a SecretMaterial or Kubernetes Secret containing the credential |
+| `header` | `string` | HTTP header to inject the credential into (e.g. `Authorization`, `x-api-key`) |
 
 ### TokenPolicyConfig
 
