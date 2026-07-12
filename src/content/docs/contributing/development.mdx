@@ -255,11 +255,11 @@ Common log levels: `error`, `warn`, `info`, `debug`, `trace`.
 During development, you can inspect the xDS communication between the control plane and data plane to verify that configuration is being transmitted correctly:
 
 ```bash
-# View xDS client status from the control plane Admin API
-curl http://localhost:8081/api/v1/clients | jq
+# View connected data plane nodes from the control plane Admin API
+curl http://localhost:18081/v1/nodes | jq
 
-# View xDS connection status from the data plane Admin API
-curl http://localhost:8082/api/v1/xds/status | jq
+# View node state (including xDS stream status) from the data plane Admin API
+curl http://localhost:19080/v1/node | jq
 ```
 
 ## Next Steps

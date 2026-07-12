@@ -255,11 +255,11 @@ RUST_LOG=nantian_dataplane::proxy=trace cargo run -- --node-id dataplane-dev-0
 在开发过程中，可以查看控制面和数据面之间的 xDS 通信来验证配置是否正确传递：
 
 ```bash
-# 查看控制面 Admin API 中的 xDS 客户端状态
-curl http://localhost:8081/api/v1/clients | jq
+# 查看控制面 Admin API 中已连接的数据面节点
+curl http://localhost:18081/v1/nodes | jq
 
-# 查看数据面 Admin API 中的 xDS 连接状态
-curl http://localhost:8082/api/v1/xds/status | jq
+# 查看数据面 Admin API 中的节点状态（含 xDS 流状态）
+curl http://localhost:19080/v1/node | jq
 ```
 
 ## 下一步

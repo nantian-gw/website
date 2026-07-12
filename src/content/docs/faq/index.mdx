@@ -45,7 +45,7 @@ See the [High Availability](/installation/ha) page for detailed configuration.
 
 The data plane has a local configuration cache. When the gRPC connection to the control plane drops, the data plane continues serving traffic using the last valid configuration — existing connections are not interrupted. The data plane continuously retries reconnection, automatically syncing the latest configuration upon reconnection.
 
-During disconnection, the data plane's Admin API `/api/v1/xds/status` shows `connected: false` and the `stream_reconnects` counter increments. If `stream_reconnects` keeps growing, the network is unstable — check connectivity between the control plane and data plane.
+During disconnection, the data plane's Admin API `/v1/node` shows the xDS stream as disconnected and the reconnect counter increments. If `stream_reconnects` keeps growing, the network is unstable — check connectivity between the control plane and data plane.
 
 ### How do I upgrade Nantian Gateway?
 
@@ -129,9 +129,9 @@ See the [Wasm Plugin Development](https://github.com/nantian-gw/gateway) guide f
 This is a common troubleshooting scenario. Check layer by layer:
 
 1. **Check route resource status**: `kubectl describe httproute <name> -n <namespace>`
-2. **Check control plane config snapshot**: `curl http://<controlplane>:8081/api/v1/config/snapshot/version`
-3. **Check data plane config version**: `curl http://<dataplane>:8082/api/v1/config/version`
-4. **Check xDS connection status**: `curl http://<controlplane>:8081/api/v1/clients`
+2. **Check control plane snapshot sync status**: `curl http://<controlplane>:18081/v1/snapshot-sync`
+3. **Check data plane node state (applied config version)**: `curl http://<dataplane>:19080/v1/node`
+4. **Check connected data plane nodes**: `curl http://<controlplane>:18081/v1/nodes`
 
 If the control plane snapshot version has updated but the data plane version hasn't, check if the xDS client is in `NACK` state. If in `NACK`, the `error_detail` field contains the specific reason for configuration parsing failure.
 
