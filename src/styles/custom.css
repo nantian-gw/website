@@ -101,8 +101,8 @@
   --sl-color-bg-inline-code: #1a2235;
   --sl-color-hairline: #1e293b;
 
-  --sl-font: 'Inter', system-ui, -apple-system, sans-serif;
-  --sl-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --sl-font: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --sl-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 /* Sidebar link hover */

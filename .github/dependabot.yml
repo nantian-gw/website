@@ -22,7 +22,6 @@ updates:
           - "astro-pagefind"
       docs-tooling:
         patterns:
-          - "playwright"
           - "typescript"
           - "sharp"
 

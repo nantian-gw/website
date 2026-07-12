@@ -76,3 +76,15 @@ const org = {
 <script is:inline type="application/ld+json" set:html={JSON.stringify(breadcrumbList)} />
 <script is:inline type="application/ld+json" set:html={JSON.stringify(webPage)} />
 <script is:inline type="application/ld+json" set:html={JSON.stringify(org)} />
+<script>
+  async function renderMermaid() {
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>('pre.mermaid:not([data-processed])'),
+    );
+    if (!nodes.length) return;
+    const { default: mermaid } = await import('mermaid');
+    mermaid.initialize({ startOnLoad: false });
+    await mermaid.run({ nodes });
+  }
+  document.addEventListener('astro:page-load', renderMermaid);
+</script>

@@ -1,64 +1,13 @@
 ---
+import { landingCopy } from '../../i18n/landing';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
-const isZh = lang === 'zh';
 
-const heading = isZh ? '使用场景' : 'Use Cases';
-const subtitle = isZh
-  ? '从 Kubernetes Ingress 到 AI 网关，一个平台覆盖所有需求'
-  : 'From Kubernetes Ingress to AI Gateway — one platform for every scenario';
-
-const linkText = isZh ? '🎯 更多场景 →' : '🎯 More Use Cases →';
-const linkHref = isZh ? '/zh/use-cases/' : '/use-cases/';
-
-const cases = isZh
-  ? [
-      {
-        icon: '🚪',
-        title: 'Kubernetes Ingress 入口',
-        desc: '标准 Gateway API 兼容，NGINX Ingress 迁移友好。支持 HTTP、gRPC、TCP、UDP、TLS 全协议路由，无需自定义 CRD。',
-      },
-      {
-        icon: '🤖',
-        title: 'AI API 网关',
-        desc: '内置 AIService 与 TokenPolicy 资源，统一管理 OpenAI、Anthropic、混元等多模型提供商的认证、限流和路由。',
-      },
-      {
-        icon: '🔌',
-        title: 'Wasm 边缘扩展',
-        desc: '通过 WasmPlugin 在数据面注入自定义逻辑——请求改写、认证、观测——无需重启网关进程即可热加载。',
-      },
-      {
-        icon: '📊',
-        title: '多集群流量管理',
-        desc: 'gRPC/xDS 协议分发路由快照，控制面与数据面解耦，支持多集群联邦部署与独立扩缩容。',
-      },
-    ]
-  : [
-      {
-        icon: '🚪',
-        title: 'Kubernetes Ingress',
-        desc: 'Standard Gateway API compatible, suitable for NGINX Ingress migration. Supports HTTP, gRPC, TCP, UDP, and TLS routing — no custom CRDs required.',
-      },
-      {
-        icon: '🤖',
-        title: 'AI API Gateway',
-        desc: 'Built-in AIService and TokenPolicy resources unify authentication, rate limiting, and routing across OpenAI, Anthropic, Hunyuan, and other model providers.',
-      },
-      {
-        icon: '🔌',
-        title: 'Wasm Edge Extensions',
-        desc: 'Inject custom logic into the data plane via WasmPlugin — request rewriting, authentication, observability — hot-loadable without restarting the gateway.',
-      },
-      {
-        icon: '📊',
-        title: 'Multi-Cluster Traffic',
-        desc: 'gRPC/xDS protocol distributes routing snapshots. Decoupled control and data planes enable multi-cluster federation with independent scaling.',
-      },
-    ];
+const { heading, subtitle, linkText, linkHref, cases } = landingCopy[lang].useCases;
 ---
 
 <section class="use-cases" aria-label={heading}>

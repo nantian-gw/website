@@ -1,46 +1,14 @@
 ---
+import { landingCopy } from '../../i18n/landing';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
-const isZh = lang === 'zh';
 
-const heading = isZh ? '为什么选择 Nantian Gateway？' : 'Why Nantian Gateway?';
-const subtitle = isZh
-  ? '与主流 Gateway API 实现的对比'
-  : 'How Nantian compares to other Gateway API implementations';
-
-const detailLinkText = isZh ? '🔬 详细对比 →' : '🔬 Full Comparison →';
-const detailLinkHref = isZh ? '/zh/comparison/' : '/comparison/';
-
-const rows = isZh
-  ? [
-      { feature: '标准 Gateway API', nantian: '✅ v1.5.1', envoy: '✅', traefik: '✅', nginx: '✅' },
-      { feature: '控制面语言', nantian: 'Go', envoy: 'Go', traefik: 'Go', nginx: 'Go' },
-      { feature: '数据面语言', nantian: 'Rust 🦀', envoy: 'C++', traefik: 'Go', nginx: 'NGINX C' },
-      { feature: 'AI 网关能力', nantian: '✅ 实验', envoy: '✅ (AI Gateway)', traefik: '❌', nginx: '❌' },
-      { feature: 'Wasm 插件', nantian: '✅ 实验', envoy: '✅', traefik: '✅', nginx: '❌' },
-      { feature: '内置 Helm Chart', nantian: '✅', envoy: '✅', traefik: '✅', nginx: '✅' },
-      { feature: '开源协议', nantian: 'Apache 2.0', envoy: 'Apache 2.0', traefik: 'MIT', nginx: 'Apache 2.0' },
-    ]
-  : [
-      { feature: 'Gateway API', nantian: '✅ v1.5.1', envoy: '✅', traefik: '✅', nginx: '✅' },
-      { feature: 'Control Plane', nantian: 'Go', envoy: 'Go', traefik: 'Go', nginx: 'Go' },
-      { feature: 'Data Plane', nantian: 'Rust 🦀', envoy: 'C++', traefik: 'Go', nginx: 'NGINX C' },
-      { feature: 'AI Gateway', nantian: '✅ Experimental', envoy: '✅ (AI Gateway)', traefik: '❌', nginx: '❌' },
-      { feature: 'Wasm Plugins', nantian: '✅ Experimental', envoy: '✅', traefik: '✅', nginx: '❌' },
-      { feature: 'Helm Chart', nantian: '✅', envoy: '✅', traefik: '✅', nginx: '✅' },
-      { feature: 'License', nantian: 'Apache 2.0', envoy: 'Apache 2.0', traefik: 'MIT', nginx: 'Apache 2.0' },
-    ];
-
-const summary = isZh
-  ? 'Nantian 的核心差异：Rust 数据面带来内存安全和高并发性能，原生 AI Gateway 能力让你无需额外组件即可管理 LLM 提供商流量。'
-  : 'Nantian\'s key differentiator: Rust data plane for memory safety and high concurrency, plus native AI Gateway capabilities to manage LLM provider traffic without extra components.';
-
-const colHeaders = isZh
-  ? ['特性', 'Nantian Gateway', 'Envoy Gateway', 'Traefik', 'NGINX Gateway']
-  : ['Feature', 'Nantian Gateway', 'Envoy Gateway', 'Traefik', 'NGINX Gateway'];
+const { heading, subtitle, detailLinkText, detailLinkHref, rows, summary, colHeaders } =
+  landingCopy[lang].comparison;
 ---
 
 <section class="comparison" aria-label={heading}>

@@ -1,33 +1,31 @@
 ---
+import { landingCopy } from '../../i18n/landing';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
 
-const isZh = lang === 'zh';
+const {
+  heading,
+  subtitle,
+  tagline,
+  quickStartLabel,
+  quickStartHref,
+  comparisonHref,
+  faqHref,
+  useCasesHref,
+  comparisonLabel,
+  faqLabel,
+  useCasesLabel,
+  ariaLabel,
+} = landingCopy[lang].hero;
 
-const heading = isZh ? 'Nantian Gateway — Kubernetes Gateway API 网关' : 'Nantian Gateway — Kubernetes Gateway API';
-const subtitle = isZh
-  ? 'Kubernetes Gateway API 控制面与 Rust 数据面'
-  : 'Kubernetes Gateway API control plane with a Rust data plane';
-const tagline = isZh
-  ? '标准 Gateway API 路由 · Go 控制面 · gRPC/xDS · 实验性 AI 与 Wasm 扩展'
-  : 'Standard Gateway API routing · Go control plane · gRPC/xDS · Experimental AI and Wasm extensions';
-const quickStartLabel = isZh ? '快速开始' : 'Quick Start';
-const quickStartHref = isZh
-  ? '/zh/getting-started/quick-start/'
-  : '/getting-started/quick-start/';
 const githubHref = 'https://github.com/nantian-gw/gateway';
-const comparisonHref = isZh ? '/zh/comparison/' : '/comparison/';
-const faqHref = isZh ? '/zh/faq/' : '/faq/';
-const useCasesHref = isZh ? '/zh/use-cases/' : '/use-cases/';
-const comparisonLabel = isZh ? '功能对比' : 'Comparison';
-const faqLabel = 'FAQ';
-const useCasesLabel = isZh ? '使用场景' : 'Use Cases';
 ---
 
-<section class="hero" aria-label={isZh ? '首页横幅' : 'Hero banner'}>
+<section class="hero" aria-label={ariaLabel}>
   <!-- Starfield layers -->
   <div class="starfield" aria-hidden="true">
     <div class="starfield-layer starfield-layer--slow"></div>
@@ -388,7 +386,7 @@ const useCasesLabel = isZh ? '使用场景' : 'Use Cases';
     color: var(--color-text-muted);
     font-weight: 400;
     letter-spacing: 0.02em;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
   }
 
   /* ===== Actions ===== */

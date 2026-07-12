@@ -32,38 +32,31 @@ function readArtifact(path) {
   return read(path);
 }
 
-test("default build command installs the browser before the Astro build", () => {
+test("default build command runs the Astro build without a browser install step", () => {
   const pkg = JSON.parse(read("package.json"));
 
-  assert.equal(pkg.scripts.build, "npm run setup:browser && astro build && npm run build:llms && npm run build:markdown");
+  assert.equal(pkg.scripts.build, "astro build && npm run build:llms && npm run build:markdown");
   assert.equal(pkg.scripts["build:astro"], "astro build");
-  assert.equal(pkg.scripts["setup:browser"], "npx playwright install chromium");
-  assert.equal(pkg.scripts["setup:browser:ci"], "npx playwright install --with-deps chromium");
   assert.equal(pkg.scripts.test, "node --test test/*.test.mjs");
+  assert.equal(pkg.scripts["setup:browser"], undefined);
+  assert.equal(pkg.scripts["setup:browser:ci"], undefined);
 
   for (const [name, script] of Object.entries(pkg.scripts)) {
     assert.doesNotMatch(
       script,
-      /npx playwright install chromium && astro build/,
-      `${name} should call the named setup script instead of duplicating the browser install command`,
+      /playwright install/,
+      `${name} should not install a browser now that mermaid renders client-side`,
     );
   }
 });
 
-test("CI installs the browser before running hardening tests and builds", () => {
+test("CI runs the hardening tests and build without a browser install step", () => {
   const ci = read(".github/workflows/ci.yml");
 
   assert.match(ci, /npm test/);
-  assert.match(ci, /npm run setup:browser:ci/);
   assert.match(ci, /npm run build:ci/);
-  assert.ok(
-    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm test"),
-    "CI must install the browser before running the hardening test suite",
-  );
-  assert.ok(
-    ci.indexOf("npm run setup:browser:ci") < ci.indexOf("npm run build:ci"),
-    "CI must install the browser before running the build",
-  );
+  assert.doesNotMatch(ci, /setup:browser/);
+  assert.doesNotMatch(ci, /playwright/);
 });
 
 test("CI audit uses the named policy script instead of raw npm audit", () => {

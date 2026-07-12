@@ -1,20 +1,14 @@
 ---
+import { landingCopy } from '../../i18n/landing';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
-const isZh = lang === 'zh';
 
-const heading = isZh ? '5 分钟快速开始' : 'Quick Start in 5 Minutes';
-const subtitle = isZh
-  ? '一条 Helm 命令安装，一个 HTTPRoute 资源即可路由流量'
-  : 'One Helm command to install, one HTTPRoute resource to route traffic';
-
-const step1Label = isZh ? '① 安装网关' : '① Install the Gateway';
-const step2Label = isZh ? '② 创建你的第一个路由' : '② Create Your First Route';
-const docLinkText = isZh ? '📖 完整文档 →' : '📖 Full Documentation →';
-const docLinkHref = isZh ? '/zh/getting-started/quick-start/' : '/getting-started/quick-start/';
+const { heading, subtitle, step1Label, step2Label, docLinkText, docLinkHref } =
+  landingCopy[lang].codeExample;
 
 const installCommands = [
   'helm repo add nantian-gw https://chart.nantian.dev',

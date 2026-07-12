@@ -11,7 +11,7 @@ export default defineConfig({
   site: 'https://nantian.dev',
   markdown: {
     processor: unified({
-      rehypePlugins: [rehypeMermaid],
+      rehypePlugins: [[rehypeMermaid, { strategy: 'pre-mermaid' }]],
     }),
   },
   integrations: [
@@ -76,5 +76,4 @@ export default defineConfig({
     pagefind(),
     sitemap(),
   ],
-  vite: {},
 });

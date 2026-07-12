@@ -1,113 +1,22 @@
 ---
+import { landingCopy } from '../../i18n/landing';
+
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
-const isZh = lang === 'zh';
 
-const sectionTitle = isZh ? '为什么选择 Nantian Gateway' : 'Why Nantian Gateway';
-const sectionSubtitle = isZh
-  ? '面向云原生时代的下一代 API 网关，融合 Go 生态与 Rust 性能'
-  : 'Next-generation API gateway for the cloud-native era, combining Go ecosystem with Rust performance';
-
-const highlights = isZh
-  ? [
-      {
-        title: '分离式平面架构',
-        desc: '控制面使用 Go 语言监听 Kubernetes 集群状态，将 Gateway、HTTPRoute、Service 等资源翻译为内部路由模型；数据面采用 Rust 实现，通过 gRPC/xDS 协议接收运行时快照，以零 GC 停顿处理每一条请求。两个平面独立扩缩容，互不干扰。',
-      },
-      {
-        title: 'Gateway API 原生支持',
-        desc: '全面实现 Kubernetes Gateway API v1.5.1 规范，声明 54 项一致性特性。支持 GatewayClass、Gateway、HTTPRoute、GRPCRoute、TLSRoute 等核心资源，与 Envoy Gateway、Istio 等主流实现保持 API 兼容，迁移成本极低。',
-      },
-      {
-        title: '极致性能与资源效率',
-        desc: 'Rust 数据面无 GC、零成本抽象，单核吞吐可达数万 QPS。内存占用低（~15MB 基线），启动时间毫秒级。内置连接池复用、零拷贝转发、异步 I/O 等优化，在生产环境中经过大规模验证。',
-      },
-      {
-        title: '实验性 AI 网关能力',
-        desc: '内置 AIService 和 TokenPolicy 资源，可统一管理多个模型提供方（OpenAI、HuggingFace 等）的 API 端点与认证凭据。支持基于 token 的速率限制与配额管理，为 AI 应用提供统一流量入口，降低多模型集成的运维复杂度。',
-      },
-      {
-        title: '可扩展的 Wasm 插件体系',
-        desc: '通过 WasmPlugin 资源支持 URL、ConfigMap 或内联模块三种来源的 Wasm 扩展。插件可绑定到特定 Gateway 或 Route，实现自定义认证、流量染色、请求改写等能力，无需重启网关进程即可热加载。',
-      },
-      {
-        title: '生产级运维能力',
-        desc: '提供 Admin API 用于运行时配置查询与调试，内置 Prometheus 指标端点与 Grafana 面板模板，支持健康检查探针与就绪探针。Helm Chart 一键部署，Kustomize Overlay 灵活定制，适配从裸金属到 Kubernetes 的多种部署环境。',
-      },
-    ]
-  : [
-      {
-        title: 'Split-Plane Architecture',
-        desc: 'The Go control plane watches Kubernetes cluster state, translating Gateway, HTTPRoute, and Service resources into an internal routing model. The Rust data plane receives runtime snapshots via gRPC/xDS and handles every request with zero GC pauses. Both planes scale independently.',
-      },
-      {
-        title: 'Native Gateway API Support',
-        desc: 'Full implementation of Kubernetes Gateway API v1.5.1 with 54 declared conformance features. Supports GatewayClass, Gateway, HTTPRoute, GRPCRoute, TLSRoute, and more. API-compatible with Envoy Gateway, Istio, and other major implementations for minimal migration cost.',
-      },
-      {
-        title: 'Extreme Performance & Efficiency',
-        desc: 'The Rust data plane delivers tens of thousands of QPS per core with no GC and zero-cost abstractions. Low memory footprint (~15MB baseline) with millisecond startup times. Built-in connection pooling, zero-copy forwarding, and async I/O are battle-tested in production.',
-      },
-      {
-        title: 'Experimental AI Gateway',
-        desc: 'Built-in AIService and TokenPolicy resources unify API endpoints and credentials across multiple model providers (OpenAI, HuggingFace, etc.). Token-based rate limiting and quota management provide a single traffic entry point for AI applications, reducing multi-model integration complexity.',
-      },
-      {
-        title: 'Extensible Wasm Plugin System',
-        desc: 'WasmPlugin resources support URL, ConfigMap, or inline module sources. Plugins bind to specific Gateways or Routes for custom authentication, traffic coloring, request rewriting, and more — hot-loadable without restarting the gateway process.',
-      },
-      {
-        title: 'Production-Grade Operations',
-        desc: 'Admin API for runtime configuration queries and debugging. Built-in Prometheus metrics endpoints and Grafana dashboard templates. Health and readiness probes. One-click Helm Chart deployment with flexible Kustomize overlays for environments from bare metal to Kubernetes.',
-      },
-    ];
-
-const bottomCta = isZh
-  ? {
-      title: '开始使用 Nantian Gateway',
-      desc: '只需一条 Helm 命令即可在 Kubernetes 集群中部署。支持 Gateway API 标准，兼容现有工具链，5 分钟上手。',
-      linkText: '查看快速开始 →',
-      linkHref: '/zh/getting-started/quick-start/',
-    }
-  : {
-      title: 'Get Started with Nantian Gateway',
-      desc: 'Deploy in your Kubernetes cluster with a single Helm command. Gateway API standard, compatible with existing toolchains, up and running in 5 minutes.',
-      linkText: 'View Quick Start →',
-      linkHref: '/getting-started/quick-start/',
-    };
-
-const perfTitle = isZh ? '性能基准' : 'Performance Benchmarks';
-const perfItems = isZh
-  ? [
-      '单核吞吐量可达 30,000+ QPS，延迟 P99 低于 5ms',
-      '内存占用仅 15MB 起，启动时间 < 50ms',
-      '启动时间 < 50ms，支持热重载配置与插件',
-      '支持 10,000+ 并发连接，零拷贝转发无性能损耗',
-    ]
-  : [
-      '30,000+ QPS per core with P99 latency under 5ms',
-      'Memory footprint starts at 15MB with startup time under 50ms',
-      'Startup time under 50ms with hot-reload for config and plugins',
-      '10,000+ concurrent connections with zero-copy forwarding',
-    ];
-
-const communityTitle = isZh ? '社区与生态' : 'Community & Ecosystem';
-const communityItems = isZh
-  ? [
-      'Apache 2.0 开源协议，完全免费商用，无任何功能限制',
-      '活跃的 GitHub 社区，欢迎贡献代码、文档与使用反馈',
-      '与 Envoy Gateway、Istio 等主流实现 API 兼容，迁移成本低',
-      '详细的中英文文档，覆盖从入门到生产部署的全流程',
-    ]
-  : [
-      'Apache 2.0 licensed — fully free for commercial use',
-      'Active GitHub community — contributions welcome',
-      'API-compatible with Envoy Gateway, Istio, and other major implementations',
-      'Comprehensive documentation in English and Chinese, from getting started to production',
-    ];
+const {
+  sectionTitle,
+  sectionSubtitle,
+  highlights,
+  bottomCta,
+  perfTitle,
+  perfItems,
+  communityTitle,
+  communityItems,
+} = landingCopy[lang].homeIntro;
 ---
 
 <section class="home-intro" aria-label={sectionTitle}>

@@ -95,14 +95,14 @@ test("feature docs document AI Gateway and Wasm CRDs without hiding experimental
 
 test("landing feature cards link to feature documentation", () => {
   const featureCard = read("src/components/landing/FeatureCard.astro");
-  const features = read("src/components/landing/Features.astro");
+  const landingCopy = read("src/i18n/landing.ts");
 
   assert.match(featureCard, /href\?:\s*string/);
   assert.match(featureCard, /href=\{href\}/);
-  assert.match(features, /href:\s*'\/features\/ai-gateway\/'/);
-  assert.match(features, /href:\s*'\/features\/wasm-plugins\/'/);
-  assert.match(features, /href:\s*'\/zh\/features\/ai-gateway\/'/);
-  assert.match(features, /href:\s*'\/zh\/features\/wasm-plugins\/'/);
+  assert.match(landingCopy, /href:\s*'\/features\/ai-gateway\/'/);
+  assert.match(landingCopy, /href:\s*'\/features\/wasm-plugins\/'/);
+  assert.match(landingCopy, /href:\s*'\/zh\/features\/ai-gateway\/'/);
+  assert.match(landingCopy, /href:\s*'\/zh\/features\/wasm-plugins\/'/);
 });
 
 test("use-case next steps point AI and Wasm readers to feature pages", () => {

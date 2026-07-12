@@ -1,26 +1,20 @@
 ---
 import quickStartScriptUrl from './quickstart.client.js?url&no-inline';
+import { landingCopy } from '../../i18n/landing';
 
 export interface Props {
   lang?: 'en' | 'zh';
 }
 
 const { lang = 'en' } = Astro.props;
-const isZh = lang === 'zh';
 
-const heading = isZh ? '快速开始' : 'Quick Start';
-const subtitle = isZh
-  ? '添加 Helm 仓库，安装网关，然后进入完整快速开始'
-  : 'Add the Helm repository, install the gateway, then follow the full quick start';
+const { heading, subtitle, copyLabel, copiedLabel } = landingCopy[lang].quickStart;
 
 const commands = [
   'helm repo add nantian-gw https://chart.nantian.dev',
   'helm repo update',
   'helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace',
 ];
-
-const copyLabel = isZh ? '复制' : 'Copy';
-const copiedLabel = isZh ? '已复制' : 'Copied';
 ---
 
 <section class="quickstart" aria-label={heading}>

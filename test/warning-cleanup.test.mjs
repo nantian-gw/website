@@ -90,13 +90,14 @@ function hasTopLevelProperty(objectLiteral, propertyName) {
   return false;
 }
 
-test("Astro markdown config uses the unified processor instead of deprecated top-level markdown plugins", () => {
+test("Astro markdown config uses the unified processor with a client-side mermaid strategy", () => {
   const config = read("astro.config.mjs");
   const markdownBlock = extractBlock(config, "markdown:");
 
   assert.match(config, /@astrojs\/markdown-remark/);
   assert.match(markdownBlock, /processor:\s*unified\(/);
   assert.match(markdownBlock, /unified\([\s\S]*rehypeMermaid[\s\S]*\)/);
+  assert.match(markdownBlock, /['"]pre-mermaid['"]/);
   assert.ok(!hasTopLevelProperty(markdownBlock, "gfm"), "markdown.gfm should not remain at the top level");
   assert.ok(
     !hasTopLevelProperty(markdownBlock, "rehypePlugins"),

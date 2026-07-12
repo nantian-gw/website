@@ -1,6 +1,7 @@
 ---
 import { getLandingRouteMeta } from '../../lib/landingRoutes';
 import navbarScriptUrl from './navbar.client.js?url&no-inline';
+import { landingCopy } from '../../i18n/landing';
 
 interface Props {
   lang?: 'en' | 'zh';
@@ -11,10 +12,11 @@ const { lang = 'en', pathname = lang === 'zh' ? '/zh/' : '/' } = Astro.props;
 const routeMeta = getLandingRouteMeta(pathname);
 const homeHref = routeMeta.homePath;
 
+const { docs, switchLang } = landingCopy[lang].navbar;
 const t = {
-  docs: lang === 'zh' ? '文档' : 'Docs',
+  docs,
   github: 'GitHub',
-  switchLang: lang === 'zh' ? 'EN' : '中文',
+  switchLang,
   switchHref: routeMeta.alternatePath ?? (lang === 'zh' ? '/' : '/zh/'),
 };
 
