@@ -92,7 +92,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "v2026.06.0"
+    tag: "latest"
     pullPolicy: IfNotPresent
   config:
     grpcAddr: ":18080"
@@ -122,7 +122,7 @@ dataplane:
   replicas: 2
   image:
     repository: "nantian-gw/dataplane"
-    tag: "v2026.06.0"
+    tag: "latest"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -165,7 +165,7 @@ dashboard:
   replicas: 2
   image:
     repository: "nantian-gw/dashboard"
-    tag: "v2026.06.0"
+    tag: "latest"
     pullPolicy: IfNotPresent
 ```
 
