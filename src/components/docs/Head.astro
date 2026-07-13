@@ -3,13 +3,24 @@
 // and enables Astro view transitions for smooth navigation.
 import Default from '@astrojs/starlight/components/Head.astro';
 import { ClientRouter } from 'astro:transitions';
+import { DEFAULT_DOCS_DESCRIPTION, extractDocsSummary } from '../../lib/docsSeo';
 
-// Derive structured data from page metadata
-const title = Astro.props.title ?? Astro.props.entry?.data?.title ?? 'Nantian Gateway';
-const description =
-  Astro.props.description ??
-  Astro.props.entry?.data?.description ??
-  'Nantian Gateway — High-performance Kubernetes Gateway API with Go + Rust';
+// Use Starlight route data (available via middleware) to derive locale-specific metadata.
+// Astro.props is empty when the Head component is rendered by Starlight's Page.astro via <Head />,
+// so fall back to Astro.locals.starlightRoute for entry data and locale info.
+const route = Astro.locals.starlightRoute;
+const pageLang = route?.lang ?? 'en';
+const entry = route?.entry;
+
+// Derive structured data from page metadata.
+// Prioritise explicit frontmatter, then route middleware extraction, then the default.
+const routeDescription =
+  entry?.data?.description?.trim() ||
+  extractDocsSummary(entry?.body ?? '') ||
+  DEFAULT_DOCS_DESCRIPTION;
+
+const title = entry?.data?.title ?? 'Nantian Gateway';
+const description = routeDescription;
 
 const pathname = Astro.url.pathname;
 const canonical = new URL(pathname, Astro.site ?? 'https://nantian.dev').href;
@@ -49,7 +60,7 @@ const webPage = {
   name: title,
   description,
   url: canonical,
-  inLanguage: Astro.props.locale?.lang ?? 'en',
+  inLanguage: pageLang,
   isPartOf: {
     '@type': 'WebSite',
     name: 'Nantian Gateway',
