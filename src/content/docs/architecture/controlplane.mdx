@@ -85,7 +85,7 @@ The store exposes hooks for metrics collection. The `OnSubscriberQueueReplace` h
 
 ## gRPC xDS server
 
-The gRPC server (`gateway/internal/grpcserver/server.go`) implements the `ConfigurationDiscoveryService` gRPC service defined in `proto/gateway/control/v1/`. Data planes connect via a bidirectional streaming RPC and exchange `DiscoveryRequest` and `DiscoveryResponse` messages.
+The gRPC server (`gateway/internal/xds/server.go`) implements the `ConfigurationDiscoveryService` gRPC service defined in `proto/gateway/control/v1/`. Data planes connect via a bidirectional streaming RPC and exchange `DiscoveryRequest` and `DiscoveryResponse` messages.
 
 ### Stream lifecycle
 

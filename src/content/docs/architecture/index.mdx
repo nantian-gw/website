@@ -102,7 +102,7 @@ The control plane is organized into these packages under `gateway/internal/`:
 |---------|---------------|
 | `translator/` | Reads Kubernetes objects, builds IR snapshots |
 | `ir/` | Internal representation types and snapshot store |
-| `grpcserver/` | gRPC xDS server, stream management, snapshot fanout |
+| `xds/` | gRPC xDS server, stream management, snapshot fanout |
 | `admin/` | HTTP admin API server, dashboard backend |
 | `controller/` | Reconciler runner, snapshot sync controller |
 | `status/` | Writes status back to Gateway API resources |

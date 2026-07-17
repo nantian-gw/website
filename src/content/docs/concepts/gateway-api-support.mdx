@@ -9,7 +9,7 @@ Nantian Gateway targets the Kubernetes Gateway API v1.5.1 specification. This pa
 
 - **Default Support** — feature is advertised when `enableExperimentalGateway=false`.
 - **Experimental Runtime Support** — feature is advertised when `enableExperimentalGateway=true`.
-- **Current Position** — Nantian's runtime-gated support position, derived from `internal/gwapi/supported_features.go` and conformance workflows.
+- **Current Position** — Nantian's runtime-gated support position, derived from `internal/gatewayapi/supported_features.go` and conformance workflows.
 
 :::note
 Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `BackendTLSPolicy`) are fully supported and not repeated here.
@@ -71,9 +71,14 @@ Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `B
 
 | Feature | Channel | Default | Experimental | Position |
 |---------|---------|---------|--------------|----------|
-| TLSRouteBackendTimeout | standard | Yes | Yes | Supported |
 | TLSRouteModeTerminate | experimental | No | Yes | Experimental runtime only |
 | TLSRouteModeMixed | experimental | No | Yes | Experimental runtime only |
+
+### UDPRoute Extended Features
+
+| Feature | Channel | Default | Experimental | Position |
+|---------|---------|---------|--------------|----------|
+| UDPRoute | experimental | No | Yes | Experimental runtime only |
 
 ### Mesh Features
 
@@ -95,14 +100,13 @@ Core features (`Gateway`, `HTTPRoute`, `GRPCRoute`, `Mesh`, `ReferenceGrant`, `B
 
 | Feature | Channel | Default | Experimental | Position |
 |---------|---------|---------|--------------|----------|
-| BackendLBPolicy | standard | Yes | Yes | Supported |
+| BackendLBSessionPersistence | standard | Yes | Yes | Supported |
 
 ### BackendTLSPolicy Features
 
 | Feature | Channel | Default | Experimental | Position |
 |---------|---------|---------|--------------|----------|
 | BackendTLSPolicySANValidation | experimental | Yes | Yes | Supported |
-| BackendTLSPolicyCACertificate | experimental | Yes | Yes | Supported |
 
 ## Nantian-Specific Declarations
 
@@ -112,6 +116,7 @@ In addition to the upstream Gateway API feature set, Nantian Gateway declares:
 |---------|-------------|
 | `TCPRoute` | TCP routing support |
 | `BackendLBSessionPersistence` | Session persistence for backend load balancing |
+| `UDPRoute` | UDP routing support |
 
 ## Enabling Experimental Features
 
@@ -130,6 +135,6 @@ CONFORMANCE_EXPERIMENTAL=true ALL_FEATURES=true make conformance
 
 ## Source of Truth
 
-- Supported feature declarations: `gateway/internal/gwapi/supported_features.go`
+- Supported feature declarations: `gateway/internal/gatewayapi/supported_features.go`
 - All-features conformance: `gateway/conformance/conformance_test.go`
 - CI workflow: `gateway/.github/workflows/conformance.yml`
