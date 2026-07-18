@@ -127,13 +127,13 @@ dataplane:
 controlplane:
   grpcTLS:
     enabled: true
-    existingSecret: "nantian-grpc-tls"
+    existing_secret: "nantian-grpc-tls"
     requireClientCert: true
 
 dataplane:
   xdsTLS:
     enabled: true
-    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
+    domain_name: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
 ```
 
 Secret 必须包含 `tls.crt`、`tls.key`，还可以包含 `ca.crt`。如果开启了 mTLS，数据面还需要通过 xDS 客户端配置客户端证书。
@@ -187,19 +187,19 @@ dataplane:
     log:
       level: "info,nantian_core::connectors=off"
       format: "json"
-      nonBlocking: true
-      nonBlockingBufferedLines: 65536
-      dropWhenFull: true
+      non_blocking: true
+      non_blocking_buffered_lines: 65536
+      drop_when_full: true
 ```
 
-`nonBlocking: true` 防止数据面因慢速日志写入而卡顿。`dropWhenFull: true` 在极端负载下丢弃日志行而不是阻塞线程。
+`non_blocking: true` 防止数据面因慢速日志写入而卡顿。`drop_when_full: true` 在极端负载下丢弃日志行而不是阻塞线程。
 
 开启访问日志，格式里包含你监控需要的字段：
 
 ```yaml
 dataplane:
   config:
-    accessLog:
+    access_log:
       enabled: true
       path: "/var/log/nantian-gw/access.log"
       mode: "text"

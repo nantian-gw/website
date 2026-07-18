@@ -11,8 +11,8 @@ The data plane uses an async runtime built on Tokio. The following settings cont
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCapacity.workerThreads` | int | `0` | Worker thread count (0 = CPU count) |
-| `runtimeTuning.httpCapacity.acceptConcurrency` | int | `16` | Concurrent TCP accept operations |
+| `runtime_tuning.http_capacity.workerThreads` | int | `0` | Worker thread count (0 = CPU count) |
+| `runtime_tuning.http_capacity.acceptConcurrency` | int | `16` | Concurrent TCP accept operations |
 
 ### Worker Threads
 
@@ -30,7 +30,7 @@ Reusing connections to upstream services avoids the overhead of TCP handshakes a
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCapacity.upstreamKeepalivePoolSize` | int | `32768` | Maximum idle connections in the upstream pool |
+| `runtime_tuning.http_capacity.upstreamKeepalivePoolSize` | int | `32768` | Maximum idle connections in the upstream pool |
 
 The upstream keepalive pool maintains idle connections to backend services. When the data plane needs to forward a request, it checks the pool for an existing connection before establishing a new one. Each idle connection consumes a small amount of memory (several kilobytes for socket buffers), so the memory cost scales linearly with pool size.
 
@@ -44,26 +44,26 @@ The data plane can cache upstream responses. The entry-size limit controls the l
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCache.maxEntrySizeMb` | int | `16` | Maximum size (MiB) of a single cached response entry |
+| `runtime_tuning.http_cache.maxEntrySizeMb` | int | `16` | Maximum size (MiB) of a single cached response entry |
 
 Responses larger than `maxEntrySizeMb` bypass the cache and stream directly to the client. Raise this value for workloads that serve large, cacheable payloads; lower it to bound per-entry memory use.
 
 ## Timeouts
 
-Timeout configuration prevents resource leaks and ensures the proxy does not hold connections indefinitely. These are flat keys directly under `runtimeTuning` (there is no nested `timeout` object), and all values are in milliseconds:
+Timeout configuration prevents resource leaks and ensures the proxy does not hold connections indefinitely. These are flat keys directly under `runtime_tuning` (there is no nested `timeout` object), and all values are in milliseconds:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | Maximum time to read the request from the client |
-| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | Maximum time to establish a connection to the upstream |
-| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | Maximum time to read the response from the upstream |
-| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | Maximum idle time before closing an upstream keepalive connection |
+| `runtime_tuning.downstreamReadTimeoutMs` | int | `60000` | Maximum time to read the request from the client |
+| `runtime_tuning.upstream_connection_timeout_ms` | int | `5000` | Maximum time to establish a connection to the upstream |
+| `runtime_tuning.upstream_read_timeout_ms` | int | `30000` | Maximum time to read the response from the upstream |
+| `runtime_tuning.upstream_idle_timeout_ms` | int | `60000` | Maximum idle time before closing an upstream keepalive connection |
 
-Lower `upstreamConnectionTimeoutMs` to fail fast when backends are unreachable; raise `upstreamReadTimeoutMs` for slow or long-running upstream endpoints.
+Lower `upstream_connection_timeout_ms` to fail fast when backends are unreachable; raise `upstream_read_timeout_ms` for slow or long-running upstream endpoints.
 
 ## TLS
 
-The proxy runtime does not expose TLS session-cache tuning knobs. TLS protocol version bounds (`runtime.tlsMinVersion` / `runtime.tlsMaxVersion`) and certificate/mTLS settings are covered in [TLS Configuration](/configuration/tls/).
+The proxy runtime does not expose TLS session-cache tuning knobs. TLS protocol version bounds (`runtime.tls_min_version` / `runtime.tls_max_version`) and certificate/mTLS settings are covered in [TLS Configuration](/configuration/tls/).
 
 ## Profiling and Monitoring
 

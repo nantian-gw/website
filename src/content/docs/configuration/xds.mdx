@@ -159,7 +159,7 @@ If the data plane logs `connection refused` on startup, check that the control p
 
 ### TLS handshake failure
 
-A TLS handshake failure typically means mismatched certificates. Check that `xdsTls.caPath` points to the CA that signed the control plane's certificate. For mTLS setups, ensure `xdsTls.certPath` and `xdsTls.keyPath` are both set and that the control plane trusts the client CA. Use `openssl s_client -connect <cp-host>:<grpc-port>` to test the TLS handshake manually.
+A TLS handshake failure typically means mismatched certificates. Check that `xds_tls.ca_path` points to the CA that signed the control plane's certificate. For mTLS setups, ensure `xds_tls.cert_path` and `xds_tls.key_path` are both set and that the control plane trusts the client CA. Use `openssl s_client -connect <cp-host>:<grpc-port>` to test the TLS handshake manually.
 
 ### NACK loop
 

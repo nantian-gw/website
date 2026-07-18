@@ -16,8 +16,8 @@ Secures the admin HTTP API with server-side TLS:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `adminTLS.enabled` | bool | `false` | Enable TLS on the admin HTTP server |
-| `adminTLS.certPath` | string | `""` | Path to the server certificate file (PEM) |
-| `adminTLS.keyPath` | string | `""` | Path to the server private key file (PEM) |
+| `adminTLS.cert_path` | string | `""` | Path to the server certificate file (PEM) |
+| `adminTLS.key_path` | string | `""` | Path to the server private key file (PEM) |
 
 When enabled, the admin server serves HTTPS instead of HTTP. The certificate and key must be valid PEM-encoded files readable by the control plane process. In Kubernetes, mount these from a Secret volume.
 
@@ -32,8 +32,8 @@ Secures the gRPC xDS stream with optional mutual TLS:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `grpcTLS.enabled` | bool | `false` | Enable TLS on the gRPC server |
-| `grpcTLS.certPath` | string | `""` | Path to the server certificate file (PEM) |
-| `grpcTLS.keyPath` | string | `""` | Path to the server private key file (PEM) |
+| `grpcTLS.cert_path` | string | `""` | Path to the server certificate file (PEM) |
+| `grpcTLS.key_path` | string | `""` | Path to the server private key file (PEM) |
 | `grpcTLS.clientCAPath` | string | `""` | Path to the CA certificate for verifying client certificates |
 | `grpcTLS.requireClientCert` | bool | `false` | Require and verify client certificates (mTLS) |
 
@@ -53,8 +53,8 @@ These settings control TLS behavior for traffic passing through the data plane:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtime.tlsMinVersion` | string | `"1.2"` | Minimum TLS version accepted (`"1.2"` or `"1.3"`) |
-| `runtime.tlsMaxVersion` | string | `"1.3"` | Maximum TLS version accepted (`"1.2"` or `"1.3"`) |
+| `runtime.tls_min_version` | string | `"1.2"` | Minimum TLS version accepted (`"1.2"` or `"1.3"`) |
+| `runtime.tls_max_version` | string | `"1.3"` | Maximum TLS version accepted (`"1.2"` or `"1.3"`) |
 
 ### xDS Transport TLS
 
@@ -62,13 +62,13 @@ Configures how the data plane connects to the control plane's gRPC server:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `xdsTls.enabled` | bool | `false` | Enable TLS for the xDS connection |
-| `xdsTls.domainName` | string | `""` | Expected server name for certificate validation |
-| `xdsTls.caPath` | string | `""` | Path to the CA certificate for verifying the server |
-| `xdsTls.certPath` | string | `""` | Path to the client certificate (for mTLS) |
-| `xdsTls.keyPath` | string | `""` | Path to the client private key (for mTLS) |
+| `xds_tls.enabled` | bool | `false` | Enable TLS for the xDS connection |
+| `xds_tls.domain_name` | string | `""` | Expected server name for certificate validation |
+| `xds_tls.ca_path` | string | `""` | Path to the CA certificate for verifying the server |
+| `xds_tls.cert_path` | string | `""` | Path to the client certificate (for mTLS) |
+| `xds_tls.key_path` | string | `""` | Path to the client private key (for mTLS) |
 
-When both `certPath` and `keyPath` are set, the data plane presents a client certificate to the control plane, satisfying the mTLS requirement when `requireClientCert` is enabled on the gRPC server.
+When both `cert_path` and `key_path` are set, the data plane presents a client certificate to the control plane, satisfying the mTLS requirement when `requireClientCert` is enabled on the gRPC server.
 
 ## Example: Full mTLS Configuration
 
@@ -78,23 +78,23 @@ The following configuration enables mTLS on the gRPC stream and TLS on the admin
 # Control plane
 grpcTLS:
   enabled: true
-  certPath: /etc/certs/grpc/tls.crt
-  keyPath: /etc/certs/grpc/tls.key
+  cert_path: /etc/certs/grpc/tls.crt
+  key_path: /etc/certs/grpc/tls.key
   clientCAPath: /etc/certs/grpc/ca.crt
   requireClientCert: true
 
 adminTLS:
   enabled: true
-  certPath: /etc/certs/admin/tls.crt
-  keyPath: /etc/certs/admin/tls.key
+  cert_path: /etc/certs/admin/tls.crt
+  key_path: /etc/certs/admin/tls.key
 
 # Data plane
-xdsTls:
+xds_tls:
   enabled: true
-  domainName: nantian-gw-controlplane-grpc.nantian-gw.svc
-  caPath: /etc/certs/xds/ca.crt
-  certPath: /etc/certs/xds/tls.crt
-  keyPath: /etc/certs/xds/tls.key
+  domain_name: nantian-gw-controlplane-grpc.nantian-gw.svc
+  ca_path: /etc/certs/xds/ca.crt
+  cert_path: /etc/certs/xds/tls.crt
+  key_path: /etc/certs/xds/tls.key
 ```
 
 ## Certificate Management

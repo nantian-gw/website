@@ -32,7 +32,7 @@ Cookie 的生命周期由 `cookieConfig.lifetimeType` 控制：
 
 ## 通过 BackendLBPolicy 配置
 
-会话保持通过 `BackendLBPolicy` CRD 的 `sessionPersistence` 字段进行配置：
+会话保持通过 `BackendLBPolicy` CRD 的 `session_persistence` 字段进行配置：
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1alpha2
@@ -45,7 +45,7 @@ spec:
     - group: ""
       kind: Service
       name: shopping-cart-service
-  sessionPersistence:
+  session_persistence:
     sessionName: ROUTEID
     sessionType: Cookie
     absoluteTimeout: 3600s
@@ -64,11 +64,11 @@ spec:
 
 | 方式 | 配置 | 适用场景 |
 | --- | --- | --- |
-| 内联密钥 | 数据面配置中的 `sharedSecret` | 使用预共享密钥的小型部署 |
+| 内联密钥 | 数据面配置中的 `shared_secret` | 使用预共享密钥的小型部署 |
 | 基于文件的密钥 | `sharedSecretFile` 指向文件路径 | 需要密钥轮换的部署（文件每 250ms 重新读取一次） |
 | 自动生成 | 无需配置 | 仅限开发环境和单副本部署 |
 
-对于多副本数据面部署，请在所有副本上配置一致的 `sharedSecret` 或 `sharedSecretFile`。如果每个副本自动生成不同的密钥，由副本 A 签名的会话令牌将在副本 B 上校验失败，导致流量在副本之间切换时用户丢失会话。
+对于多副本数据面部署，请在所有副本上配置一致的 `shared_secret` 或 `sharedSecretFile`。如果每个副本自动生成不同的密钥，由副本 A 签名的会话令牌将在副本 B 上校验失败，导致流量在副本之间切换时用户丢失会话。
 
 ## 何时使用会话保持
 
@@ -107,8 +107,8 @@ spec:
 3. **检查多副本部署**。如果你运行了多个数据面副本，请配置共享密钥：
    ```yaml
    # 数据面配置
-   sessionPersistence:
-     sharedSecret: "your-32-byte-secret"
+   session_persistence:
+     shared_secret: "your-32-byte-secret"
    ```
    没有此项配置，由副本 A 签名的会话 Cookie 会被副本 B 拒绝。
 
@@ -124,8 +124,8 @@ spec:
 
 | nginx-ingress 注解 | nantian-gw 等效配置 |
 |---|---|
-| `nginx.ingress.kubernetes.io/affinity: cookie` | 创建包含 `sessionPersistence.type: Cookie` 的 `BackendLBPolicy` |
-| `nginx.ingress.kubernetes.io/session-cookie-name` | `sessionPersistence.sessionName` |
-| `nginx.ingress.kubernetes.io/session-cookie-expires` | `sessionPersistence.absoluteTimeout` |
-| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `sessionPersistence.cookieConfig.lifetimeType: Permanent` |
+| `nginx.ingress.kubernetes.io/affinity: cookie` | 创建包含 `session_persistence.type: Cookie` 的 `BackendLBPolicy` |
+| `nginx.ingress.kubernetes.io/session-cookie-name` | `session_persistence.sessionName` |
+| `nginx.ingress.kubernetes.io/session-cookie-expires` | `session_persistence.absoluteTimeout` |
+| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `session_persistence.cookieConfig.lifetimeType: Permanent` |
 | `nginx.ingress.kubernetes.io/session-cookie-path` | 不适用（Cookie 路径默认为 `/`） |

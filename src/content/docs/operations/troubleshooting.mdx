@@ -50,7 +50,7 @@ kubectl logs -n nantian-gw -l app=nantian-gw-controlplane --tail=50
 - **Configuration file is missing or invalid**: The control plane looks for the config at the path specified by `--config`. Verify the ConfigMap is mounted correctly.
 - **Kubernetes API connection failed**: The control plane needs a valid service account and RBAC permissions. Check that the service account has the necessary ClusterRoles.
 - **Leader election configuration error**: If `leaderElection.id` conflicts with another controller in the same namespace, the control plane will fail to start.
-- **Admin auth token resolution failed**: If `adminAuth.bearerTokenFile` points to a non-existent file or `adminAuth.bearerToken` is configured but the env var is empty, startup fails.
+- **Admin auth token resolution failed**: If `admin_auth.bearer_token_file` points to a non-existent file or `admin_auth.bearer_token` is configured but the env var is empty, startup fails.
 
 **Resolution**: Check the control plane logs for the specific error message. The startup sequence logs each step with a `"component"` field. The error message will indicate which component failed.
 
@@ -124,17 +124,17 @@ kubectl get deploy -n nantian-gw nantian-gw-dataplane -o yaml | sed -n '/env:/,/
 
 **Common causes**:
 
-- **Duplicate runtime `nodeId` across replicas**: The control plane keeps only one active xDS stream per `nodeId`, so a newer connection replaces the older one.
-- **Old manifests still use a fixed `dataplane.config.nodeId`**: Static values such as `dp-kubernetes` are safe only as fallbacks when the runtime also receives a unique env override.
+- **Duplicate runtime `node_id` across replicas**: The control plane keeps only one active xDS stream per `node_id`, so a newer connection replaces the older one.
+- **Old manifests still use a fixed `dataplane.config.node_id`**: Static values such as `dp-kubernetes` are safe only as fallbacks when the runtime also receives a unique env override.
 - **Obsolete env wiring**: Older manifests may still inject `PGW_NODE_ID`. Current chart versions inject `NANTIAN_GW_NODE_ID` from Pod `metadata.name`.
 
-**Resolution**: Ensure every data plane replica has a unique runtime identity. With the current Helm chart, keep the `NANTIAN_GW_NODE_ID <- metadata.name` injection and avoid overriding it with a shared fixed value. If you maintain custom manifests, remove `PGW_NODE_ID`, keep `dataplane.config.nodeId` only as a fallback, and restart the data plane after applying the corrected Deployment.
+**Resolution**: Ensure every data plane replica has a unique runtime identity. With the current Helm chart, keep the `NANTIAN_GW_NODE_ID <- metadata.name` injection and avoid overriding it with a shared fixed value. If you maintain custom manifests, remove `PGW_NODE_ID`, keep `dataplane.config.node_id` only as a fallback, and restart the data plane after applying the corrected Deployment.
 
 ### Session persistence warning about auto-generated keys
 
-**Symptoms**: Data plane logs show warnings such as `session persistence is using an ephemeral, auto-generated secret` or `configure sharedSecret or sharedSecretFile`.
+**Symptoms**: Data plane logs show warnings such as `session persistence is using an ephemeral, auto-generated secret` or `configure shared_secret or sharedSecretFile`.
 
-**Resolution**: Configure `dataplane.sessionPersistence.existingSecret` or `dataplane.sessionPersistence.sharedSecret` when running more than one replica. Current Helm chart releases mount that Secret and wire the runtime `sessionPersistence.secretKeyFile` automatically, so sticky-session state survives restarts and can be shared across replicas.
+**Resolution**: Configure `dataplane.session_persistence.existing_secret` or `dataplane.session_persistence.shared_secret` when running more than one replica. Current Helm chart releases mount that Secret and wire the runtime `session_persistence.secret_key_file` automatically, so sticky-session state survives restarts and can be shared across replicas.
 
 ### Leader election flapping
 

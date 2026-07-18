@@ -129,10 +129,10 @@ Nantian Gateway 以带版本的全量（SotW）快照交付配置：
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `xds.serverAddress` | string | `http://127.0.0.1:18080` | 控制面 gRPC 地址 |
-| `xdsTls.enabled` | bool | `false` | 是否给 xDS 传输加 TLS |
-| `xdsTls.caPath` | string | 空 | 验证控制面证书的 CA 证书路径 |
-| `xdsTls.certPath` | string | 空 | 客户端证书路径（mTLS） |
-| `xdsTls.keyPath` | string | 空 | 客户端私钥路径（mTLS） |
+| `xds_tls.enabled` | bool | `false` | 是否给 xDS 传输加 TLS |
+| `xds_tls.ca_path` | string | 空 | 验证控制面证书的 CA 证书路径 |
+| `xds_tls.cert_path` | string | 空 | 客户端证书路径（mTLS） |
+| `xds_tls.key_path` | string | 空 | 客户端私钥路径（mTLS） |
 
 数据面启动后立即尝试连接控制面。如果连接失败，数据面以指数退避重试，直到连接成功。连接建立后，数据面发送节点标识和当前配置版本，控制面根据版本差异决定是否推送当前全量快照（版本一致时可跳过）。
 
@@ -163,7 +163,7 @@ xDS 流使用标准的 [gRPC 健康检查协议](https://github.com/grpc/grpc/bl
 
 ### TLS 握手失败
 
-TLS 握手失败通常是证书不匹配。检查 `xdsTls.caPath` 是否指向了签发控制面证书的 CA。对于 mTLS 场景，确认 `xdsTls.certPath` 和 `xdsTls.keyPath` 都已设置，且控制面信任客户端的 CA。可以用 `openssl s_client -connect <cp-host>:<grpc-port>` 手动测试 TLS 握手。
+TLS 握手失败通常是证书不匹配。检查 `xds_tls.ca_path` 是否指向了签发控制面证书的 CA。对于 mTLS 场景，确认 `xds_tls.cert_path` 和 `xds_tls.key_path` 都已设置，且控制面信任客户端的 CA。可以用 `openssl s_client -connect <cp-host>:<grpc-port>` 手动测试 TLS 握手。
 
 ### NACK 循环
 

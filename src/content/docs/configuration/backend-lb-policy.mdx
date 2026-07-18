@@ -16,7 +16,7 @@ spec:
     - group: ""
       kind: Service
       name: orders-service
-  sessionPersistence:
+  session_persistence:
     sessionName: orders-session
     type: Cookie
     absoluteTimeout: 30m
@@ -48,7 +48,7 @@ The policy cannot target Services in other namespaces. A single policy can targe
 
 All three features (session persistence, load balancing, and circuit breaking) are optional. Omit a field to leave the gateway default in place for that feature. An empty `BackendLBPolicy` with all three fields absent has no effect.
 
-### sessionPersistence
+### session_persistence
 
 Configures cookie-based session affinity. Requests from the same client are routed to the same backend for the duration of the session.
 
@@ -92,7 +92,7 @@ Multiple `BackendLBPolicy` resources may target the same backend. When this happ
 
 This is a first-match-wins rule per backend. The gateway does not merge policies. Each backend gets exactly one winning policy, as determined by the `PolicyPrecedes` function.
 
-The resolved policy appears in the data plane snapshot under `BackendCluster.loadBalancing`, `BackendCluster.sessionPersistence`, and `BackendCluster.circuitBreaker`. You can inspect these fields through the data plane admin API at the `/snapshots` endpoint.
+The resolved policy appears in the data plane snapshot under `BackendCluster.loadBalancing`, `BackendCluster.session_persistence`, and `BackendCluster.circuitBreaker`. You can inspect these fields through the data plane admin API at the `/snapshots` endpoint.
 
 ## Status Conditions
 
@@ -109,4 +109,4 @@ Check `status.conditions` to troubleshoot why a policy is not taking effect. A p
 
 ## Checking Applied Policies
 
-Query the data plane admin API at port `19080` to see which policies are active. The `/snapshots` endpoint returns the full IR snapshot. Look for the `BackendCluster` entry matching your service and inspect the `sessionPersistence`, `loadBalancing`, and `circuitBreaker` fields. These fields are present only when a `BackendLBPolicy` has been resolved for that backend.
+Query the data plane admin API at port `19080` to see which policies are active. The `/snapshots` endpoint returns the full IR snapshot. Look for the `BackendCluster` entry matching your service and inspect the `session_persistence`, `loadBalancing`, and `circuitBreaker` fields. These fields are present only when a `BackendLBPolicy` has been resolved for that backend.

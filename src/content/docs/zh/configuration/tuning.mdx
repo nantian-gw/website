@@ -10,8 +10,8 @@ title: 性能调优
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCapacity.workerThreads` | int | `0` | 工作线程数（0 = CPU 核心数） |
-| `runtimeTuning.httpCapacity.acceptConcurrency` | int | `16` | 并发 TCP accept 操作数 |
+| `runtime_tuning.http_capacity.workerThreads` | int | `0` | 工作线程数（0 = CPU 核心数） |
+| `runtime_tuning.http_capacity.acceptConcurrency` | int | `16` | 并发 TCP accept 操作数 |
 
 ### 工作线程
 
@@ -29,7 +29,7 @@ title: 性能调优
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCapacity.upstreamKeepalivePoolSize` | int | `32768` | 上游池中保持的最大空闲连接数 |
+| `runtime_tuning.http_capacity.upstreamKeepalivePoolSize` | int | `32768` | 上游池中保持的最大空闲连接数 |
 
 上游 keepalive 池维护与后端服务的空闲连接。当数据面需要转发请求时，先检查池中是否有可用连接，然后再建立新连接。每个空闲连接消耗少量内存（数 KB 的 socket 缓冲区），因此内存成本随池大小线性增长。
 
@@ -43,26 +43,26 @@ title: 性能调优
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCache.maxEntrySizeMb` | int | `16` | 单个缓存响应条目的最大大小（MiB） |
+| `runtime_tuning.http_cache.maxEntrySizeMb` | int | `16` | 单个缓存响应条目的最大大小（MiB） |
 
 大于 `maxEntrySizeMb` 的响应会跳过缓存并直接流式传输给客户端。对于提供大体积可缓存负载的工作负载可调高此值；调低则可限制单条目的内存占用。
 
 ## 超时
 
-超时配置可防止资源泄漏，确保代理不会无限期持有连接。以下均为直接位于 `runtimeTuning` 下的扁平键（不存在嵌套的 `timeout` 对象），单位均为毫秒：
+超时配置可防止资源泄漏，确保代理不会无限期持有连接。以下均为直接位于 `runtime_tuning` 下的扁平键（不存在嵌套的 `timeout` 对象），单位均为毫秒：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |-----------|------|---------|-------------|
-| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | 从客户端读取请求的最大时间 |
-| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | 与上游建立连接的最大时间 |
-| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | 从上游读取响应的最大时间 |
-| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | 关闭上游 keepalive 连接前的最大空闲时间 |
+| `runtime_tuning.downstreamReadTimeoutMs` | int | `60000` | 从客户端读取请求的最大时间 |
+| `runtime_tuning.upstream_connection_timeout_ms` | int | `5000` | 与上游建立连接的最大时间 |
+| `runtime_tuning.upstream_read_timeout_ms` | int | `30000` | 从上游读取响应的最大时间 |
+| `runtime_tuning.upstream_idle_timeout_ms` | int | `60000` | 关闭上游 keepalive 连接前的最大空闲时间 |
 
-当后端不可达时，调低 `upstreamConnectionTimeoutMs` 可快速失败；对于缓慢或长时间运行的上游端点，调高 `upstreamReadTimeoutMs`。
+当后端不可达时，调低 `upstream_connection_timeout_ms` 可快速失败；对于缓慢或长时间运行的上游端点，调高 `upstream_read_timeout_ms`。
 
 ## TLS
 
-代理运行时不提供 TLS 会话缓存调优项。TLS 协议版本上下界（`runtime.tlsMinVersion` / `runtime.tlsMaxVersion`）以及证书/mTLS 设置见 [TLS 配置](/zh/configuration/tls/)。
+代理运行时不提供 TLS 会话缓存调优项。TLS 协议版本上下界（`runtime.tls_min_version` / `runtime.tls_max_version`）以及证书/mTLS 设置见 [TLS 配置](/zh/configuration/tls/)。
 
 ## 性能分析与监控
 

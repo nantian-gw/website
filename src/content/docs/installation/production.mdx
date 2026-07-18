@@ -97,13 +97,13 @@ In production, every connection should be encrypted. The chart supports three TL
 controlplane:
   grpcTLS:
     enabled: true
-    existingSecret: "nantian-grpc-tls"
+    existing_secret: "nantian-grpc-tls"
     requireClientCert: true
 
 dataplane:
   xdsTLS:
     enabled: true
-    domainName: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
+    domain_name: "nantian-gw-controlplane-grpc.nantian-gw.svc.cluster.local"
 ```
 
 The secret must contain `tls.crt`, `tls.key`, and optionally `ca.crt`. For mTLS, the data plane also needs a client certificate configured via its xDS client settings.
@@ -155,19 +155,19 @@ dataplane:
     log:
       level: "info,nantian_core::connectors=off"
       format: "json"
-      nonBlocking: true
-      nonBlockingBufferedLines: 65536
-      dropWhenFull: true
+      non_blocking: true
+      non_blocking_buffered_lines: 65536
+      drop_when_full: true
 ```
 
-`nonBlocking: true` keeps the data plane from stalling on slow log writes. `dropWhenFull: true` discards log lines rather than blocking under extreme load.
+`non_blocking: true` keeps the data plane from stalling on slow log writes. `drop_when_full: true` discards log lines rather than blocking under extreme load.
 
 Enable access logging with a format that captures the fields your monitoring needs:
 
 ```yaml
 dataplane:
   config:
-    accessLog:
+    access_log:
       enabled: true
       path: "/var/log/nantian-gw/access.log"
       mode: "text"

@@ -32,7 +32,7 @@ Header-based sessions have the same signing, timeout, and routing guarantees as 
 
 ## Configure Via BackendLBPolicy
 
-Session persistence is configured through the `BackendLBPolicy` CRD under the `sessionPersistence` field:
+Session persistence is configured through the `BackendLBPolicy` CRD under the `session_persistence` field:
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1alpha2
@@ -45,7 +45,7 @@ spec:
     - group: ""
       kind: Service
       name: shopping-cart-service
-  sessionPersistence:
+  session_persistence:
     sessionName: ROUTEID
     sessionType: Cookie
     absoluteTimeout: 3600s
@@ -64,11 +64,11 @@ The session token is signed with a shared secret for integrity. The gateway supp
 
 | Method | Configuration | Use Case |
 | --- | --- | --- |
-| Inline secret | `sharedSecret` in data plane config | Small deployments with a pre-shared key |
+| Inline secret | `shared_secret` in data plane config | Small deployments with a pre-shared key |
 | File-based secret | `sharedSecretFile` pointing to a file path | Deployments with secret rotation (the file is re-read every 250ms) |
 | Auto-generated | No configuration | Development and single-replica deployments only |
 
-For multi-replica data plane deployments, configure a consistent `sharedSecret` or `sharedSecretFile` across all replicas. If each replica auto-generates a different key, a session token signed by replica A will fail validation on replica B, causing the user to lose their session when traffic shifts between replicas.
+For multi-replica data plane deployments, configure a consistent `shared_secret` or `sharedSecretFile` across all replicas. If each replica auto-generates a different key, a session token signed by replica A will fail validation on replica B, causing the user to lose their session when traffic shifts between replicas.
 
 ## When to Use Session Persistence
 
@@ -107,8 +107,8 @@ If users report being unexpectedly logged out or losing session state, the most 
 3. **Check for multi-replica deployments**. If you run multiple dataplane replicas, configure a shared secret:
    ```yaml
    # dataplane config
-   sessionPersistence:
-     sharedSecret: "your-32-byte-secret"
+   session_persistence:
+     shared_secret: "your-32-byte-secret"
    ```
    Without this, a session cookie signed by replica A will be rejected by replica B.
 
@@ -124,8 +124,8 @@ If users report being unexpectedly logged out or losing session state, the most 
 
 | nginx-ingress annotation | nantian-gw equivalent |
 |---|---|
-| `nginx.ingress.kubernetes.io/affinity: cookie` | Create a `BackendLBPolicy` with `sessionPersistence.type: Cookie` |
-| `nginx.ingress.kubernetes.io/session-cookie-name` | `sessionPersistence.sessionName` |
-| `nginx.ingress.kubernetes.io/session-cookie-expires` | `sessionPersistence.absoluteTimeout` |
-| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `sessionPersistence.cookieConfig.lifetimeType: Permanent` |
+| `nginx.ingress.kubernetes.io/affinity: cookie` | Create a `BackendLBPolicy` with `session_persistence.type: Cookie` |
+| `nginx.ingress.kubernetes.io/session-cookie-name` | `session_persistence.sessionName` |
+| `nginx.ingress.kubernetes.io/session-cookie-expires` | `session_persistence.absoluteTimeout` |
+| `nginx.ingress.kubernetes.io/session-cookie-max-age` | `session_persistence.cookieConfig.lifetimeType: Permanent` |
 | `nginx.ingress.kubernetes.io/session-cookie-path` | Not applicable (cookie path is `/` by default) |

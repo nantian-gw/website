@@ -9,21 +9,21 @@ The data plane configuration file is located at `dataplane/configs/dataplane/con
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `nodeId` | string | `dp-local` | Unique identifier for this data plane instance |
+| `node_id` | string | `dp-local` | Unique identifier for this data plane instance |
 | `cluster` | string | `default` | Logical cluster name this instance belongs to |
 
-The `nodeId` must be unique across all data plane instances connected to the same control plane. In Kubernetes, the Helm chart sets this to the pod name automatically. The `cluster` field groups data planes into logical clusters for multi-cluster deployments.
+The `node_id` must be unique across all data plane instances connected to the same control plane. In Kubernetes, the Helm chart sets this to the pod name automatically. The `cluster` field groups data planes into logical clusters for multi-cluster deployments.
 
 ## Control Plane Connection
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `controlPlaneAddr` | string | `http://127.0.0.1:18080` | Address of the control plane gRPC server |
-| `adminAddr` | string | `127.0.0.1:19080` | Address for the data plane's own admin HTTP server |
+| `control_plane_addr` | string | `http://127.0.0.1:18080` | Address of the control plane gRPC server |
+| `admin_addr` | string | `127.0.0.1:19080` | Address for the data plane's own admin HTTP server |
 
-The `controlPlaneAddr` is the gRPC endpoint where the data plane connects to receive configuration snapshots. Use `https://` when TLS is enabled on the control plane's gRPC server.
+The `control_plane_addr` is the gRPC endpoint where the data plane connects to receive configuration snapshots. Use `https://` when TLS is enabled on the control plane's gRPC server.
 
-The `adminAddr` is the data plane's own admin HTTP server, used by the control plane for health checks and aggregation.
+The `admin_addr` is the data plane's own admin HTTP server, used by the control plane for health checks and aggregation.
 
 ## Logging
 
@@ -33,13 +33,13 @@ The data plane uses Rust's `tracing` framework with fine-grained per-module cont
 |-----------|------|---------|-------------|
 | `log.level` | string | `info,nantian_core::connectors=off` | Tracing filter directives |
 | `log.format` | string | `json` | Output format: `json` or `text` |
-| `log.addSource` | bool | `false` | Include source file and line number |
-| `log.includeTarget` | bool | `false` | Include the tracing target (Rust module path) |
-| `log.includeThreadIds` | bool | `false` | Include thread IDs |
-| `log.includeThreadNames` | bool | `false` | Include thread names |
-| `log.nonBlocking` | bool | `true` | Use non-blocking log output |
-| `log.nonBlockingBufferedLines` | int | `65536` | Ring buffer capacity for non-blocking logging |
-| `log.dropWhenFull` | bool | `true` | Drop logs when the buffer is full |
+| `log.add_source` | bool | `false` | Include source file and line number |
+| `log.include_target` | bool | `false` | Include the tracing target (Rust module path) |
+| `log.include_thread_ids` | bool | `false` | Include thread IDs |
+| `log.include_thread_names` | bool | `false` | Include thread names |
+| `log.non_blocking` | bool | `true` | Use non-blocking log output |
+| `log.non_blocking_buffered_lines` | int | `65536` | Ring buffer capacity for non-blocking logging |
+| `log.drop_when_full` | bool | `true` | Drop logs when the buffer is full |
 
 The `level` field accepts tracing filter syntax for per-module granularity: `info,hyper=warn,tower=debug`.
 
@@ -47,21 +47,21 @@ The `level` field accepts tracing filter syntax for per-module granularity: `inf
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `log.openTelemetry.enabled` | bool | `false` | Export logs via OpenTelemetry |
-| `log.openTelemetry.endpoint` | string | `""` | OTLP collector endpoint |
-| `log.openTelemetry.protocol` | string | `grpc` | OTLP protocol: `grpc` or `http` |
-| `log.openTelemetry.timeoutMs` | int | `3000` | Export timeout in milliseconds |
-| `log.openTelemetry.insecure` | bool | `false` | Use insecure connection to the collector |
-| `log.openTelemetry.sampleRatio` | float | `1.0` | Sampling ratio (0.0 to 1.0) |
-| `log.openTelemetry.serviceName` | string | `nantian-dataplane` | Service name in exported data |
-| `log.openTelemetry.serviceNamespace` | string | `""` | Service namespace in exported data |
+| `log.open_telemetry.enabled` | bool | `false` | Export logs via OpenTelemetry |
+| `log.open_telemetry.endpoint` | string | `""` | OTLP collector endpoint |
+| `log.open_telemetry.protocol` | string | `grpc` | OTLP protocol: `grpc` or `http` |
+| `log.open_telemetry.timeoutMs` | int | `3000` | Export timeout in milliseconds |
+| `log.open_telemetry.insecure` | bool | `false` | Use insecure connection to the collector |
+| `log.open_telemetry.sampleRatio` | float | `1.0` | Sampling ratio (0.0 to 1.0) |
+| `log.open_telemetry.serviceName` | string | `nantian-dataplane` | Service name in exported data |
+| `log.open_telemetry.serviceNamespace` | string | `""` | Service namespace in exported data |
 
 ## Admin Authentication
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `adminAuth.bearerToken` | string | `""` | Static bearer token for admin API authentication |
-| `adminAuth.bearerTokenFile` | string | `""` | Path to a file containing the bearer token |
+| `admin_auth.bearer_token` | string | `""` | Static bearer token for admin API authentication |
+| `admin_auth.bearer_token_file` | string | `""` | Path to a file containing the bearer token |
 
 ## Access Logging
 
@@ -69,12 +69,12 @@ Access logs record every request processed by the data plane:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `accessLog.enabled` | bool | `false` | Enable access logging |
-| `accessLog.path` | string | `stdout` | Output path (`stdout`, `stderr`, or file path) |
-| `accessLog.format` | string | (see below) | Log format string with placeholders |
-| `accessLog.mode` | string | `json` | Output mode: `json` or `text` |
-| `accessLog.sampleRate` | float | `0.01` | Sampling rate (0.0 to 1.0) |
-| `accessLog.routeAnnotationPrefix` | string | `gateway.nantian.dev/access-log-` | Annotation prefix for per-route log configuration |
+| `access_log.enabled` | bool | `false` | Enable access logging |
+| `access_log.path` | string | `stdout` | Output path (`stdout`, `stderr`, or file path) |
+| `access_log.format` | string | (see below) | Log format string with placeholders |
+| `access_log.mode` | string | `json` | Output mode: `json` or `text` |
+| `access_log.sample_rate` | float | `0.01` | Sampling rate (0.0 to 1.0) |
+| `access_log.routeAnnotationPrefix` | string | `gateway.nantian.dev/access-log-` | Annotation prefix for per-route log configuration |
 
 Available format placeholders: `%TIMESTAMP%`, `%EVENT%`, `%PROTOCOL%`, `%LISTENER%`, `%CLIENT_IP%`, `%HOST%`, `%METHOD%`, `%PATH%`, `%REQUEST_ID%`, `%ROUTE_NAMESPACE%`, `%ROUTE_NAME%`, `%BACKEND%`, `%STATUS%`, `%LATENCY_MS%`, `%BYTES_RECEIVED%`, `%BYTES_SENT%`, `%SNAPSHOT_VERSION%`, `%RETRY_ATTEMPTS%`, `%RESPONSE_FLAGS%`.
 
@@ -119,11 +119,11 @@ Core runtime settings for the data plane proxy:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtime.httpListenAddr` | string | `0.0.0.0:80` | Address for the HTTP listener |
-| `runtime.enableIpv6` | bool | `true` | Enable IPv6 support |
-| `runtime.enableHttp3` | bool | `false` | Enable HTTP/3 (QUIC) support |
-| `runtime.tlsMinVersion` | string | `1.2` | Minimum TLS version accepted |
-| `runtime.tlsMaxVersion` | string | `1.3` | Maximum TLS version offered |
+| `runtime.http_listen_addr` | string | `0.0.0.0:80` | Address for the HTTP listener |
+| `runtime.enable_ipv6` | bool | `true` | Enable IPv6 support |
+| `runtime.enable_http3` | bool | `false` | Enable HTTP/3 (QUIC) support |
+| `runtime.tls_min_version` | string | `1.2` | Minimum TLS version accepted |
+| `runtime.tls_max_version` | string | `1.3` | Maximum TLS version offered |
 | `runtime.tlsAssetDir` | string | `""` | Directory for TLS certificate assets |
 
 ## Runtime Tuning
@@ -132,87 +132,87 @@ Performance tuning parameters for the data plane:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpReloadRetryIntervalMs` | int | `1000` | Retry interval for HTTP listener reload (ms) |
-| `runtimeTuning.streamReloadRetryIntervalMs` | int | `1000` | Retry interval for stream listener reload (ms) |
-| `runtimeTuning.downstreamReadTimeoutMs` | int | `60000` | Timeout for reading from downstream clients (ms) |
-| `runtimeTuning.httpMaxConnectionAgeMs` | int | `0` | Maximum HTTP connection age (0 = unlimited) |
-| `runtimeTuning.httpKeepaliveRequestLimit` | int | `0` | Maximum requests per keepalive connection (0 = unlimited) |
-| `runtimeTuning.upstreamConnectionTimeoutMs` | int | `5000` | Timeout for establishing upstream connections (ms) |
-| `runtimeTuning.upstreamReadTimeoutMs` | int | `30000` | Timeout for reading from upstream services (ms) |
-| `runtimeTuning.upstreamIdleTimeoutMs` | int | `60000` | Idle timeout for upstream connections (ms) |
+| `runtime_tuning.httpReloadRetryIntervalMs` | int | `1000` | Retry interval for HTTP listener reload (ms) |
+| `runtime_tuning.streamReloadRetryIntervalMs` | int | `1000` | Retry interval for stream listener reload (ms) |
+| `runtime_tuning.downstreamReadTimeoutMs` | int | `60000` | Timeout for reading from downstream clients (ms) |
+| `runtime_tuning.httpMaxConnectionAgeMs` | int | `0` | Maximum HTTP connection age (0 = unlimited) |
+| `runtime_tuning.httpKeepaliveRequestLimit` | int | `0` | Maximum requests per keepalive connection (0 = unlimited) |
+| `runtime_tuning.upstream_connection_timeout_ms` | int | `5000` | Timeout for establishing upstream connections (ms) |
+| `runtime_tuning.upstream_read_timeout_ms` | int | `30000` | Timeout for reading from upstream services (ms) |
+| `runtime_tuning.upstream_idle_timeout_ms` | int | `60000` | Idle timeout for upstream connections (ms) |
 
 ### HTTP Capacity
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCapacity.workerThreads` | int | `0` | Worker thread count (0 = CPU count) |
-| `runtimeTuning.httpCapacity.acceptConcurrency` | int | `16` | Concurrent TCP accept operations |
-| `runtimeTuning.httpCapacity.upstreamKeepalivePoolSize` | int | `32768` | Maximum idle connections in the upstream pool |
-| `runtimeTuning.httpCapacity.reusePort` | bool | `null` | Enable SO_REUSEPORT (null = auto-detect) |
+| `runtime_tuning.http_capacity.workerThreads` | int | `0` | Worker thread count (0 = CPU count) |
+| `runtime_tuning.http_capacity.acceptConcurrency` | int | `16` | Concurrent TCP accept operations |
+| `runtime_tuning.http_capacity.upstreamKeepalivePoolSize` | int | `32768` | Maximum idle connections in the upstream pool |
+| `runtime_tuning.http_capacity.reusePort` | bool | `null` | Enable SO_REUSEPORT (null = auto-detect) |
 
 ### Request Mirroring
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.requestMirrorMaxConcurrency` | int | `1024` | Maximum concurrent mirrored requests |
+| `runtime_tuning.requestMirrorMaxConcurrency` | int | `1024` | Maximum concurrent mirrored requests |
 
 ### UDP
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.udpResponseIdleTimeoutMs` | int | `500` | Idle timeout for UDP responses (ms) |
+| `runtime_tuning.udpResponseIdleTimeoutMs` | int | `500` | Idle timeout for UDP responses (ms) |
 
 ### TCP Proxy
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.tcpProxyBufferBytes` | int | `16384` | Buffer size for TCP proxy connections |
-| `runtimeTuning.tcpSessionIdleTimeoutMs` | int | `0` | TCP session idle timeout (0 = unlimited) |
-| `runtimeTuning.tcpMaxConnectionAgeMs` | int | `0` | Maximum TCP connection age (0 = unlimited) |
+| `runtime_tuning.tcpProxyBufferBytes` | int | `16384` | Buffer size for TCP proxy connections |
+| `runtime_tuning.tcpSessionIdleTimeoutMs` | int | `0` | TCP session idle timeout (0 = unlimited) |
+| `runtime_tuning.tcpMaxConnectionAgeMs` | int | `0` | Maximum TCP connection age (0 = unlimited) |
 
 ### Retry Budget
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.retryBudgetEnabled` | bool | `true` | Enable retry budget for circuit breaking |
-| `runtimeTuning.retryBudgetRatioPercent` | int | `20` | Ratio of retries to total requests (%) |
-| `runtimeTuning.retryBudgetBurst` | int | `16` | Maximum burst of retries allowed |
+| `runtime_tuning.retryBudgetEnabled` | bool | `true` | Enable retry budget for circuit breaking |
+| `runtime_tuning.retryBudgetRatioPercent` | int | `20` | Ratio of retries to total requests (%) |
+| `runtime_tuning.retryBudgetBurst` | int | `16` | Maximum burst of retries allowed |
 
 ### Stream Connection Pool
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.streamUpstreamPoolSize` | int | `128` | Maximum idle stream connections in the upstream pool |
-| `runtimeTuning.streamUpstreamPoolIdleTimeoutMs` | int | `30000` | Idle timeout for stream upstream connections (ms) |
+| `runtime_tuning.streamUpstreamPoolSize` | int | `128` | Maximum idle stream connections in the upstream pool |
+| `runtime_tuning.streamUpstreamPoolIdleTimeoutMs` | int | `30000` | Idle timeout for stream upstream connections (ms) |
 
 ### Work Stealing
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.workStealing` | bool | `true` | Enable Tokio work-stealing across worker threads |
+| `runtime_tuning.work_stealing` | bool | `true` | Enable Tokio work-stealing across worker threads |
 
 ### HTTP Cache
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.httpCache.enabled` | bool | `false` | Enable HTTP response caching |
-| `runtimeTuning.httpCache.maxSizeMb` | int | `256` | Maximum cache size in megabytes |
-| `runtimeTuning.httpCache.defaultTtlSeconds` | int | `60` | Default cache TTL in seconds |
+| `runtime_tuning.http_cache.enabled` | bool | `false` | Enable HTTP response caching |
+| `runtime_tuning.http_cache.maxSizeMb` | int | `256` | Maximum cache size in megabytes |
+| `runtime_tuning.http_cache.defaultTtlSeconds` | int | `60` | Default cache TTL in seconds |
 
 ### Graceful Shutdown
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.gracefulDrainPeriodMs` | int | `0` | Grace period for draining connections on shutdown (ms) |
+| `runtime_tuning.graceful_drain_period_ms` | int | `0` | Grace period for draining connections on shutdown (ms) |
 
 ### Active Health Checks
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.activeHealthCheckEnabled` | bool | `false` | Enable active health checking of backends |
-| `runtimeTuning.activeHealthCheckIntervalMs` | int | `5000` | Interval between health checks (ms) |
-| `runtimeTuning.activeHealthCheckTimeoutMs` | int | `1000` | Timeout for health check requests (ms) |
-| `runtimeTuning.activeHealthCheckUnhealthyThreshold` | int | `2` | Consecutive failures before marking unhealthy |
+| `runtime_tuning.activeHealthCheckEnabled` | bool | `false` | Enable active health checking of backends |
+| `runtime_tuning.activeHealthCheckIntervalMs` | int | `5000` | Interval between health checks (ms) |
+| `runtime_tuning.activeHealthCheckTimeoutMs` | int | `1000` | Timeout for health check requests (ms) |
+| `runtime_tuning.activeHealthCheckUnhealthyThreshold` | int | `2` | Consecutive failures before marking unhealthy |
 
 ### TCP Keepalive
 
@@ -220,31 +220,31 @@ Performance tuning parameters for the data plane:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.downstreamTcpKeepalive.enabled` | bool | `false` | Enable TCP keepalive for downstream connections |
-| `runtimeTuning.downstreamTcpKeepalive.idleMs` | int | `60000` | Idle time before sending keepalive probes (ms) |
-| `runtimeTuning.downstreamTcpKeepalive.intervalMs` | int | `15000` | Interval between keepalive probes (ms) |
-| `runtimeTuning.downstreamTcpKeepalive.probeCount` | int | `4` | Number of probes before declaring dead |
-| `runtimeTuning.downstreamTcpKeepalive.userTimeoutMs` | int | `0` | User timeout for keepalive (0 = OS default) |
+| `runtime_tuning.downstreamTcpKeepalive.enabled` | bool | `false` | Enable TCP keepalive for downstream connections |
+| `runtime_tuning.downstreamTcpKeepalive.idleMs` | int | `60000` | Idle time before sending keepalive probes (ms) |
+| `runtime_tuning.downstreamTcpKeepalive.intervalMs` | int | `15000` | Interval between keepalive probes (ms) |
+| `runtime_tuning.downstreamTcpKeepalive.probeCount` | int | `4` | Number of probes before declaring dead |
+| `runtime_tuning.downstreamTcpKeepalive.userTimeoutMs` | int | `0` | User timeout for keepalive (0 = OS default) |
 
 #### Upstream (backend-facing)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.upstreamTcpKeepalive.enabled` | bool | `true` | Enable TCP keepalive for upstream connections |
-| `runtimeTuning.upstreamTcpKeepalive.idleMs` | int | `60000` | Idle time before sending keepalive probes (ms) |
-| `runtimeTuning.upstreamTcpKeepalive.intervalMs` | int | `15000` | Interval between keepalive probes (ms) |
-| `runtimeTuning.upstreamTcpKeepalive.probeCount` | int | `4` | Number of probes before declaring dead |
-| `runtimeTuning.upstreamTcpKeepalive.userTimeoutMs` | int | `0` | User timeout for keepalive (0 = OS default) |
+| `runtime_tuning.upstream_tcp_keepalive.enabled` | bool | `true` | Enable TCP keepalive for upstream connections |
+| `runtime_tuning.upstream_tcp_keepalive.idleMs` | int | `60000` | Idle time before sending keepalive probes (ms) |
+| `runtime_tuning.upstream_tcp_keepalive.intervalMs` | int | `15000` | Interval between keepalive probes (ms) |
+| `runtime_tuning.upstream_tcp_keepalive.probeCount` | int | `4` | Number of probes before declaring dead |
+| `runtime_tuning.upstream_tcp_keepalive.userTimeoutMs` | int | `0` | User timeout for keepalive (0 = OS default) |
 
 ### TCP Optimizations
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeTuning.downstreamTcpFastopen` | bool | `null` | Enable TCP Fast Open for downstream (null = auto-detect) |
-| `runtimeTuning.downstreamDscp` | int | `null` | DSCP marking for downstream connections (null = disabled) |
-| `runtimeTuning.upstreamTcpRecvBuf` | int | `0` | Upstream TCP receive buffer size in bytes (0 = OS default) |
-| `runtimeTuning.upstreamTcpFastOpen` | bool | `true` | Enable TCP Fast Open for upstream connections |
-| `runtimeTuning.upstreamDscp` | int | `null` | DSCP marking for upstream connections (null = disabled) |
+| `runtime_tuning.downstream_tcp_fastopen` | bool | `null` | Enable TCP Fast Open for downstream (null = auto-detect) |
+| `runtime_tuning.downstream_dscp` | int | `null` | DSCP marking for downstream connections (null = disabled) |
+| `runtime_tuning.upstream_tcp_recv_buf` | int | `0` | Upstream TCP receive buffer size in bytes (0 = OS default) |
+| `runtime_tuning.upstream_tcp_fast_open` | bool | `true` | Enable TCP Fast Open for upstream connections |
+| `runtime_tuning.upstream_dscp` | int | `null` | DSCP marking for upstream connections (null = disabled) |
 
 TCP Fast Open reduces connection latency by allowing data to be sent during the initial TCP handshake. DSCP (Differentiated Services Code Point) marking enables QoS prioritization at the network level.
 
@@ -256,54 +256,54 @@ Protection limits to prevent overload and resource exhaustion:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpGlobalInflightLimit` | int | `16384` | Maximum concurrent in-flight HTTP requests (0 = unlimited) |
-| `runtimeProtection.httpGlobalRateLimitRequestsPerSecond` | int | `10000` | Global rate limit (requests/second, 0 = unlimited) |
-| `runtimeProtection.httpGlobalRateLimitBurst` | int | `20000` | Burst allowance for global rate limit |
+| `runtime_protection.httpGlobalInflightLimit` | int | `16384` | Maximum concurrent in-flight HTTP requests (0 = unlimited) |
+| `runtime_protection.httpGlobalRateLimitRequestsPerSecond` | int | `10000` | Global rate limit (requests/second, 0 = unlimited) |
+| `runtime_protection.httpGlobalRateLimitBurst` | int | `20000` | Burst allowance for global rate limit |
 
 ### Listener Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpListenerInflightLimit` | int | `8192` | Maximum concurrent requests per listener (0 = unlimited) |
-| `runtimeProtection.httpListenerRateLimitRequestsPerSecond` | int | `5000` | Per-listener rate limit (0 = unlimited) |
-| `runtimeProtection.httpListenerRateLimitBurst` | int | `10000` | Burst allowance for listener rate limit |
+| `runtime_protection.httpListenerInflightLimit` | int | `8192` | Maximum concurrent requests per listener (0 = unlimited) |
+| `runtime_protection.httpListenerRateLimitRequestsPerSecond` | int | `5000` | Per-listener rate limit (0 = unlimited) |
+| `runtime_protection.httpListenerRateLimitBurst` | int | `10000` | Burst allowance for listener rate limit |
 
 ### Route Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpRouteInflightLimit` | int | `4096` | Maximum concurrent requests per route (0 = unlimited) |
-| `runtimeProtection.httpRouteRateLimitRequestsPerSecond` | int | `2000` | Per-route rate limit (0 = unlimited) |
-| `runtimeProtection.httpRouteRateLimitBurst` | int | `4000` | Burst allowance for route rate limit |
+| `runtime_protection.httpRouteInflightLimit` | int | `4096` | Maximum concurrent requests per route (0 = unlimited) |
+| `runtime_protection.httpRouteRateLimitRequestsPerSecond` | int | `2000` | Per-route rate limit (0 = unlimited) |
+| `runtime_protection.httpRouteRateLimitBurst` | int | `4000` | Burst allowance for route rate limit |
 
 ### Backend Circuit Breaker
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpBackendCircuitBreakerMaxRequests` | int | `4096` | Maximum concurrent requests per backend (0 = unlimited) |
+| `runtime_protection.httpBackendCircuitBreakerMaxRequests` | int | `4096` | Maximum concurrent requests per backend (0 = unlimited) |
 
 ### Request Size Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.httpMaxRequestBodyBytes` | int | `10485760` | Maximum request body size in bytes (0 = unlimited) |
-| `runtimeProtection.httpMaxRequestHeaderBytes` | int | `65536` | Maximum request header size in bytes (0 = unlimited) |
+| `runtime_protection.httpMaxRequestBodyBytes` | int | `10485760` | Maximum request body size in bytes (0 = unlimited) |
+| `runtime_protection.httpMaxRequestHeaderBytes` | int | `65536` | Maximum request header size in bytes (0 = unlimited) |
 
 ### TCP/UDP Limits
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `runtimeProtection.tcpGlobalConnectionLimit` | int | `32768` | Maximum concurrent TCP connections (0 = unlimited) |
-| `runtimeProtection.tcpListenerConnectionLimit` | int | `8192` | Maximum TCP connections per listener (0 = unlimited) |
-| `runtimeProtection.udpGlobalDatagramLimit` | int | `100000` | Maximum concurrent UDP datagrams (0 = unlimited) |
-| `runtimeProtection.udpListenerDatagramLimit` | int | `50000` | Maximum UDP datagrams per listener (0 = unlimited) |
+| `runtime_protection.tcpGlobalConnectionLimit` | int | `32768` | Maximum concurrent TCP connections (0 = unlimited) |
+| `runtime_protection.tcpListenerConnectionLimit` | int | `8192` | Maximum TCP connections per listener (0 = unlimited) |
+| `runtime_protection.udpGlobalDatagramLimit` | int | `100000` | Maximum concurrent UDP datagrams (0 = unlimited) |
+| `runtime_protection.udpListenerDatagramLimit` | int | `50000` | Maximum UDP datagrams per listener (0 = unlimited) |
 
 ## Session Persistence
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `sessionPersistence.secretKey` | string | `""` | Secret key for session cookie signing |
-| `sessionPersistence.secretKeyFile` | string | `""` | Path to file containing the secret key |
+| `session_persistence.secret_key` | string | `""` | Secret key for session cookie signing |
+| `session_persistence.secret_key_file` | string | `""` | Path to file containing the secret key |
 
 ## xDS TLS
 
@@ -311,18 +311,18 @@ TLS configuration for the xDS connection to the control plane:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `xdsTls.enabled` | bool | `false` | Enable TLS for the xDS connection |
-| `xdsTls.caPath` | string | `""` | Path to the CA certificate for verifying the control plane |
-| `xdsTls.certPath` | string | `""` | Path to the client certificate (for mTLS) |
-| `xdsTls.keyPath` | string | `""` | Path to the client private key (for mTLS) |
-| `xdsTls.domainName` | string | `""` | Expected server name for certificate validation |
+| `xds_tls.enabled` | bool | `false` | Enable TLS for the xDS connection |
+| `xds_tls.ca_path` | string | `""` | Path to the CA certificate for verifying the control plane |
+| `xds_tls.cert_path` | string | `""` | Path to the client certificate (for mTLS) |
+| `xds_tls.key_path` | string | `""` | Path to the client private key (for mTLS) |
+| `xds_tls.domain_name` | string | `""` | Expected server name for certificate validation |
 
 ## xDS Transport
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `xdsTransport.connectTimeoutMs` | int | `5000` | Timeout for establishing the xDS connection (ms) |
-| `xdsTransport.keepaliveIntervalMs` | int | `10000` | Interval for xDS keepalive pings (ms) |
+| `xdsTransport.connect_timeout_ms` | int | `5000` | Timeout for establishing the xDS connection (ms) |
+| `xdsTransport.keepalive_interval_ms` | int | `10000` | Interval for xDS keepalive pings (ms) |
 | `xdsTransport.keepaliveTimeoutMs` | int | `5000` | Timeout for xDS keepalive ping responses (ms) |
 | `xdsTransport.initialReconnectBackoffMs` | int | `2000` | Initial backoff for xDS reconnection (ms) |
 | `xdsTransport.maxReconnectBackoffMs` | int | `30000` | Maximum backoff for xDS reconnection (ms) |
@@ -343,22 +343,22 @@ TLS configuration for the xDS connection to the control plane:
 The following is a complete data plane configuration with all available options:
 
 ```yaml
-nodeId: "dp-local"
+node_id: "dp-local"
 cluster: "default"
-controlPlaneAddr: "http://127.0.0.1:18080"
-adminAddr: "127.0.0.1:19080"
+control_plane_addr: "http://127.0.0.1:18080"
+admin_addr: "127.0.0.1:19080"
 
 log:
   level: "info,nantian_core::connectors=off"
   format: "json"
-  addSource: false
-  includeTarget: false
-  includeThreadIds: false
-  includeThreadNames: false
-  nonBlocking: true
-  nonBlockingBufferedLines: 65536
-  dropWhenFull: true
-  openTelemetry:
+  add_source: false
+  include_target: false
+  include_thread_ids: false
+  include_thread_names: false
+  non_blocking: true
+  non_blocking_buffered_lines: 65536
+  drop_when_full: true
+  open_telemetry:
     enabled: false
     endpoint: ""
     protocol: "grpc"
@@ -368,36 +368,36 @@ log:
     serviceName: "nantian-dataplane"
     serviceNamespace: ""
 
-adminAuth:
-  bearerToken: ""
-  bearerTokenFile: ""
+admin_auth:
+  bearer_token: ""
+  bearer_token_file: ""
 
-accessLog:
+access_log:
   enabled: false
   path: "stdout"
   format: "%TIMESTAMP% %EVENT% %PROTOCOL% %LISTENER% %CLIENT_IP% %HOST% %METHOD% %PATH% %REQUEST_ID% %ROUTE_NAMESPACE% %ROUTE_NAME% %BACKEND% %STATUS% %LATENCY_MS% %BYTES_RECEIVED% %BYTES_SENT% %SNAPSHOT_VERSION% %RETRY_ATTEMPTS% %RESPONSE_FLAGS%"
   mode: "json"
-  sampleRate: 0.01
+  sample_rate: 0.01
   routeAnnotationPrefix: "gateway.nantian.dev/access-log-"
 
 runtime:
-  httpListenAddr: "0.0.0.0:80"
-  enableIpv6: true
-  enableHttp3: false
-  tlsMinVersion: "1.2"
-  tlsMaxVersion: "1.3"
+  http_listen_addr: "0.0.0.0:80"
+  enable_ipv6: true
+  enable_http3: false
+  tls_min_version: "1.2"
+  tls_max_version: "1.3"
   tlsAssetDir: ""
 
-runtimeTuning:
+runtime_tuning:
   httpReloadRetryIntervalMs: 1000
   streamReloadRetryIntervalMs: 1000
   downstreamReadTimeoutMs: 60000
   httpMaxConnectionAgeMs: 0
   httpKeepaliveRequestLimit: 0
-  upstreamConnectionTimeoutMs: 5000
-  upstreamReadTimeoutMs: 30000
-  upstreamIdleTimeoutMs: 60000
-  httpCapacity:
+  upstream_connection_timeout_ms: 5000
+  upstream_read_timeout_ms: 30000
+  upstream_idle_timeout_ms: 60000
+  http_capacity:
     workerThreads: 0
     acceptConcurrency: 16
     upstreamKeepalivePoolSize: 32768
@@ -412,17 +412,17 @@ runtimeTuning:
   retryBudgetBurst: 16
   streamUpstreamPoolSize: 128
   streamUpstreamPoolIdleTimeoutMs: 30000
-  workStealing: true
-  downstreamTcpFastopen: null
-  downstreamDscp: null
-  upstreamTcpRecvBuf: 0
-  upstreamTcpFastOpen: true
-  upstreamDscp: null
-  httpCache:
+  work_stealing: true
+  downstream_tcp_fastopen: null
+  downstream_dscp: null
+  upstream_tcp_recv_buf: 0
+  upstream_tcp_fast_open: true
+  upstream_dscp: null
+  http_cache:
     enabled: false
     maxSizeMb: 256
     defaultTtlSeconds: 60
-  gracefulDrainPeriodMs: 0
+  graceful_drain_period_ms: 0
   activeHealthCheckEnabled: false
   activeHealthCheckIntervalMs: 5000
   activeHealthCheckTimeoutMs: 1000
@@ -433,14 +433,14 @@ runtimeTuning:
     intervalMs: 15000
     probeCount: 4
     userTimeoutMs: 0
-  upstreamTcpKeepalive:
+  upstream_tcp_keepalive:
     enabled: true
     idleMs: 60000
     intervalMs: 15000
     probeCount: 4
     userTimeoutMs: 0
 
-runtimeProtection:
+runtime_protection:
   httpGlobalInflightLimit: 16384
   httpListenerInflightLimit: 8192
   httpRouteInflightLimit: 4096
@@ -458,20 +458,20 @@ runtimeProtection:
   udpGlobalDatagramLimit: 100000
   udpListenerDatagramLimit: 50000
 
-sessionPersistence:
-  secretKey: ""
-  secretKeyFile: ""
+session_persistence:
+  secret_key: ""
+  secret_key_file: ""
 
-xdsTls:
+xds_tls:
   enabled: false
-  caPath: ""
-  certPath: ""
-  keyPath: ""
-  domainName: ""
+  ca_path: ""
+  cert_path: ""
+  key_path: ""
+  domain_name: ""
 
 xdsTransport:
-  connectTimeoutMs: 5000
-  keepaliveIntervalMs: 10000
+  connect_timeout_ms: 5000
+  keepalive_interval_ms: 10000
   keepaliveTimeoutMs: 5000
   initialReconnectBackoffMs: 2000
   maxReconnectBackoffMs: 30000
