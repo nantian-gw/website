@@ -2,37 +2,37 @@
 title: 发布流程
 ---
 
-Nantian Gateway 采用语义化版本控制，通过 GitHub Releases 分发二进制和容器镜像，通过 Helm Chart 仓库分发部署包。本页说明完整的发布流程，供维护者参考。
+Nantian Gateway 采用日历化版本控制，通过 GitHub Releases 分发二进制和容器镜像，通过 Helm Chart 仓库分发部署包。本页说明完整的发布流程，供维护者参考。
 
 ## 版本策略
 
-### 语义化版本
+### 日历化版本
 
-Nantian Gateway 遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-CN/) 规范。版本号格式为 `MAJOR.MINOR.PATCH`：
+Nantian Gateway 遵循 [Calendar Versioning (CalVer)](https://calver.org/) 规范。版本号格式为 `vYYYY.MM.PATCH`：
 
 | 版本类型 | 变更内容 | 示例 |
 |---------|---------|------|
-| PATCH（修订） | Bug 修复、安全补丁，不影响 API 兼容性 | `v1.2.3` → `v1.2.4` |
-| MINOR（次要） | 新功能，向后兼容的 API 扩展 | `v1.2.0` → `v1.3.0` |
-| MAJOR（主要） | 不兼容的 API 变更，重大架构调整 | `v1.x.x` → `v2.0.0` |
+| PATCH（修订） | Bug 修复、安全补丁，不影响 API 兼容性 | `v2026.06.0` → `v2026.06.1` |
+| MONTHLY（月更） | 新功能，向后兼容的 API 扩展 | `v2026.06.0` → `v2026.07.0` |
+| YEARLY（年度） | 不兼容的 API 变更，重大架构调整 | `v2026.12.0` → `v2027.01.0` |
 
 ### 版本号使用场景
 
-- **稳定版**：`v1.2.3` — 推荐生产环境使用
-- **预发布版**：`v1.3.0-alpha.1`、`v1.3.0-beta.1`、`v1.3.0-rc.1` — 功能预览和测试
+- **稳定版**：`v2026.06.0` — 推荐生产环境使用
+- **预发布版**：`v2026.07.0-rc.1`、`v2026.07.0-rc.2`、`v2026.07.0-rc.3` — 功能预览和测试
 - **开发版**：`v0.0.0-dev` — 从 `main` 分支构建的版本
 
-项目已经拆分为多个组件仓库。稳定发布使用同一个 product version，例如 `v1.3.0`，作为 controlplane、dataplane 和 dashboard 镜像 tag。Helm chart 使用不带 `v` 前缀的 chart version，例如 `1.3.0`，并在 `appVersion: "v1.3.0"` 中记录 product version。`latest`、`sha-*`、`ci-*` 等开发镜像 tag 只用于验证，不应替代稳定发布 tag。
+项目已经拆分为多个组件仓库。稳定发布使用同一个 product version，例如 `v2026.07.0`，作为 controlplane、dataplane 和 dashboard 镜像 tag。Helm chart 使用不带 `v` 前缀的 chart version，例如 `2026.07.0`，并在 `appVersion: "v2026.07.0"` 中记录 product version。`latest`、`sha-*`、`ci-*` 等开发镜像 tag 只用于验证，不应替代稳定发布 tag。
 
 ### 支持策略
 
-Nantian Gateway 维护最近两个 MINOR 版本的安全和关键 Bug 修复：
+Nantian Gateway 维护最近两个月度版本的安全和关键 Bug 修复：
 
 | 版本 | 状态 | 支持截止 |
 |------|------|---------|
-| `v1.3.x` | 当前主要版本 | 下一个 MINOR 发布后 3 个月 |
-| `v1.2.x` | 维护中 | 下一个 MINOR 发布后 3 个月 |
-| `v1.1.x` | 生命周期结束 | 已停止支持 |
+| `v2026.07.x` | 当前版本 | 下一个月度发布后 3 个月 |
+| `v2026.06.x` | 维护中 | 下一个月度发布后 3 个月 |
+| `v2026.05.x` | 生命周期结束 | 已停止支持 |
 
 ## 发布产物
 
@@ -67,7 +67,7 @@ make test-conformance
 ### 2. 创建发布分支
 
 ```bash
-product_version=v1.3.0
+product_version=v2026.07.0
 chart_version=${product_version#v}
 
 # 在组件仓库中创建发布分支
@@ -88,7 +88,7 @@ git checkout -b release/${product_version}
 在 `CHANGELOG.md` 中添加新版本的变更记录。使用以下格式：
 
 ```markdown
-## [1.3.0] - 2024-06-15
+## [2026.07.0] - 2026-07-01
 
 ### 新增
 - feat(controlplane): 支持 HTTPRoute 后端协议选择
@@ -103,7 +103,7 @@ git checkout -b release/${product_version}
 - refactor(dataplane): 重构 HTTP 路由匹配引擎，性能提升 15%
 
 ### 废弃
-- deprecation(proto): SecretRef 字段将在 v2.0.0 中移除
+- deprecation(proto): SecretRef 字段将在 v2027.01.0 中移除
 
 ### 安全
 - security: 修复 gRPC 服务中的输入验证缺陷 (CVE-2024-XXXX)
@@ -112,26 +112,26 @@ git checkout -b release/${product_version}
 ### 4. 提交并创建标签
 
 ```bash
-product_version=v1.3.0
+product_version=v2026.07.0
 
 # 在每个受影响的组件仓库中提交发布变更
 git add CHANGELOG.md
-git commit -m "chore(release): prepare v1.3.0"
+git commit -m "chore(release): prepare v2026.07.0"
 git push origin release/${product_version}
 
 # 在 helm-charts 仓库中提交 chart version 和 appVersion 更新
 git add charts/nantian-gw/Chart.yaml CHANGELOG.md
-git commit -m "chore(chart): release v1.3.0"
+git commit -m "chore(chart): release v2026.07.0"
 git push origin release/${product_version}
 
 # 创建 PR 合并到 main
-# 在 GitHub 上创建 Pull Request，标题为 "Release v1.3.0"
+# 在 GitHub 上创建 Pull Request，标题为 "Release v2026.07.0"
 
 # 合并后，在 main 分支上创建标签
 git checkout main
 git pull upstream main
-git tag -a v1.3.0 -m "Release v1.3.0"
-git push upstream v1.3.0
+git tag -a v2026.07.0 -m "Release v2026.07.0"
+git push upstream v2026.07.0
 ```
 
 ### 5. GitHub Release
@@ -157,7 +157,7 @@ helm repo index . --url https://chart.nantian.dev
 
 # 推送到 Helm Chart 仓库
 git add .
-git commit -m "chore(chart): release v1.3.0"
+git commit -m "chore(chart): release v2026.07.0"
 git push
 ```
 
@@ -166,14 +166,10 @@ git push
 对于需要社区测试的功能，可以发布预发布版本：
 
 ```bash
-# Alpha 版本 — 功能可能不完整
-git tag -a v1.4.0-alpha.1 -m "Pre-release v1.4.0-alpha.1"
-
-# Beta 版本 — 功能基本完整，需要测试
-git tag -a v1.4.0-beta.1 -m "Pre-release v1.4.0-beta.1"
-
-# Release Candidate — 候选发布版本
-git tag -a v1.4.0-rc.1 -m "Pre-release v1.4.0-rc.1"
+# 候选发布版本
+git tag -a v2026.08.0-rc.1 -m "Pre-release v2026.08.0-rc.1"
+git tag -a v2026.08.0-rc.2 -m "Pre-release v2026.08.0-rc.2"
+git tag -a v2026.08.0-rc.3 -m "Pre-release v2026.08.0-rc.3"
 ```
 
 预发布版本在 GitHub 上标记为 "Pre-release"，不会出现在默认的"Latest Release"中。
@@ -184,7 +180,7 @@ git tag -a v1.4.0-rc.1 -m "Pre-release v1.4.0-rc.1"
 
 ```bash
 # 从发布分支创建
-git checkout release/v1.2
+git checkout release/v2026.06
 git checkout -b fix/critical-bug
 
 # 修复 Bug 后 cherry-pick 到 main
@@ -192,7 +188,7 @@ git checkout main
 git cherry-pick <commit-hash>
 
 # 创建补丁标签
-git tag -a v1.2.4 -m "Patch release v1.2.4"
+git tag -a v2026.06.1 -m "Patch release v2026.06.1"
 ```
 
 ## 发布检查清单
@@ -211,17 +207,17 @@ git tag -a v1.2.4 -m "Patch release v1.2.4"
 
 ## 升级兼容性
 
-对于 MINOR 和 MAJOR 版本，需要提供升级指南，说明：
+对于 MONTHLY 和 YEARLY 版本，需要提供升级指南，说明：
 
 - 删除或废弃的 API 字段
 - 行为变更（如默认值变化）
 - 新增的必需配置项
 - 数据迁移步骤（如有）
 
-升级指南放在 `docs/upgrade/` 目录下，以版本号命名，如 `docs/upgrade/v1.2-to-v1.3.md`。
+升级指南放在 `docs/upgrade/` 目录下，以版本号命名，如 `docs/upgrade/v2026.06-to-v2026.07.md`。
 
 :::caution[破坏性变更]
-MAJOR 版本中的破坏性变更必须在发布前在 `CHANGELOG.md` 中明确标注，并在升级指南中提供详细的迁移步骤。建议在正式发布前至少提供一个 RC 版本供社区测试。
+YEARLY 版本中的破坏性变更必须在发布前在 `CHANGELOG.md` 中明确标注，并在升级指南中提供详细的迁移步骤。建议在正式发布前至少提供一个 RC 版本供社区测试。
 :::
 
 ## 下一步

@@ -117,7 +117,7 @@ kubectl apply -f tls-secrets-backup.yaml
 
 # 验证恢复状态
 kubectl get gateway -A
-curl http://<controlplane>:19080/v1/summary
+curl http://<controlplane>:18081/v1/summary
 ```
 
 ### 恢复后的验证
@@ -127,7 +127,7 @@ curl http://<controlplane>:19080/v1/summary
 1. **检查控制面状态**：
 
    ```bash
-   curl http://<controlplane>:19080/v1/summary
+   curl http://<controlplane>:18081/v1/summary
    ```
 
    确认 `listenerCount`、`routeCount` 和 `backendCount` 与预期一致。
@@ -135,7 +135,7 @@ curl http://<controlplane>:19080/v1/summary
 2. **检查数据面同步**：
 
    ```bash
-   curl http://<controlplane>:19080/v1/snapshot-sync
+   curl http://<controlplane>:18081/v1/snapshot-sync
    ```
 
    确认 `driftedNodeCount` 为 0。
@@ -143,7 +143,7 @@ curl http://<controlplane>:19080/v1/summary
 3. **检查数据面就绪**：
 
    ```bash
-   curl http://<controlplane>:19080/v1/nodes
+   curl http://<controlplane>:18081/v1/nodes
    ```
 
    确认所有节点的 `ready` 字段为 `true`。

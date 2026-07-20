@@ -45,7 +45,7 @@ curl http://<dataplane-pod-ip>:19080/metrics
 
 ```bash
 # 通过控制面代理查询指定数据面节点
-curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
+curl http://<controlplane>:18081/v1/dataplanes/<nodeId>/summary
 ```
 
 ## 常见问题
@@ -65,7 +65,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 2. 检查数据面是否连接到控制面：
 
    ```bash
-   curl http://<controlplane>:19080/v1/nodes
+   curl http://<controlplane>:18081/v1/nodes
    ```
 
    查看目标节点的 `connected` 字段是否为 `true`。
@@ -115,13 +115,13 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 3. 通过 Admin API 检查快照中是否包含该路由：
 
    ```bash
-   curl http://<controlplane>:19080/v1/routes
+   curl http://<controlplane>:18081/v1/routes
    ```
 
 4. 检查监听器是否就绪：
 
    ```bash
-   curl http://<controlplane>:19080/v1/listeners
+   curl http://<controlplane>:18081/v1/listeners
    ```
 
    查看目标监听器的状态。
@@ -129,7 +129,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 5. 检查后端端点是否健康：
 
    ```bash
-   curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
+   curl http://<controlplane>:18081/v1/backends/<namespace>/<name>
    ```
 
    查看后端集群的端点列表和健康状态。
@@ -193,7 +193,7 @@ curl http://<controlplane>:19080/v1/dataplanes/<nodeId>/summary
 2. 检查后端端点健康状态：
 
    ```bash
-   curl http://<controlplane>:19080/v1/backends/<namespace>/<name>
+   curl http://<controlplane>:18081/v1/backends/<namespace>/<name>
    ```
 
 3. 检查数据面日志中的错误信息。

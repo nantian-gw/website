@@ -4,37 +4,37 @@ description: "Complete release process for Nantian Gateway maintainers including
 slug: 1.5/contributing/release
 ---
 
-Nantian Gateway follows semantic versioning, distributes binaries and container images through GitHub Releases, and distributes deployment packages through the Helm Chart repository. This page explains the complete release process for maintainers.
+Nantian Gateway follows calendar versioning, distributes binaries and container images through GitHub Releases, and distributes deployment packages through the Helm Chart repository. This page explains the complete release process for maintainers.
 
 ## Versioning Policy
 
-### Semantic Versioning
+### Calendar Versioning
 
-Nantian Gateway follows the [Semantic Versioning 2.0.0](https://semver.org/) specification. The version number format is `MAJOR.MINOR.PATCH`:
+Nantian Gateway follows [Calendar Versioning (CalVer)](https://calver.org/) with the format `vYYYY.MM.PATCH`:
 
 | Version Type | Changes | Example |
 |-------------|---------|---------|
-| PATCH | Bug fixes, security patches, no API compatibility changes | `v1.2.3` → `v1.2.4` |
-| MINOR | New features, backward-compatible API extensions | `v1.2.0` → `v1.3.0` |
-| MAJOR | Incompatible API changes, major architectural overhauls | `v1.x.x` → `v2.0.0` |
+| PATCH | Bug fixes, security patches, no API compatibility changes | `v2026.06.0` → `v2026.06.1` |
+| MONTHLY | New features, backward-compatible API extensions | `v2026.06.0` → `v2026.07.0` |
+| YEARLY | Incompatible API changes, major architectural overhauls | `v2026.12.0` → `v2027.01.0` |
 
 ### Version Number Usage
 
-* **Stable release**: `v1.2.3` — recommended for production use
-* **Pre-release**: `v1.3.0-alpha.1`, `v1.3.0-beta.1`, `v1.3.0-rc.1` — feature preview and testing
+* **Stable release**: `v2026.06.0` — recommended for production use
+* **Pre-release**: `v2026.07.0-rc.1`, `v2026.07.0-rc.2`, `v2026.07.0-rc.3` — feature preview and testing
 * **Development build**: `v0.0.0-dev` — built from the `main` branch
 
-The project is split across component repositories. A stable release uses one product version such as `v1.3.0` for the controlplane, dataplane, and dashboard image tags. The Helm chart uses chart version `1.3.0` and records the product version in `appVersion: "v1.3.0"`. Development image tags such as `latest`, `sha-*`, and `ci-*` are for validation and should not replace stable release tags.
+The project is split across component repositories. A stable release uses one product version such as `v2026.07.0` for the controlplane, dataplane, and dashboard image tags. The Helm chart uses chart version `2026.07.0` and records the product version in `appVersion: "v2026.07.0"`. Development image tags such as `latest`, `sha-*`, and `ci-*` are for validation and should not replace stable release tags.
 
 ### Support Policy
 
-Nantian Gateway maintains security and critical bug fixes for the two most recent MINOR versions:
+Nantian Gateway maintains security and critical bug fixes for the two most recent monthly releases:
 
 | Version | Status | Support Until |
 |---------|--------|---------------|
-| `v1.3.x` | Current major version | 3 months after the next MINOR release |
-| `v1.2.x` | Maintenance | 3 months after the next MINOR release |
-| `v1.1.x` | End of life | No longer supported |
+| `v2026.07.x` | Current release | 3 months after the next monthly release |
+| `v2026.06.x` | Maintenance | 3 months after the next monthly release |
+| `v2026.05.x` | End of life | No longer supported |
 
 ## Release Artifacts
 
@@ -69,7 +69,7 @@ make test-conformance
 ### 2. Create a Release Branch
 
 ```bash
-product_version=v1.3.0
+product_version=v2026.07.0
 chart_version=${product_version#v}
 
 # Create release branches in the component repositories
@@ -105,7 +105,7 @@ Add the new version's change record to `CHANGELOG.md`. Use the following format:
 - refactor(dataplane): refactor HTTP route matching engine, 15% performance improvement
 
 ### Deprecated
-- deprecation(proto): SecretRef field will be removed in v2.0.0
+- deprecation(proto): SecretRef field will be removed in v2027.01.0
 
 ### Security
 - security: fix input validation flaw in gRPC service (CVE-2024-XXXX)
@@ -114,26 +114,26 @@ Add the new version's change record to `CHANGELOG.md`. Use the following format:
 ### 4. Commit and Create a Tag
 
 ```bash
-product_version=v1.3.0
+product_version=v2026.07.0
 
 # Commit the release changes in each affected component repository
 git add CHANGELOG.md
-git commit -m "chore(release): prepare v1.3.0"
+git commit -m "chore(release): prepare v2026.07.0"
 git push origin release/${product_version}
 
 # Commit the Helm chart version and appVersion update in the helm-charts repository
 git add charts/nantian-gw/Chart.yaml CHANGELOG.md
-git commit -m "chore(chart): release v1.3.0"
+git commit -m "chore(chart): release v2026.07.0"
 git push origin release/${product_version}
 
 # Create a PR to merge into main
-# On GitHub, create a Pull Request titled "Release v1.3.0"
+# On GitHub, create a Pull Request titled "Release v2026.07.0"
 
 # After merging, create the tag on the main branch
 git checkout main
 git pull upstream main
-git tag -a v1.3.0 -m "Release v1.3.0"
-git push upstream v1.3.0
+git tag -a v2026.07.0 -m "Release v2026.07.0"
+git push upstream v2026.07.0
 ```
 
 ### 5. GitHub Release
@@ -159,7 +159,7 @@ helm repo index . --url https://chart.nantian.dev
 
 # Push to the Helm Chart repository
 git add .
-git commit -m "chore(chart): release v1.3.0"
+git commit -m "chore(chart): release v2026.07.0"
 git push
 ```
 
@@ -169,13 +169,13 @@ For features that need community testing, you can publish pre-release versions:
 
 ```bash
 # Alpha version — features may be incomplete
-git tag -a v1.4.0-alpha.1 -m "Pre-release v1.4.0-alpha.1"
+git tag -a v2026.08.0-alpha.1 -m "Pre-release v2026.08.0-alpha.1"
 
 # Beta version — features are mostly complete, needs testing
-git tag -a v1.4.0-beta.1 -m "Pre-release v1.4.0-beta.1"
+git tag -a v2026.08.0-beta.1 -m "Pre-release v2026.08.0-beta.1"
 
 # Release Candidate — candidate for final release
-git tag -a v1.4.0-rc.1 -m "Pre-release v1.4.0-rc.1"
+git tag -a v2026.08.0-rc.1 -m "Pre-release v2026.08.0-rc.1"
 ```
 
 Pre-release versions are marked as "Pre-release" on GitHub and won't appear as the default "Latest Release".
@@ -194,7 +194,7 @@ git checkout main
 git cherry-pick <commit-hash>
 
 # Create a patch tag
-git tag -a v1.2.4 -m "Patch release v1.2.4"
+git tag -a v2026.06.1 -m "Patch release v2026.06.1"
 ```
 
 ## Release Checklist
