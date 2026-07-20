@@ -20,35 +20,35 @@ IR 充当解耦层：
 ## IR 是如何构建的
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes API                           │
-│                                                              │
-│  Gateways  Routes  Services  EndpointSlices  AIServices ... │
-└────────────────────────┬────────────────────────────────────┘
-                         │  Watch & reconcile（监听与调和）
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      翻译器（Translator）                     │
-│                                                              │
-│  Resolve references（解析引用）  •  Collapse hierarchies（折叠层级） │
-│  Apply defaults（应用默认值）   •  Normalize configurations（规范化配置）│
-│  Validate rules（校验规则）     •  Reject invalid combinations（拒绝无效组合）│
-└────────────────────────┬────────────────────────────────────┘
-                         │  IR Snapshot（IR 快照）
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    IR（带版本号）                              │
-│                                                              │
-│  listeners  routes  backends  endpoints  AI services  Wasm   │
-└────────────────────────┬────────────────────────────────────┘
-                         │  xDS（gRPC 双向流）
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      数据面（Data Planes）                    │
-│                                                              │
-│  Receive snapshot（接收快照）  •  Apply to runtime（应用到运行时）  │
-│  Ack to control（向控制面确认）                                  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    Kubernetes API                        │
+│                                                          │
+│  Gateways  Routes  Services  EndpointSlices  AIServices  │
+└──────────────────────┬───────────────────────────────────┘
+                       │  Watch & reconcile（监听与调和）
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                 翻译器（Translator）                     │
+│                                                          │
+│  Resolve references（解析引用）・Collapse hierarchies（折叠层级）│
+│  Apply defaults（应用默认值）・Normalize configurations（规范化配置）│
+│  Validate rules（校验规则）・Reject invalid combinations（拒绝无效组合）│
+└──────────────────────┬───────────────────────────────────┘
+                       │  IR Snapshot（IR 快照）
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                IR（带版本号）                             │
+│                                                          │
+│  listeners  routes  backends  endpoints  AI services     │
+└──────────────────────┬───────────────────────────────────┘
+                       │  xDS（gRPC 双向流）
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                 数据面（Data Planes）                    │
+│                                                          │
+│  Receive snapshot（接收快照）· Apply to runtime（应用到运行时）│
+│  Ack to control（向控制面确认）                            │
+└──────────────────────────────────────────────────────────┘
 ```
 
 翻译器在每次监听的 Kubernetes 资源发生变化时运行。它收集所有相关资源，解析交叉引用，应用策略，并生成一个 IR 快照。如果校验通过，快照会获得一个版本号，并通过 xDS 发布到数据面。

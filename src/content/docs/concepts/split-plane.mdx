@@ -18,34 +18,34 @@ A split-plane architecture separates these concerns. The control plane focuses o
 ## Architecture Overview
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                      Kubernetes Cluster                      │
-│                                                              │
-│  ┌──────────────────┐       ┌─────────────────────────────┐ │
-│  │   Control Plane   │       │       Data Plane (Rust)      │ │
-│  │      (Go)         │       │                              │ │
-│  │                   │ gRPC  │  ┌─────────────────────────┐│ │
-│  │  • Watch K8s API  │◄─────►│  │   Proxy Runtime         ││ │
-│  │  • Translate CRDs │ xDS   │  │  • TLS termination      ││ │
-│  │  • Push config    │       │  │  • HTTP routing          ││ │
-│  │  • Admin API      │       │  │  • Rate limiting         ││ │
-│  │  • Web Dashboard  │       │  │  • AI gateway            ││ │
-│  └──────────────────┘       │  │  • Wasm extensions       ││ │
-│                              │  └─────────────────────────┘│ │
-│                              │                              │ │
-│                              │  ┌─────────────────────────┐│ │
-│                              │  │   xDS Client             ││ │
-│                              │  │  • Receive config        ││ │
-│                              │  │  • Apply snapshots       ││ │
-│                              │  │  • Health reporting      ││ │
-│                              │  └─────────────────────────┘│ │
-│                              └─────────────────────────────┘ │
-│                                                              │
-│                         ┌──────────┐                         │
-│                         │ Backend   │                         │
-│                         │ Services  │                         │
-│                         └──────────┘                         │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                     │
+│                                                           │
+│  ┌──────────────────┐      ┌───────────────────────────┐  │
+│  │   Control Plane   │      │    Data Plane (Rust)       │  │
+│  │      (Go)         │      │                            │  │
+│  │                   │gRPC  │  ┌──────────────────────┐  │  │
+│  │  • Watch K8s API  │◄───► │  │   Proxy Runtime      │  │  │
+│  │  • Translate CRDs │ xDS  │  │  • TLS termination   │  │  │
+│  │  • Push config    │      │  │  • HTTP routing       │  │  │
+│  │  • Admin API      │      │  │  • Rate limiting      │  │  │
+│  │  • Web Dashboard  │      │  │  • AI gateway         │  │  │
+│  └──────────────────┘      │  │  • Wasm extensions    │  │  │
+│                             │  └──────────────────────┘  │  │
+│                             │                            │  │
+│                             │  ┌──────────────────────┐  │  │
+│                             │  │   xDS Client          │  │  │
+│                             │  │  • Receive config     │  │  │
+│                             │  │  • Apply snapshots    │  │  │
+│                             │  │  • Health reporting   │  │  │
+│                             │  └──────────────────────┘  │  │
+│                             └───────────────────────────┘  │
+│                                                           │
+│                      ┌──────────┐                         │
+│                      │ Backend  │                         │
+│                      │ Services │                         │
+│                      └──────────┘                         │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Control Plane (Go)

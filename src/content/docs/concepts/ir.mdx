@@ -21,34 +21,34 @@ This split means the control plane can evolve its translation logic (new Gateway
 ## How IR Is Built
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                     Kubernetes API                           │
-│                                                              │
-│  Gateways  Routes  Services  EndpointSlices  AIServices ... │
-└────────────────────────┬────────────────────────────────────┘
-                         │  Watch & reconcile
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Translator                              │
-│                                                              │
-│  Resolve references  •  Collapse hierarchies                 │
-│  Apply defaults     •  Normalize configurations              │
-│  Validate rules     •  Reject invalid combinations           │
-└────────────────────────┬────────────────────────────────────┘
-                         │  IR Snapshot
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    IR (versioned)                             │
-│                                                              │
-│  listeners  routes  backends  endpoints  AI services  Wasm   │
-└────────────────────────┬────────────────────────────────────┘
-                         │  xDS (gRPC bidirectional stream)
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Data Planes                              │
-│                                                              │
-│  Receive snapshot  •  Apply to runtime  •  Ack to control    │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    Kubernetes API                        │
+│                                                          │
+│  Gateways  Routes  Services  EndpointSlices  AIServices  │
+└──────────────────────┬───────────────────────────────────┘
+                       │  Watch & reconcile
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                     Translator                           │
+│                                                          │
+│  Resolve references  ·  Collapse hierarchies             │
+│  Apply defaults      ·  Normalize configurations         │
+│  Validate rules      ·  Reject invalid combinations      │
+└──────────────────────┬───────────────────────────────────┘
+                       │  IR Snapshot
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                   IR (versioned)                         │
+│                                                          │
+│  listeners  routes  backends  endpoints  AI services    │
+└──────────────────────┬───────────────────────────────────┘
+                       │  xDS (gRPC bidirectional stream)
+                       ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Data Planes                           │
+│                                                          │
+│  Receive snapshot  ·  Apply to runtime  ·  Ack to control│
+└──────────────────────────────────────────────────────────┘
 ```
 
 The translator runs whenever a watched Kubernetes resource changes. It collects all relevant resources, resolves cross-references, applies policy, and produces a single IR snapshot. If validation passes, the snapshot gets a version number and is published to data planes via xDS.
