@@ -69,6 +69,25 @@ Install the required CRDs and enable the documented feature flags before creatin
 
 Read [Experimental Features](/configuration/experimental-features/) before using these APIs, then use [Custom And Experimental Resources](/api-reference/crds/) for current field references.
 
+## Feature Maturity
+
+Features move from experimental to stable on independent timelines. Use this table to gauge readiness for production:
+
+| Feature | Status | API Version | Production Ready? |
+|---------|--------|-------------|-------------------|
+| HTTP/HTTPS Routing | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
+| GRPCRoute | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
+| TLS Passthrough | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
+| TCP/UDP Routing | **Alpha** | `gateway.networking.k8s.io/v1alpha2` | ⚠️ With testing |
+| BackendTLSPolicy | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
+| AI Gateway | **Experimental** | `gateway.nantian.dev/v1alpha1` | ⚠️ Production evaluation |
+| TokenPolicy | **Experimental** | `gateway.nantian.dev/v1alpha1` | ⚠️ Production evaluation |
+| WasmPlugin | **Experimental** | `gateway.nantian.dev/v1alpha1` | ⚠️ Development/Staging |
+| BackendLBPolicy | **Experimental** | `gateway.networking.k8s.io/v1alpha2` | ⚠️ Production evaluation |
+| RoutePolicy | **Experimental** | `gateway.nantian.dev/v1alpha1` | ⚠️ Production evaluation |
+
+Features marked ⚠️ "Production evaluation" are under active development. Their APIs may change between releases. Test thoroughly in staging before production deployment.
+
 ## Where To Go Next
 
 - [AI Gateway](/features/ai-gateway/) — provider/model targets, token quotas, and AI observability

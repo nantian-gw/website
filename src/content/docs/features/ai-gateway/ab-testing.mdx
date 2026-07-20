@@ -84,6 +84,47 @@ Each variant selection is visible through the AI Gateway metrics. Track per-vari
 
 Use these metrics to compare variants and decide which model to promote. Combine with [operations metrics](/operations/metrics/) for end-to-end observability of your experiment pipeline.
 
+## Multi-Variant Example
+
+A typical experiment compares three or more variants simultaneously:
+
+```yaml
+abTesting:
+  experimentId: exp_multi_model_001
+  variants:
+    - name: gpt4o
+      model: gpt-4o
+      weight: 0.4
+      config:
+        temperature: 0.7
+    - name: claude-sonnet
+      model: claude-3-sonnet
+      weight: 0.3
+      config:
+        max_tokens: 4096
+    - name: gpt4-turbo
+      model: gpt-4-turbo
+      weight: 0.2
+    - name: mixtral
+      model: mixtral-8x7b
+      weight: 0.1
+      config:
+        provider: "ollama"
+```
+
+The `config` field on each variant carries arbitrary JSON that the application can inspect via a response header to understand which variant served the request.
+
+## Evaluating Results
+
+To determine which variant to promote:
+
+1. **Establish a baseline** — let the experiment run for at least 1 hour or 10,000 requests to reach statistical significance
+2. **Compare metrics by variant** — use the `variant` label in AI Gateway metrics dashboards
+3. **Watch for anomalies** — a variant with high error rates or latency spikes may indicate model API issues, not poor model quality
+4. **Promote the winner** — update the `AIService` `model` field to the winning variant and remove the `abTesting` block
+
+For cost-sensitive evaluations, include `nantian_gw_ai_cost_dollars_total` in your comparison. A faster but more expensive model may win on latency but lose on total cost of ownership.
+
 ## Related Pages
 
 - [AI Gateway](/features/ai-gateway/)

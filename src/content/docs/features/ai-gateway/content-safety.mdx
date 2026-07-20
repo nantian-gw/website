@@ -103,6 +103,30 @@ Content safety violations appear in the AI Gateway metrics under the `content_sa
 
 Combine these metrics with standard [troubleshooting](/operations/troubleshooting/) workflows to identify which models and applications generate the most safety events.
 
+## Comparison with External Moderation APIs
+
+Nantian Gateway's content safety runs locally in the data plane without extra network calls. This contrasts with external moderation services:
+
+| Approach | Latency | Cost | Privacy |
+|----------|---------|------|---------|
+| **Built-in (local)** | <1ms per message | Zero additional | Raw content stays in-cluster |
+| **External API (e.g., OpenAI Moderation)** | 50-200ms per call | Per-request pricing | Content sent to third party |
+
+The built-in filter is a good first layer for catching obvious violations. For sensitive production workloads, consider running the built-in filter as a fast pre-screen and routing flagged-but-unblocked content to an external moderation API for deeper analysis.
+
+## Response Inspection
+
+By default, the filter only inspects prompt (user) messages. To also inspect model responses, enable response inspection in your AIService configuration:
+
+```yaml
+contentSafety:
+  enabled: true
+  blockMode: true
+  inspectResponses: true
+```
+
+Response inspection catches harmful content that the model may generate, such as toxic completions or PII regurgitation. This adds the same per-message overhead to each response chunk during streaming.
+
 ## Related Pages
 
 - [AI Gateway](/features/ai-gateway/)

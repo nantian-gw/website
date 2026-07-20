@@ -83,6 +83,36 @@ spec:
 
 Custom patterns are added alongside the built-in patterns. Both sets run on every message, and overlapping matches are deduplicated with the longest match taking precedence.
 
+## Testing and Validation
+
+Before enabling PII masking in production, test your patterns against sample data:
+
+```bash
+# Send a test request with known PII
+curl -X POST https://gateway/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "My email is alice@example.com"}]
+  }'
+```
+
+The response should show the masked content. For audit-only validation without affecting end users, temporarily set `mode: redact` in a staging `AIService` with production traffic mirrored via [Request Mirroring](/guides/request-mirroring/).
+
+## Performance
+
+PII masking adds regex scanning to every request and response message. The overhead depends on message size and pattern complexity:
+
+| Scenario | Typical Overhead |
+|----------|-----------------|
+| Short prompts (<500 chars) | <1ms |
+| Long prompts (2K-8K chars) | 1-5ms |
+| Response streaming | Per-chunk overhead (masking applied to each chunk) |
+| Custom regex with backtracking | Potentially higher — test thoroughly |
+
+The built-in patterns are compiled once at startup and use linear-time matching where possible. Custom patterns that include `.*` or nested quantifiers may trigger backtracking on long inputs — validate with representative data.
+
 ## How Masking Works
 
 The masker runs `detect()` to find all entity matches, then replaces them in left-to-right order. Overlapping matches are resolved by keeping the longest match at each position. For example, if a URL contains an embedded IP address, only the URL is replaced, not the IP.
