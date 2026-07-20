@@ -402,6 +402,63 @@ Admin API 服务器应用以下限制：
 | `writeTimeout` | 30s | 写入响应的最大时间 |
 | `idleTimeout` | 2m | Keep-Alive 连接的最大空闲时间 |
 
+## 审计日志
+
+每个 Admin API 请求都会被记录在结构化审计日志中。审计中间件位于认证层之后，因此每个日志事件都包含调用方身份信息。
+
+### 日志格式
+
+审计事件以 JSON（或文本，取决于 `logging.format`）输出到 stdout。每个事件包含：
+
+| 字段 | 说明 |
+|------|------|
+| `log_type` | 始终为 `audit` — 用于过滤或路由审计事件 |
+| `who` | 已认证的调用方身份 |
+| `method` | HTTP 方法（`GET`、`POST`、`PUT`、`DELETE`） |
+| `path` | 请求 URL 路径 |
+| `route` | 标准化路由名（如 `listeners`、`resource_detail`） |
+| `status` | HTTP 响应状态码 |
+| `duration_ms` | 请求处理耗时（毫秒） |
+| `remote_addr` | 客户端远程地址 |
+
+### 身份来源
+
+`who` 字段从认证层解析：
+
+| 认证模式 | `who` 值 |
+|---------|---------|
+| `kubernetes` | TokenReview 返回的 Kubernetes 用户名（如 `system:admin`） |
+| `static` | `static-token` |
+| `none` | `anonymous` |
+
+### 日志级别
+
+审计事件根据响应状态使用不同日志级别：
+
+| 状态 | 级别 | 示例场景 |
+|------|------|---------|
+| 2xx | `INFO` | 成功的读取或变更操作 |
+| 4xx | `WARN` | 无效请求、未授权、未找到 |
+| 5xx | `ERROR` | 内部服务器错误 |
+
+### 示例
+
+```json
+{
+  "time": "2026-07-20T16:00:00Z",
+  "level": "INFO",
+  "msg": "admin api request",
+  "log_type": "audit",
+  "who": "system:admin",
+  "method": "POST",
+  "path": "/v1/resources",
+  "route": "resources",
+  "status": 200,
+  "duration_ms": 47,
+  "remote_addr": "10.0.0.5:54321"
+}
+```
+
 ## 下一步
 
 - [API 参考：Admin API](/zh/api-reference/admin-api) — OpenAPI 规范与客户端库

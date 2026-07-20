@@ -1,17 +1,67 @@
 ---
-title: "API 参考"
-description: "从 proto 定义自动生成的 gRPC API 参考文档"
+title: API 参考
+description: "Nantian Gateway API 参考：gRPC xDS 协议、Admin REST API、Gateway API 资源与自定义 CRD 规范。"
 ---
 
-# API 参考
+Nantian Gateway 提供多个 API 接口，用于配置、运维和运行时管理。本节介绍每个接口。
 
-gRPC API 定义在 [proto 仓库](https://github.com/nantian-gw/proto) 中。
-运行 `buf generate` 重新生成 API 参考文档。
+## API 接口概览
 
-## 生成文档
+| API | 协议 | 端口 | 用途 |
+|-----|----------|------|---------|
+| [Gateway API 资源](/zh/api-reference/gateway-api) | Kubernetes CRD | — | 声明网关、路由和策略 |
+| [自定义 CRD](/zh/api-reference/crds) | Kubernetes CRD | — | AI 服务、Wasm 插件、令牌策略 |
+| [Admin API](/zh/api-reference/admin-api) | REST (JSON) | `:18081` | 运维仪表盘、诊断、资源管理 |
+| [xDS 协议](/zh/api-reference/xds-proto) | gRPC 双向流 | `:18080` | 控制面到数据面的配置分发 |
+
+## Gateway API 资源
+
+Nantian Gateway 实现了 [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) 规范（v1.5.1）。你可以使用标准的、厂商中立的资源来定义网关拓扑：
+
+- **GatewayClass** — 定义网关类的控制器和参数
+- **Gateway** — 逻辑监听器，包含端口、协议和 TLS 配置
+- **HTTPRoute** / **GRPCRoute** / **TLSRoute** / **TCPRoute** / **UDPRoute** — 流量路由规则
+- **ReferenceGrant** — 跨命名空间引用授权
+- **BackendTLSPolicy** — 后端 TLS 和证书验证
+- **BackendLBPolicy** — 会话保持配置
+
+详见 [Gateway API 支持矩阵](/zh/concepts/gateway-api-support) 了解完整的功能支持情况。
+
+## 自定义 CRD
+
+Nantian Gateway 通过自定义资源扩展 Gateway API，提供 AI 网关和插件能力：
+
+- **AIService** — 定义 AI 提供商后端，包含模型路由、回退链和令牌预算
+- **TokenPolicy** — 按路由设置令牌使用限制和成本控制
+- **WasmPlugin** — 在代理层加载 WebAssembly 过滤器插件
+- **RoutePolicy** — 按路由覆盖超时、重试和熔断器配置
+
+## Admin API
+
+控制面在端口 `18081` 上暴露 REST API，用于运维操作：
+
+- **读端点**：查询网关、监听器、路由、后端、节点、基础设施状态和 AI 网关指标
+- **写端点**：通过托管资源接口创建、更新和删除 Kubernetes 资源
+- **诊断端点**：`/livez`、`/readyz`、摘要、快照和快照同步
+- **认证**：静态 Bearer Token 或 Kubernetes TokenReview
+
+所有请求均以调用方身份、方法、路径、路由名、状态码和耗时进行审计日志记录。
+
+## xDS 协议
+
+控制面通过 gRPC 双向流将配置快照分发给数据面，使用自定义的 `ConfigurationDiscoveryService` 协议：
+
+- 每个数据面节点开启一条持久的双向流
+- 控制面在每次变更时推送全量配置快照
+- 数据面确认接收并报告运行状态
+- 快照按兼容性配置进行投影，用于版本协商
+
+Protobuf 定义位于 [proto 仓库](https://github.com/nantian-gw/proto) 的 `gateway/control/v1/control.proto`。
+
+## 生成
+
+gRPC API 参考文档由 proto 定义生成：
 
 ```bash
 cd proto && buf generate
 ```
-
-生成的 API 参考文档可在 `/api/` 路径访问。

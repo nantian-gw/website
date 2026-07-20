@@ -1,17 +1,67 @@
 ---
-title: "API Reference"
-description: "Automated gRPC API reference generated from proto definitions"
+title: API Reference
+description: "Nantian Gateway API reference: gRPC xDS protocol, Admin REST API, Gateway API resources, and custom CRD specifications."
 ---
 
-# API Reference
+Nantian Gateway exposes multiple API surfaces for configuration, operation, and runtime management. This section documents each interface.
 
-The gRPC API is defined in the [proto repository](https://github.com/nantian-gw/proto).
-Run `buf generate` to regenerate the API reference.
+## API surfaces
 
-## Generating Docs
+| API | Protocol | Port | Purpose |
+|-----|----------|------|---------|
+| [Gateway API Resources](/api-reference/gateway-api) | Kubernetes CRDs | — | Declare gateways, routes, and policies |
+| [Custom CRDs](/api-reference/crds) | Kubernetes CRDs | — | AI services, Wasm plugins, token policies |
+| [Admin API](/api-reference/admin-api) | REST (JSON) | `:18081` | Operational dashboard, diagnostics, resource management |
+| [xDS Protocol](/api-reference/xds-proto) | gRPC bidirectional stream | `:18080` | Control plane to data plane config distribution |
+
+## Gateway API Resources
+
+Nantian Gateway implements the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) specification (v1.5.1). You define your gateway topology using standard, vendor-neutral resources:
+
+- **GatewayClass** — defines the controller and parameters for a class of gateways
+- **Gateway** — a logical listener with ports, protocols, and TLS configuration
+- **HTTPRoute** / **GRPCRoute** / **TLSRoute** / **TCPRoute** / **UDPRoute** — traffic routing rules
+- **ReferenceGrant** — cross-namespace reference authorization
+- **BackendTLSPolicy** — backend TLS and certificate validation
+- **BackendLBPolicy** — session persistence configuration
+
+See the [Gateway API Support](/concepts/gateway-api-support) page for the complete feature support matrix.
+
+## Custom CRDs
+
+Nantian Gateway extends the Gateway API with custom resources for AI gateway and plugin capabilities:
+
+- **AIService** — defines an AI provider backend with model routing, fallback chains, and token budgets
+- **TokenPolicy** — per-route token usage limits and cost controls
+- **WasmPlugin** — WebAssembly filter plugins loaded at the proxy layer
+- **RoutePolicy** — per-route timeout, retry, and circuit breaker overrides
+
+## Admin API
+
+The control plane exposes a REST API on port `18081` for operational tasks:
+
+- **Read endpoints**: query gateways, listeners, routes, backends, nodes, infrastructure state, and AI gateway metrics
+- **Write endpoints**: create, update, and delete Kubernetes resources through the managed resource interface
+- **Diagnostic endpoints**: `/livez`, `/readyz`, summary, snapshot, and snapshot-sync
+- **Authentication**: static bearer tokens or Kubernetes TokenReview
+
+All requests are audit-logged with caller identity, method, path, route, status code, and duration.
+
+## xDS Protocol
+
+The control plane distributes configuration snapshots to data planes over gRPC bidirectional streaming, using a custom `ConfigurationDiscoveryService` protocol:
+
+- Each data plane node opens a persistent bidirectional stream
+- The control plane pushes full configuration snapshots on every change
+- Data planes acknowledge receipt and report operational status
+- Snapshots are projected per compatibility profile for version negotiation
+
+The protobuf schema is defined in the [proto repository](https://github.com/nantian-gw/proto) under `gateway/control/v1/control.proto`.
+
+## Generating
+
+The gRPC API reference is generated from proto definitions:
 
 ```bash
 cd proto && buf generate
 ```
-
-The generated API reference is available at `/api/`.

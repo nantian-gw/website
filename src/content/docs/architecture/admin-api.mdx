@@ -257,6 +257,63 @@ The Admin API server applies these limits:
 | `writeTimeout` | 30s | Maximum time to write the response |
 | `idleTimeout` | 2m | Maximum idle time for keep-alive connections |
 
+## Audit logging
+
+Every Admin API request is recorded in structured audit logs. The audit middleware sits after authentication in the request chain, so caller identity is available for every logged event.
+
+### Log format
+
+Audit events are written to stdout as JSON (or text, depending on `logging.format`). Each event includes:
+
+| Field | Description |
+|-------|-------------|
+| `log_type` | Always `audit` — use this to filter or route audit events |
+| `who` | Authenticated caller identity |
+| `method` | HTTP method (`GET`, `POST`, `PUT`, `DELETE`) |
+| `path` | Request URL path |
+| `route` | Normalized route name (e.g., `listeners`, `resource_detail`) |
+| `status` | HTTP response status code |
+| `duration_ms` | Request processing time in milliseconds |
+| `remote_addr` | Client remote address |
+
+### Identity resolution
+
+The `who` field is resolved from the authentication layer:
+
+| Auth mode | `who` value |
+|-----------|------------|
+| `kubernetes` | Kubernetes username from TokenReview (e.g., `system:admin`) |
+| `static` | `static-token` |
+| `none` | `anonymous` |
+
+### Log levels
+
+Audit events use log levels based on the response status:
+
+| Status | Level | Example scenario |
+|--------|-------|-----------------|
+| 2xx | `INFO` | Successful read or mutation |
+| 4xx | `WARN` | Invalid request, unauthorized, not found |
+| 5xx | `ERROR` | Internal server error |
+
+### Example
+
+```json
+{
+  "time": "2026-07-20T16:00:00Z",
+  "level": "INFO",
+  "msg": "admin api request",
+  "log_type": "audit",
+  "who": "system:admin",
+  "method": "POST",
+  "path": "/v1/resources",
+  "route": "resources",
+  "status": 200,
+  "duration_ms": 47,
+  "remote_addr": "10.0.0.5:54321"
+}
+```
+
 ## Metrics
 
 The Admin API emits request-level metrics through the `nantian_gateway_controlplane_admin_requests_total` and `nantian_gateway_controlplane_admin_request_duration_seconds` metrics, partitioned by HTTP method, normalized route, and status class. These are scraped by Prometheus through the main metrics endpoint on `:18082`.
