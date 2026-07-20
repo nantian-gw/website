@@ -81,3 +81,100 @@ kubectl get podmonitor -n nantian-gw
 ```
 
 From the Prometheus UI, confirm that both the `nantian-gw-controlplane` and `nantian-gw-dataplane` targets appear under **Status > Targets** with state `UP`.
+
+## AlertManager Integration
+
+Prometheus AlertManager routes alerts from Prometheus rules to notification channels (email, Slack, PagerDuty). The Helm chart's [Alerting Rules](/operations/alerting/) include pre-built rules for control plane and data plane health.
+
+To connect Prometheus to AlertManager:
+
+```yaml
+# prometheus-values.yaml
+alertmanager:
+  enabled: true
+alertmanagerFiles:
+  alertmanager.yml:
+    global:
+      slack_api_url: "https://hooks.slack.com/services/..."
+    route:
+      group_by: ["alertname", "severity"]
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: "slack-notifications"
+    receivers:
+      - name: "slack-notifications"
+        slack_configs:
+          - channel: "#nantian-alerts"
+            title: "Nantian Gateway Alert"
+            text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
+```
+
+Prometheus discovers AlertManager via the `alerting` configuration:
+
+```yaml
+prometheus:
+  prometheusSpec:
+    alertingEndpoints:
+      - name: alertmanager-operated
+        namespace: monitoring
+        port: 9093
+```
+
+## Recording Rules
+
+Recording rules pre-compute frequently used expressions for faster dashboards and alerting. Add these to your Prometheus configuration:
+
+```yaml
+prometheus:
+  prometheusSpec:
+    ruleSelector:
+      matchLabels:
+        role: alert-rules
+    ruleNamespaceSelector: {}
+```
+
+Then create a PrometheusRule with recording rules:
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nantian-gw-recording
+  namespace: monitoring
+  labels:
+    role: alert-rules
+spec:
+  groups:
+    - name: nantian-gw
+      rules:
+        - record: nantian:http_requests:rate5m
+          expr: rate(nantian_gw_dataplane_http_requests_total[5m])
+        - record: nantian:http_errors:rate5m
+          expr: rate(nantian_gw_dataplane_http_requests_total{status_class="5xx"}[5m])
+        - record: nantian:error_ratio
+          expr: nantian:http_errors:rate5m / nantian:http_requests:rate5m
+```
+
+Recording rules reduce query latency in Grafana dashboards and simplify alerting expressions.
+
+## Federation
+
+For multi-cluster deployments, use Prometheus federation to aggregate metrics from multiple gateway instances into a central Prometheus:
+
+```yaml
+scrape_configs:
+  - job_name: "federate-nantian-gw"
+    scrape_interval: 30s
+    honor_labels: true
+    metrics_path: "/federate"
+    params:
+      match[]:
+        - '{__name__=~"nantian_gw_.+"}'
+    static_configs:
+      - targets:
+          - "prometheus-cluster-a.monitoring:9090"
+          - "prometheus-cluster-b.monitoring:9090"
+```
+
+Federated metrics carry the original labels from each cluster, so use `honor_labels: true` to preserve cluster identity in your central dashboards.

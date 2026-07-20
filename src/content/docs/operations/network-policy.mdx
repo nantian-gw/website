@@ -80,4 +80,89 @@ spec:
 
 Multiple NetworkPolicies targeting the same pods are additive, so your custom rules merge with the chart's defaults.
 
-For cross-namespace Prometheus scraping details, see [Prometheus Integration](/operations/prometheus-setup/).
+## CNI-specific considerations
+
+NetworkPolicy enforcement depends on your cluster's CNI plugin. Most managed Kubernetes services (EKS, AKS, GKE) include a compatible controller by default. For self-managed clusters:
+
+| CNI | NetworkPolicy Support | Notes |
+|-----|----------------------|-------|
+| **Calico** | Full support | Default in many distributions. Supports both standard and Calico-specific policies. |
+| **Cilium** | Full support | Supports standard NetworkPolicies plus CiliumNetworkPolicy for L7 rules. |
+| **Flannel** | No native support | Requires Calico or Cilium as an additional policy engine. |
+| **Weave** | Full support | Supports standard NetworkPolicies. |
+
+Verify your CNI supports NetworkPolicy by checking for a running controller:
+
+```bash
+kubectl get pods -n kube-system | grep -E "calico|cilium|weave"
+```
+
+If no policy controller is running, NetworkPolicies are created but not enforced — traffic flows unrestricted.
+
+## Troubleshooting
+
+### Pods cannot reach the control plane
+
+If data plane pods fail to connect to the control plane gRPC port:
+
+```bash
+# Check the NetworkPolicy is applied
+kubectl get networkpolicy -n nantian-gw
+
+# Verify the data plane pod has the correct label
+kubectl get pod -n nantian-gw -l app.kubernetes.io/component=dataplane --show-labels
+
+# Test connectivity from within the data plane pod
+kubectl exec -n nantian-gw deploy/nantian-gw-dataplane -- \
+  nc -zv nantian-gw-controlplane 18080
+```
+
+If the NetworkPolicy is present but connectivity fails, verify the pod labels match the policy's `podSelector` and `namespaceSelector`.
+
+### Prometheus cannot scrape metrics
+
+When Prometheus runs in a different namespace, confirm `serviceMonitor.fromNamespaces` includes that namespace:
+
+```bash
+helm get values nantian-gw -n nantian-gw | grep -A5 serviceMonitor
+```
+
+Then verify the NetworkPolicy has an ingress rule for the Prometheus namespace:
+
+```bash
+kubectl describe networkpolicy nantian-gw-controlplane -n nantian-gw
+```
+
+## Egress policies
+
+The default NetworkPolicies only restrict ingress. To restrict egress traffic from gateway pods (e.g., to allow only specific external backends), add a custom egress NetworkPolicy:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nantian-gw-controlplane-egress
+  namespace: nantian-gw
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: controlplane
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 443
+```
+
+This allows the control plane to reach any pod in the cluster on port 443 and any external IP on port 443, while blocking cloud metadata endpoints.
