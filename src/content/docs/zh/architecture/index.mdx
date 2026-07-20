@@ -1,6 +1,6 @@
 ---
 title: 整体架构
-description: "南天网关控制面与数据面的职责划分，以及运行时快照如何在两者之间流动。"
+description: "Nantian Gateway控制面与数据面的职责划分，以及运行时快照如何在两者之间流动。"
 ---
 
 Nantian Gateway 采用控制面与数据面分离的架构（split-plane architecture）。Go 控制面监听 Kubernetes API 中的 Gateway 资源，将其翻译为与设备无关的内部表示（IR），然后通过 gRPC/xDS 双向流推送到 Rust 数据面代理。两个平面以独立的 Kubernetes 工作负载部署，各自扩缩，彼此之间仅通过 gRPC 通道通信。
