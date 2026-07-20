@@ -76,6 +76,24 @@ Before adjusting tuning parameters, establish a performance baseline using the a
 
 Make parameter changes incrementally, measuring the impact on each metric before proceeding to the next adjustment. Document the baseline and each change for future reference.
 
+## Memory Allocator
+
+The data plane links against [jemalloc](https://jemalloc.net/) for production builds, which provides better memory fragmentation behavior and lower tail latency compared to the system allocator. The allocator is selected at compile time via the `--features jemalloc` flag.
+
+For workloads with very large numbers of concurrent connections, jemalloc's thread-cache and background thread features reduce allocation contention. Monitor `nantian_gw_dataplane_container_memory_working_set_bytes` to verify the allocator is performing well under your traffic profile.
+
+## Buffer and I/O Tuning
+
+For high-throughput deployments, consider adjusting these environment-level knobs:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `runtime_tuning.http_capacity.bufferPoolSize` | int | `1024` | Number of reusable buffer slabs |
+| `runtime_tuning.http_capacity.maxHeaderSize` | int | `65536` | Max header bytes per request (64 KiB) |
+| `runtime_tuning.http_capacity.maxBodySize` | int | `10485760` | Max body bytes per request (10 MiB) |
+
+Increase `bufferPoolSize` for workloads with large, bursty request volumes to reduce per-request allocation overhead. Reduce `maxBodySize` if your upstreams only accept small payloads — this limits the memory window for malformed requests.
+
 ## Next Steps
 
 - [Observability](/configuration/observability) — configure metrics, logs, and traces for monitoring

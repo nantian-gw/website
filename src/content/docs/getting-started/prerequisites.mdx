@@ -116,6 +116,36 @@ NAME                                    CREATED AT
 gateways.gateway.networking.k8s.io      2024-01-01T00:00:00Z
 ```
 
+## Resource Requirements
+
+The following table lists the minimum and recommended resource allocations for each component at different traffic volumes.
+
+### Minimum (development / low traffic)
+
+| Component | CPU Request | Memory Request | Replicas |
+|-----------|-------------|----------------|----------|
+| Control Plane | 100m | 128Mi | 1 |
+| Data Plane | 500m | 256Mi | 1 |
+| Dashboard | 50m | 128Mi | 1 |
+
+### Recommended (production / moderate traffic: 1K–5K RPS)
+
+| Component | CPU Request | Memory Request | CPU Limit | Memory Limit | Replicas |
+|-----------|-------------|----------------|-----------|--------------|----------|
+| Control Plane | 200m | 256Mi | 1 | 1Gi | 2 |
+| Data Plane | 2 | 512Mi | — | 2Gi | 2–4 |
+| Dashboard | 100m | 128Mi | 500m | 256Mi | 2 |
+
+### High traffic (5K–50K+ RPS)
+
+| Component | CPU Request | Memory Request | Replicas |
+|-----------|-------------|----------------|----------|
+| Control Plane | 500m | 512Mi | 2–3 |
+| Data Plane | 4 | 1Gi | 4–8 |
+| Dashboard | 200m | 256Mi | 2 |
+
+The data plane is the primary consumer of CPU and memory. Each additional replica increases aggregate throughput linearly.
+
 ## Next Steps
 
 After verifying all prerequisites, proceed to the [Quick Start](/getting-started/quick-start) to deploy Nantian Gateway.
