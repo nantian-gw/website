@@ -11,12 +11,14 @@ Nantian Gateway 是一个基于 Kubernetes Gateway API 的分离式网关栈。G
 
 Nantian Gateway 拆分为多个组件仓库，每个组件可以用自己的构建、测试和发布流程演进。
 
-- `gateway/` 包含 Go 控制面、Kubernetes reconciler、translator、CRD 清单、Admin API 和一致性工具。
-- `dataplane/` 包含 Rust 数据面 workspace，负责接收运行时快照并处理流量。
-- `helm-charts/` 打包可安装的 Helm chart，发布地址是 `https://chart.nantian.dev`。
-- `dashboard/` 包含面向运维人员的 Web 管理界面。
-- `website/` 包含当前 Astro/Starlight 文档站。
-- `proto/` 维护组件之间共享的 protobuf 契约。
+| 仓库 | GitHub | 用途 |
+|------|--------|------|
+| `gateway/` | [nantian-gw/gateway](https://github.com/nantian-gw/gateway) | Go 控制面、Kubernetes reconciler、translator、CRD 清单、Admin API 和一致性工具 |
+| `dataplane/` | [nantian-gw/dataplane](https://github.com/nantian-gw/dataplane) | Rust 数据面 workspace，负责接收运行时快照并处理流量 |
+| `helm-charts/` | [nantian-gw/helm-charts](https://github.com/nantian-gw/helm-charts) | 打包可安装的 Helm chart，发布地址是 `https://chart.nantian.dev` |
+| `dashboard/` | [nantian-gw/dashboard](https://github.com/nantian-gw/dashboard) | 面向运维人员的 Web 管理界面 |
+| `website/` | [nantian-gw/website](https://github.com/nantian-gw/website) | 当前 Astro/Starlight 文档站 |
+| `proto/` | [nantian-gw/proto](https://github.com/nantian-gw/proto) | 维护组件之间共享的 protobuf 契约 |
 
 ## 它如何工作
 

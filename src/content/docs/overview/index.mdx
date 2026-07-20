@@ -59,14 +59,14 @@ That's it — traffic to `/api` is now routed to `my-backend-service:8080`. No c
 
 Nantian Gateway is split across several component repositories so each part can evolve with its own build, test, and release flow.
 
-| Repository | Purpose |
-|-----------|---------|
-| `gateway/` | Go control plane — Kubernetes reconcilers, translators, CRD manifests, admin API, conformance tooling |
-| `dataplane/` | Rust data plane — HTTP/gRPC/TCP/UDP proxy, AI gateway, Wasm runtime, xDS client |
-| `helm-charts/` | Helm chart published at `https://chart.nantian.dev` |
-| `dashboard/` | Next.js admin UI for operators |
-| `website/` | This Astro/Starlight documentation site |
-| `proto/` | Shared protobuf contract between control plane and data plane |
+| Repository | GitHub | Purpose |
+|-----------|--------|---------|
+| `gateway/` | [nantian-gw/gateway](https://github.com/nantian-gw/gateway) | Go control plane — Kubernetes reconcilers, translators, CRD manifests, admin API, conformance tooling |
+| `dataplane/` | [nantian-gw/dataplane](https://github.com/nantian-gw/dataplane) | Rust data plane — HTTP/gRPC/TCP/UDP proxy, AI gateway, Wasm runtime, xDS client |
+| `helm-charts/` | [nantian-gw/helm-charts](https://github.com/nantian-gw/helm-charts) | Helm chart published at `https://chart.nantian.dev` |
+| `dashboard/` | [nantian-gw/dashboard](https://github.com/nantian-gw/dashboard) | Next.js admin UI for operators |
+| `website/` | [nantian-gw/website](https://github.com/nantian-gw/website) | This Astro/Starlight documentation site |
+| `proto/` | [nantian-gw/proto](https://github.com/nantian-gw/proto) | Shared protobuf contract between control plane and data plane |
 
 ## How It Works
 
