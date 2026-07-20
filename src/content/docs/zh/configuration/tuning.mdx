@@ -75,6 +75,24 @@ title: 性能调优
 
 逐步调整参数，在每次调整后测量对各项指标的影响，然后再进行下一次调整。记录基线和每次变更以供将来参考。
 
+## 内存分配器
+
+数据面在生产构建中链接 [jemalloc](https://jemalloc.net/)，相比系统分配器具有更好的内存碎片化行为和更低的尾部延迟。分配器通过 `--features jemalloc` 编译标志选择。
+
+对于并发连接数非常大的工作负载，jemalloc 的线程缓存和后台线程特性可减少分配争用。监控 `nantian_gw_dataplane_container_memory_working_set_bytes` 以验证分配器在你的流量配置下表现良好。
+
+## 缓冲区与 I/O 调优
+
+对于高吞吐量部署，可考虑调整以下环境级别参数：
+
+| 参数 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `runtime_tuning.http_capacity.bufferPoolSize` | int | `1024` | 可复用的缓冲区 slab 数量 |
+| `runtime_tuning.http_capacity.maxHeaderSize` | int | `65536` | 每个请求最大请求头字节数（64 KiB） |
+| `runtime_tuning.http_capacity.maxBodySize` | int | `10485760` | 每个请求最大请求体字节数（10 MiB） |
+
+对于突发请求量大的工作负载，增大 `bufferPoolSize` 可减少每次请求的分配开销。如果上游只接受小负载，降低 `maxBodySize` 可限制恶意请求的内存窗口。
+
 ## 下一步
 
 - [可观测性](/zh/configuration/observability) — 配置用于监控的指标、日志和链路追踪

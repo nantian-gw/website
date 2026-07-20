@@ -100,3 +100,105 @@ kubectl get deployment metrics-server -n kube-system
 # Confirm data plane pods report resource usage
 kubectl top pods -n nantian-gw -l app.kubernetes.io/component=dataplane
 ```
+
+## Scaling beyond CPU and memory
+
+### Vertical Pod Autoscaling (VPA)
+
+For workloads where right-sizing is more important than horizontal scaling, consider [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler). VPA adjusts CPU and memory requests based on historical usage patterns:
+
+```yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: nantian-gw-dataplane
+  namespace: nantian-gw
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nantian-gw-dataplane
+  updatePolicy:
+    updateMode: "Auto"
+```
+
+:::caution
+VPA in `Auto` mode restarts pods to apply new resource values. This causes brief traffic interruptions on the data plane. Use `Off` mode with manual review for production traffic.
+:::
+
+### KEDA (Event-Driven Autoscaling)
+
+For event-driven scaling — scaling the data plane based on request queue depth, Prometheus metrics, or external event sources — use [KEDA](https://keda.sh/):
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: nantian-gw-dataplane-prometheus
+  namespace: nantian-gw
+spec:
+  scaleTargetRef:
+    name: nantian-gw-dataplane
+  minReplicaCount: 2
+  maxReplicaCount: 20
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://prometheus-operated.monitoring:9090
+      metricName: http_requests_per_second
+      query: rate(nantian_gw_dataplane_http_requests_total[1m])
+      threshold: "5000"
+```
+
+This scales the data plane based on actual request rate rather than CPU utilization, which is more responsive for traffic spikes.
+
+### Custom Metrics Scaling
+
+HPA supports custom and external metrics when a Prometheus adapter is installed:
+
+```bash
+helm install prometheus-adapter prometheus-community/prometheus-adapter \
+  --namespace monitoring
+```
+
+Then configure HPA with a custom metric:
+
+```yaml
+hpa:
+  enabled: true
+  dataplane:
+    minReplicas: 2
+    maxReplicas: 20
+  customMetrics:
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "5000"
+```
+
+## Scaling benchmarks
+
+The following table provides approximate throughput per data plane replica under typical conditions (TLS-terminated HTTP/1.1, 1KB response body, keepalive connections):
+
+| Replicas | Approximate RPS | P99 Latency | CPU per replica |
+|----------|----------------|-------------|-----------------|
+| 1 | 8,000 | 15ms | ~1.1 cores |
+| 2 | 16,000 | 18ms | ~1.1 cores |
+| 4 | 32,000 | 22ms | ~1.0 cores |
+| 8 | 60,000 | 28ms | ~1.0 cores |
+
+These numbers are from the project's nightly performance suite (`platform-release/results/nightly/`). Actual throughput depends on TLS configuration, request/response sizes, backend latency, and CPU architecture.
+
+## Troubleshooting HPA
+
+If replicas are not scaling as expected:
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| HPA shows `<unknown>` metrics | metrics-server not running | `kubectl get deployment metrics-server -n kube-system` |
+| HPA target is 0% | Pods not receiving traffic | Verify service selectors and network policies |
+| HPA never scales up | `maxReplicas` too low | Increase maxReplicas in Helm values |
+| HPA oscillates (flapping) | Threshold too aggressive | Raise `targetCPUUtilization` or increase `minReplicas` |

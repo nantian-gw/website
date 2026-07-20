@@ -98,3 +98,33 @@ Missing CRDs cause resource creation failures. Disabled control plane feature fl
 ## Use The APIs
 
 After the CRDs and flags are in place, create resources that match the current schemas. Start with [Custom And Experimental Resources](/api-reference/crds/) for examples of `AIService`, `TokenPolicy`, `WasmPlugin`, and `BackendLBPolicy`.
+
+## Feature Stability Roadmap
+
+Experimental features graduate to stable on independent timelines. The table below tracks current status and expected graduation:
+
+| Feature | CRD | API Version | Status | Expected Stable |
+|---------|-----|-------------|--------|----------------|
+| AIService | `aiservices.gateway.nantian.dev` | `v1alpha1` | Experimental | TBD |
+| TokenPolicy | `tokenpolicies.gateway.nantian.dev` | `v1alpha1` | Experimental | TBD |
+| WasmPlugin | `wasmplugins.gateway.nantian.dev` | `v1alpha1` | Experimental | TBD |
+| BackendLBPolicy | `backendlbpolicies.gateway.networking.k8s.io` | `v1alpha2` | Upstream experimental | Follows Gateway API |
+| RoutePolicy | `routepolicies.gateway.nantian.dev` | `v1alpha1` | Experimental | TBD |
+
+### Migration from Experimental to Stable
+
+When a feature graduates to stable:
+
+1. The stable CRD version is installed alongside the experimental one
+2. Existing experimental resources continue to work during a deprecation window (typically 2 releases)
+3. New resources should use the stable API version
+4. The experimental CRD and feature flag are removed in a subsequent release
+
+Monitor the [changelog](https://github.com/nantian-gw/gateway/releases) for deprecation notices and migration instructions.
+
+### Known Limitations
+
+- **AIService**: Model routing uses round-robin by default. Custom routing strategies require RoutePolicy overrides.
+- **TokenPolicy**: Token counting is approximate for streaming responses. The count may differ from the provider's billing report.
+- **WasmPlugin**: Plugins run in a single-threaded Wasmtime instance per worker. CPU-intensive plugins impact proxy throughput.
+- **BackendLBPolicy**: Session persistence requires a configured shared secret for multi-replica deployments. Without it, sessions are lost on replica restart.

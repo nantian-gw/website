@@ -123,7 +123,79 @@ Nantian Gateway targets the Gateway API v1.5.1 specification with 54 declared su
 - **Extended features**: HTTP header matching, query parameter matching, request mirroring, traffic splitting, URL rewriting, CORS, and more
 - **Mesh features**: Gateway API Mesh resources for service mesh configurations
 
-For a complete list of supported features, see the [API Reference](/api-reference/).
+For a complete list of supported features, see the [Gateway API Support](/concepts/gateway-api-support) matrix.
+
+## HTTPRoute Filters and Traffic Shaping
+
+HTTPRoute supports a rich set of filters that modify requests and responses at the proxy layer. Filters are applied in the order they are defined in the route rule.
+
+### Request Modification
+
+```yaml
+rules:
+- matches:
+    - path:
+        type: PathPrefix
+        value: /api
+  filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+          - name: X-Custom-Header
+            value: "true"
+        remove:
+          - "X-Deprecated-Header"
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /v2
+  backendRefs:
+    - name: api-service
+      port: 8080
+```
+
+### Traffic Splitting
+
+Route traffic across multiple backends with weighted distribution:
+
+```yaml
+backendRefs:
+  - name: api-stable
+    port: 8080
+    weight: 90
+  - name: api-canary
+    port: 8080
+    weight: 10
+```
+
+### Redirect and CORS
+
+```yaml
+filters:
+  - type: RequestRedirect
+    requestRedirect:
+      scheme: https
+      statusCode: 301
+  - type: ExtensionRef
+    extensionRef:
+      group: gateway.networking.k8s.io
+      kind: CORSFilter
+      name: allow-origins
+```
+
+## Policy Attachment Model
+
+In addition to route-level filters, Gateway API provides *policies* — resources that attach configuration to gateways, routes, or backends independently of route definitions:
+
+| Policy | Attaches To | Purpose |
+|--------|-------------|---------|
+| **BackendTLSPolicy** | Service | TLS settings for backend connections |
+| **BackendLBPolicy** | Service | Session persistence configuration |
+| **Nantian RoutePolicy** | HTTPRoute, GRPCRoute | Timeout, retry, and circuit breaker overrides |
+| **Nantian TokenPolicy** | HTTPRoute | Per-route token usage limits |
+
+This separation allows security and platform teams to apply policies without modifying application-owned route resources.
 
 ## Next Steps
 
