@@ -106,7 +106,7 @@ PII masking adds regex scanning to every request and response message. The overh
 
 | Scenario | Typical Overhead |
 |----------|-----------------|
-| Short prompts (<500 chars) | <1ms |
+| Short prompts (&lt;500 chars) | &lt;1ms |
 | Long prompts (2K-8K chars) | 1-5ms |
 | Response streaming | Per-chunk overhead (masking applied to each chunk) |
 | Custom regex with backtracking | Potentially higher — test thoroughly |

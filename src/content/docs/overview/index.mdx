@@ -99,6 +99,17 @@ The control plane exposes gRPC on `18080`, the admin API on `18081`, metrics on 
 
 For day-two operations, start with Kubernetes pod status, `GatewayClass` status, route attachment status, control plane and data plane logs, Prometheus metrics, Grafana dashboards, and the admin APIs.
 
+## Key Differentiators
+
+| Capability | Nantian Gateway | How it works |
+|-----------|----------------|-------------|
+| **Split-plane architecture** | Go control plane + Rust data plane | Control plane handles translation and orchestration (Go's Kubernetes ecosystem). Data plane handles real-time traffic (Rust's performance, no GC pauses). |
+| **Standard Gateway API** | 54+ supported features, v1.5.1 | No proprietary CRDs for routing. Your routes are portable across Gateway API implementations. |
+| **AI Gateway native** | Built-in AI proxy with 11 features | Model routing, semantic cache, PII masking, content safety, A/B testing, fallback, cost tracking — all at the proxy layer, no sidecar needed. |
+| **Wasm extensibility** | Sandboxed plugin runtime | Write custom filters in Rust, compile to `wasm32-wasi`, deploy via CRD. |
+| **Production observability** | Prometheus, Grafana, OpenTelemetry | Pre-built dashboards, 100+ metrics, audit logging, OpenTelemetry tracing across control and data planes. |
+| **O(1) control plane memory** | State-of-the-World snapshots | Entire configuration is one atomic snapshot. No per-request control plane involvement — data plane handles all traffic autonomously. |
+
 ## Next Steps
 
 - [Quick Start](/getting-started/quick-start/)

@@ -1,0 +1,131 @@
+---
+title: Fault Injection
+description: "Test service resilience by injecting delays and errors into HTTP requests with Nantian Gateway's fault injection filters."
+---
+
+Fault injection lets you test how your services behave under adverse conditions — slow backends, intermittent failures, or complete outages. By injecting faults at the gateway layer, you can validate circuit breakers, retry logic, and fallback mechanisms without modifying backend code.
+
+## Fault Types
+
+Nantian Gateway supports two fault types, configured as HTTPRoute filters:
+
+| Fault Type | What it does | Use case |
+|-----------|-------------|----------|
+| **Delay** | Adds a fixed delay before forwarding the request to the backend | Test timeout handling, slow backend scenarios |
+| **Abort** | Immediately returns an HTTP error status without contacting the backend | Test error handling, circuit breaker triggering |
+
+## Delay Injection
+
+Inject a fixed delay into a percentage of requests:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: fault-test
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.networking.k8s.io
+        kind: HTTPRouteFilter
+        name: fault-injection
+    backendRefs:
+    - name: api-service
+      port: 8080
+  - filters:
+    - type: RequestMirror
+      requestMirror:
+        backendRef:
+          name: fault-injector
+          port: 8080
+```
+
+:::note
+Fault injection is configured through HTTPRoute filters. The exact filter configuration depends on the Gateway API version and implementation support.
+:::
+
+## Common Testing Scenarios
+
+### Circuit Breaker Validation
+
+Inject 5-second delays on 30% of requests and verify the circuit breaker opens:
+
+```yaml
+# 1. Configure a circuit breaker
+# See BackendLBPolicy configuration for maxInflightRequests
+
+# 2. Inject delays
+# Apply a delay filter to a route targeting the backend
+
+# 3. Send traffic and observe
+# The circuit breaker should trip after exceeding the threshold
+# Metrics: nantian_gw_dataplane_circuit_breaker_open_total
+```
+
+### Retry Logic Testing
+
+Abort 50% of requests and verify retries succeed:
+
+```yaml
+# 1. Configure retries
+# See Retry Policies guide for retry configuration
+
+# 2. Inject aborts
+# Apply an abort filter returning 503 on 50% of requests
+
+# 3. Observe
+# Successful responses indicate retries handled the aborts
+# Track nantian_gw_dataplane_retry_attempts_total
+```
+
+### Timeout Handling
+
+Inject delays exceeding the route timeout:
+
+```yaml
+# 1. Set a tight route timeout (e.g., 2 seconds)
+# 2. Inject a 5-second delay
+# 3. Requests should fail with 504 Gateway Timeout
+```
+
+## Production Safety
+
+Fault injection filters are powerful testing tools but dangerous in production:
+
+:::caution
+Never enable fault injection on production routes without explicit approval and monitoring. A misconfigured abort filter returning 500 on 100% of requests takes a service offline instantly.
+:::
+
+Safety practices:
+
+- **Use canary routes** — create a separate route for fault testing that only matches a test header or path
+- **Start small** — begin with 5% injection rate and increase gradually
+- **Monitor continuously** — watch error rate dashboards during injection windows
+- **Automate cleanup** — use a CronJob or TTL to remove test routes after a fixed window
+- **Isolate from production traffic** — run fault tests against a staging backend, not the production service
+
+## Observability
+
+Track fault injection behavior through metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `nantian_gw_dataplane_fault_injection_delays_total` | Number of injected delays |
+| `nantian_gw_dataplane_fault_injection_aborts_total` | Number of injected aborts |
+
+Combine with [Circuit Breaker](/guides/circuit-breaker/) and [Retry Policies](/guides/retry/) guides to build a complete resilience testing framework.
+
+## Related Pages
+
+- [Circuit Breaker](/guides/circuit-breaker/) — protecting backends from overload
+- [Retry Policies](/guides/retry/) — automatic retry configuration
+- [Traffic Management](/features/traffic-management/) — traffic splitting and routing
+- [Operations Metrics](/operations/metrics/) — monitoring and alerting

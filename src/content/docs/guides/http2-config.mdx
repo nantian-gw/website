@@ -1,0 +1,119 @@
+---
+title: HTTP/2 Configuration
+description: "Enable HTTP/2 on frontend listeners and backend connections in Nantian Gateway, with protocol negotiation and upgrade guidance."
+---
+
+Nantian Gateway supports HTTP/2 on both frontend (client-facing) and backend (upstream) connections. HTTP/2 provides multiplexed streams, header compression, and server push — reducing latency for modern web applications and gRPC services.
+
+## Frontend HTTP/2
+
+HTTP/2 on frontend listeners is enabled by configuring the listener protocol and TLS settings on your Gateway resource.
+
+### HTTP/2 over TLS (h2)
+
+When a listener uses `protocol: HTTPS` with TLS termination, HTTP/2 is negotiated via ALPN during the TLS handshake:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: h2-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: my-tls-cert
+```
+
+Clients that support HTTP/2 will negotiate it automatically. Clients that only support HTTP/1.1 will fall back transparently.
+
+### HTTP/2 without TLS (h2c)
+
+For internal services where TLS is handled elsewhere (e.g., a load balancer terminates TLS), use `protocol: HTTP` and enable H2C via the backend protocol setting:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: h2c-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+```
+
+Then configure backend services with `appProtocol: kubernetes.io/h2c` on the Service:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-backend
+  annotations:
+    networking.gateway.networking.k8s.io/appProtocol: kubernetes.io/h2c
+spec:
+  ports:
+  - port: 9090
+    targetPort: 9090
+```
+
+## Backend HTTP/2
+
+The data plane uses HTTP/2 for backend connections when the backend service advertises `appProtocol: kubernetes.io/h2c`. This is typically used for gRPC services (which require HTTP/2) or internal services that benefit from multiplexed connections.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grpc-route
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - backendRefs:
+    - name: grpc-service
+      port: 9090
+```
+
+No additional route configuration is needed. The data plane detects `GRPCRoute` or `appProtocol: kubernetes.io/h2c` and upgrades the backend connection to HTTP/2 automatically.
+
+## Protocol Selection Behavior
+
+| Listener Protocol | TLS | Client Protocol | Backend Protocol |
+|------------------|-----|----------------|-----------------|
+| `HTTPS` | Terminate | h2 (ALPN) | h2c or HTTP/1.1 |
+| `HTTPS` | Passthrough | Client's choice | Client's choice |
+| `HTTP` | None | HTTP/1.1 | HTTP/1.1 or h2c |
+
+## Performance Considerations
+
+HTTP/2 multiplexing reduces connection overhead for workloads with many concurrent requests to the same backend. A single TCP connection handles hundreds of concurrent streams, eliminating the head-of-line blocking that affects HTTP/1.1 pipelining.
+
+However, HTTP/2's per-connection flow control can cause head-of-line blocking at the TCP level under packet loss. For high-throughput, high-latency backend connections, test HTTP/2 performance against HTTP/1.1 with connection pooling to determine the optimal configuration.
+
+## Troubleshooting
+
+### gRPC calls failing with protocol errors
+
+Check that the backend Service advertises `appProtocol: kubernetes.io/h2c`. Without this annotation, the data plane attempts HTTP/1.1 to the backend, which gRPC servers reject.
+
+```bash
+kubectl get svc grpc-service -o yaml | grep appProtocol
+```
+
+### HTTP/2 not negotiated on frontend
+
+Verify the listener uses `protocol: HTTPS` with `tls.mode: Terminate`. HTTP/2 negotiation requires TLS ALPN. If TLS is terminated by an external load balancer, configure HTTP/2 at the load balancer layer and set the backend protocol to h2c.
+
+## Related Pages
+
+- [gRPC Routes](/guides/grpc-routes/) — routing gRPC traffic by service and method
+- [TLS Configuration](/configuration/tls/) — TLS termination and mTLS setup
+- [Stream and TCP Routes](/guides/stream-routes/) — non-HTTP protocol routing

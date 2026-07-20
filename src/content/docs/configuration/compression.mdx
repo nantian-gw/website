@@ -1,0 +1,118 @@
+---
+title: Response Compression
+description: "Enable gzip and brotli compression for HTTP responses in Nantian Gateway to reduce bandwidth usage and improve client performance."
+---
+
+Nantian Gateway supports transparent response compression for HTTP traffic. Compression reduces response payload sizes, which decreases bandwidth costs and improves page load times for clients on slower connections. The data plane compresses eligible responses before sending them to the client — no backend changes required.
+
+## How Compression Works
+
+Compression is enabled at the data plane level, not per-route. The data plane inspects the `Accept-Encoding` header from the client and applies the best compression algorithm both the client and gateway support.
+
+```text
+Client sends: Accept-Encoding: gzip, br, deflate
+Gateway chooses: br (brotli, if available) or gzip
+Gateway compresses response body and adds Content-Encoding: br
+```
+
+If the client does not send `Accept-Encoding`, or if the response is already compressed (e.g., images, pre-compressed assets), the gateway passes the response through unchanged.
+
+## Enabling Compression
+
+Compression is controlled via the data plane configuration:
+
+```yaml
+dataplane:
+  config:
+    runtime:
+      compression:
+        enabled: true
+        algorithms:
+          - gzip
+          - brotli
+        minResponseBytes: 1024
+        contentTypes:
+          - text/html
+          - text/css
+          - text/javascript
+          - application/json
+          - application/javascript
+          - application/xml
+          - text/plain
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `enabled` | bool | `false` | Enable HTTP response compression |
+| `algorithms` | list | `["gzip"]` | Compression algorithms: `gzip`, `brotli` |
+| `minResponseBytes` | int | `1024` | Minimum response size in bytes to compress. Smaller responses skip compression to avoid overhead. |
+| `contentTypes` | list | See above | MIME types eligible for compression |
+
+## Choosing Algorithms
+
+| Algorithm | Compression Ratio | CPU Cost | Browser Support |
+|-----------|-----------------|----------|----------------|
+| **gzip** | ~70% reduction | Low | Universal |
+| **brotli** | ~80% reduction | Medium | All modern browsers (97%+) |
+
+Brotli provides 10-20% better compression than gzip at the cost of slightly higher CPU usage. For API responses (JSON), both perform similarly since JSON is already efficient. For HTML and text-heavy responses, brotli shows a clear advantage.
+
+When both `gzip` and `brotli` are listed, the gateway prefers brotli when the client supports it. If only one algorithm is listed, the gateway uses that algorithm exclusively.
+
+## What Gets Compressed
+
+- Responses with a `Content-Type` matching the `contentTypes` list
+- Responses larger than `minResponseBytes`
+- Responses from the client request (pulled through the proxy)
+
+What is NOT compressed:
+
+- Responses that already have a `Content-Encoding` header (e.g., from an upstream CDN)
+- Binary formats (images, videos, fonts) — these are already compressed
+- Responses smaller than `minResponseBytes`
+- Responses served from the [Semantic Cache](/features/ai-gateway/semantic-cache/) (cached responses may be pre-compressed)
+
+## Performance
+
+Compression adds per-response CPU overhead proportional to the response size and algorithm. For a typical 10KB JSON response:
+
+| Algorithm | Compression Time | Compressed Size | Overhead |
+|-----------|-----------------|----------------|----------|
+| None | 0ms | 10,000 bytes | Negligible |
+| gzip | &lt;1ms | ~3,200 bytes | Negligible |
+| brotli | ~1ms | ~2,800 bytes | Negligible |
+
+The bandwidth savings typically outweigh the CPU cost. For very large responses (>1MB), compression time increases linearly. Set `minResponseBytes` to skip compression for trivially small payloads.
+
+## Troubleshooting
+
+### Responses not being compressed
+
+Check the response meets all criteria:
+1. `Content-Type` is in the `contentTypes` list
+2. Response size exceeds `minResponseBytes`
+3. Client sent `Accept-Encoding` header
+4. Response does not already have `Content-Encoding`
+
+Verify compression is enabled in the data plane config:
+
+```bash
+kubectl exec -n nantian-gw deploy/nantian-gw-dataplane -- \
+  curl -s http://localhost:19080/v1/summary | jq '.config.compression'
+```
+
+### Testing compression
+
+```bash
+curl -H "Accept-Encoding: gzip, br" \
+     -H "Host: api.example.com" \
+     --compressed \
+     -o /dev/null -w "Size: %{size_download}, Encoding: %{content_encoding}" \
+     https://gateway/api/health
+```
+
+## Related Pages
+
+- [Performance Tuning](/configuration/tuning/) — connection pooling, buffer sizing, and throughput optimization
+- [Data Plane Configuration](/configuration/dataplane/) — full data plane config reference
+- [HTTP/2 Configuration](/guides/http2-config/) — HTTP/2 setup guide
