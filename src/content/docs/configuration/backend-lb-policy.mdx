@@ -110,3 +110,37 @@ Check `status.conditions` to troubleshoot why a policy is not taking effect. A p
 ## Checking Applied Policies
 
 Query the data plane admin API at port `19080` to see which policies are active. The `/snapshots` endpoint returns the full IR snapshot. Look for the `BackendCluster` entry matching your service and inspect the `session_persistence`, `loadBalancing`, and `circuitBreaker` fields. These fields are present only when a `BackendLBPolicy` has been resolved for that backend.
+
+## Session Persistence with Multi-Replica Deployments
+
+Session persistence stores session state in cookies signed with a shared secret. For single-replica deployments, the data plane auto-generates an ephemeral key on startup. For multi-replica deployments, you must configure a shared secret so all replicas can validate session cookies:
+
+```yaml
+# dataplane config
+dataplane:
+  config:
+    session_persistence:
+      secret_key_file: /etc/nantian-gw/session-secret/key
+```
+
+Or via Helm chart values:
+
+```yaml
+dataplane:
+  sessionPersistence:
+    sharedSecret: "your-cryptographically-random-secret"
+    # Or reference an existing Kubernetes Secret:
+    # existingSecret: "nantian-gw-session-secret"
+```
+
+Without a shared secret, each data plane replica generates its own ephemeral key. Session cookies signed by one replica are rejected by others, and all sessions are lost on pod restart. The data plane logs a warning on startup when using an auto-generated key:
+
+```
+session persistence using auto-generated key; configure sharedSecret or sharedSecretFile for multi-replica deployments
+```
+
+Generate a secure key:
+
+```bash
+openssl rand -hex 32
+```

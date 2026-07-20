@@ -102,3 +102,58 @@ Then create a demo `Gateway` and `HTTPRoute` as shown in the [Quick Start](/gett
 - Use [Helm Values Guide](/configuration/helm-values/) for layered values files, major chart value groups, and production guardrails.
 - Use [Experimental Features](/configuration/experimental-features/) before creating `AIService`, `TokenPolicy`, `WasmPlugin`, or experimental `BackendLBPolicy` resources.
 - Use [Operations](/operations/) for first checks after install, service names, logs, metrics, and admin access.
+
+## Air-Gapped and Offline Installations
+
+For clusters without internet access, pre-pull and re-tag images:
+
+```bash
+# On a machine with internet access
+docker pull ghcr.io/nantian-gw/nantian-controlplane:v2026.07.0
+docker pull ghcr.io/nantian-gw/dataplane:v2026.07.0
+docker pull ghcr.io/nantian-gw/dashboard:v2026.07.0
+
+# Tag for your private registry
+docker tag ghcr.io/nantian-gw/nantian-controlplane:v2026.07.0 \
+  registry.internal.example.com/nantian-gw/nantian-controlplane:v2026.07.0
+docker tag ghcr.io/nantian-gw/dataplane:v2026.07.0 \
+  registry.internal.example.com/nantian-gw/dataplane:v2026.07.0
+docker tag ghcr.io/nantian-gw/dashboard:v2026.07.0 \
+  registry.internal.example.com/nantian-gw/dashboard:v2026.07.0
+
+# Push to private registry
+docker push registry.internal.example.com/nantian-gw/nantian-controlplane:v2026.07.0
+docker push registry.internal.example.com/nantian-gw/dataplane:v2026.07.0
+docker push registry.internal.example.com/nantian-gw/dashboard:v2026.07.0
+```
+
+Then override the image registry in your Helm values:
+
+```yaml
+global:
+  imageRegistry: registry.internal.example.com
+controlplane:
+  image:
+    tag: v2026.07.0
+dataplane:
+  image:
+    tag: v2026.07.0
+dashboard:
+  image:
+    tag: v2026.07.0
+```
+
+For Helm charts in air-gapped environments, download the chart tarball:
+
+```bash
+helm pull nantian/nantian-gw --version 2026.07.0
+# Transfer nantian-gw-2026.07.0.tgz to the air-gapped machine
+helm install nantian-gw ./nantian-gw-2026.07.0.tgz -f values.yaml
+```
+
+Gateway API CRDs must also be available offline. Download the manifest and transfer it:
+
+```bash
+curl -LO https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
+kubectl apply -f standard-install.yaml
+```

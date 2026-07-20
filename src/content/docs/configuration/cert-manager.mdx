@@ -109,3 +109,62 @@ The chart creates three Certificate resources (CA, server, client) referencing y
 | `certs.certManager.enabled: true` | Production clusters with cert-manager | Automatic via cert-manager |
 
 When neither self-signed generation nor cert-manager is enabled, the chart expects you to have created the three TLS Secrets (`nantian-gw-grpc-ca`, `nantian-gw-grpc-server-tls`, `nantian-gw-grpc-client-tls`) yourself. This gives you full control over the certificate lifecycle using your own PKI or tooling.
+
+## Let's Encrypt Integration
+
+For public-facing gateway listeners, combine cert-manager with Let's Encrypt for automated TLS certificate provisioning:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+```
+
+Then reference this issuer in your Gateway listener's TLS configuration. cert-manager automatically requests, renews, and replaces certificates before expiry.
+
+## Troubleshooting
+
+### Certificate not issued
+
+```bash
+kubectl describe certificaterequest -n nantian-gw
+kubectl describe order -n nantian-gw  # For ACME issuers
+```
+
+Common failure reasons:
+- **Issuer not found**: Verify `certs.certManager.issuerRef.name` matches an existing `Issuer` or `ClusterIssuer`
+- **DNS validation failed**: For ACME, check that the domain's DNS records are resolvable and the solver configuration is correct
+- **Rate limiting**: Let's Encrypt enforces rate limits (50 certificates per domain per week). Use the staging environment (`https://acme-staging-v02.api.letsencrypt.org/directory`) for testing
+
+### Certificate about to expire
+
+```bash
+kubectl get certificate -n nantian-gw -o wide
+```
+
+The `Ready` and `Renewal Time` columns show certificate status. cert-manager renews certificates at `renewBefore` (default 15 days before expiry). Force manual renewal:
+
+```bash
+kubectl annotate certificate nantian-gw-grpc-server-tls -n nantian-gw \
+  cert-manager.io/issuer-kind=ClusterIssuer \
+  cert-manager.io/issuer-name=nantian-gw-ca-issuer
+```
+
+### gRPC connection refused after certificate rotation
+
+If data planes lose connection after certificate rotation, they may be using a cached, expired certificate. Restart data plane pods to force a fresh connection:
+
+```bash
+kubectl rollout restart deployment/nantian-gw-dataplane -n nantian-gw
+```
