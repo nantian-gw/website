@@ -44,5 +44,8 @@
     "markdownlint-cli2": "^0.22.1",
     "playwright": "^1.61.1",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "js-yaml": "4.3.0"
   }
 }
