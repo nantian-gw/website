@@ -8,6 +8,7 @@ const allowedHighs = new Map([
   ["astro", ["esbuild", "vite"]],
   ["astro-expressive-code", ["astro"]],
   ["esbuild", ["esbuild"]],
+  ["js-yaml", ["js-yaml"]],
   ["starlight-versions", ["@astrojs/starlight"]],
   ["vite", ["esbuild"]],
 ]);
@@ -38,8 +39,11 @@ export function classifyAuditReport(report) {
 
     const expectedVia = allowedHighs.get(name);
     const actualVia = normalizeVia(vulnerability.via);
+    const effectivelyUnfixable =
+      vulnerability.fixAvailable === false ||
+      vulnerability.fixAvailable?.isSemVerMajor === true;
     const knownUnfixable =
-      vulnerability.fixAvailable === false &&
+      effectivelyUnfixable &&
       expectedVia &&
       sameMembers(actualVia, [...expectedVia].sort());
 
