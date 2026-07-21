@@ -1,0 +1,131 @@
+---
+title: 故障注入
+description: "通过 Nantian Gateway 的故障注入过滤器向 HTTP 请求注入延迟和错误，测试服务的弹性能力。"
+---
+
+故障注入可帮助您测试服务在不利条件下的表现——包括慢速后端、间歇性故障或完全中断。通过在网关层注入故障，可以在不修改后端代码的情况下验证熔断器、重试逻辑和回退机制。
+
+## 故障类型
+
+Nantian Gateway 支持两种故障类型，作为 HTTPRoute 过滤器配置：
+
+| 故障类型 | 作用 | 适用场景 |
+|-----------|-------------|----------|
+| **延迟** | 在将请求转发至后端之前添加固定延迟 | 测试超时处理、慢后端场景 |
+| **中断** | 立即返回 HTTP 错误状态而不连接后端 | 测试错误处理、熔断器触发 |
+
+## 延迟注入
+
+向一定比例的请求注入固定延迟：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: fault-test
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    filters:
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.networking.k8s.io
+        kind: HTTPRouteFilter
+        name: fault-injection
+    backendRefs:
+    - name: api-service
+      port: 8080
+  - filters:
+    - type: RequestMirror
+      requestMirror:
+        backendRef:
+          name: fault-injector
+          port: 8080
+```
+
+:::note
+故障注入通过 HTTPRoute 过滤器配置。具体的过滤器配置取决于 Gateway API 版本和实现支持。
+:::
+
+## 常见测试场景
+
+### 熔断器验证
+
+在 30% 的请求上注入 5 秒延迟，验证熔断器是否开启：
+
+```yaml
+# 1. 配置熔断器
+# 参见 BackendLBPolicy 配置中的 maxInflightRequests
+
+# 2. 注入延迟
+# 在指向后端的路由上应用延迟过滤器
+
+# 3. 发送流量并观察
+# 超过阈值后熔断器应跳闸
+# 指标: nantian_gw_dataplane_circuit_breaker_open_total
+```
+
+### 重试逻辑测试
+
+中断 50% 的请求，验证重试是否成功：
+
+```yaml
+# 1. 配置重试
+# 参见重试策略指南中的重试配置
+
+# 2. 注入中断
+# 应用中断过滤器，在 50% 请求上返回 503
+
+# 3. 观察
+# 成功的响应表明重试已处理中断
+# 追踪 nantian_gw_dataplane_retry_attempts_total
+```
+
+### 超时处理
+
+注入超过路由超时时间的延迟：
+
+```yaml
+# 1. 设置一个较短的路由超时（如 2 秒）
+# 2. 注入 5 秒延迟
+# 3. 请求应失败并返回 504 Gateway Timeout
+```
+
+## 生产安全
+
+故障注入过滤器是强大的测试工具，但在生产环境中使用很危险：
+
+:::caution
+未经明确批准和监控，切勿在生产路由上启用故障注入。一个配置错误的中断过滤器返回 100% 的 500 错误会立即让服务下线。
+:::
+
+安全实践：
+
+- **使用灰度路由** — 创建一个独立的用于故障测试的路由，仅匹配测试请求头或路径
+- **从小开始** — 从 5% 注入率开始，逐步增加
+- **持续监控** — 在注入期间观察错误率仪表板
+- **自动化清理** — 使用 CronJob 或 TTL 在固定时间窗口后移除测试路由
+- **隔离生产流量** — 对 staging 后端而非生产服务运行故障测试
+
+## 可观测性
+
+通过指标跟踪故障注入行为：
+
+| 指标 | 描述 |
+|--------|-------------|
+| `nantian_gw_dataplane_fault_injection_delays_total` | 注入的延迟次数 |
+| `nantian_gw_dataplane_fault_injection_aborts_total` | 注入的中断次数 |
+
+结合[熔断器](/zh/guides/circuit-breaker/)和[重试策略](/zh/guides/retry/)指南，构建完整的弹性测试框架。
+
+## 相关页面
+
+- [熔断器](/zh/guides/circuit-breaker/) — 保护后端免受过载
+- [重试策略](/zh/guides/retry/) — 自动重试配置
+- [流量管理](/zh/features/traffic-management/) — 流量分割与路由
+- [运维指标](/zh/operations/metrics/) — 监控与告警

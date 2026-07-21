@@ -1,0 +1,118 @@
+---
+title: 响应压缩
+description: "在 Nantian Gateway 中启用 gzip 和 brotli 压缩以减少带宽使用并提升客户端性能。"
+---
+
+Nantian Gateway 支持对 HTTP 流量进行透明的响应压缩。压缩可减小响应负载大小，降低带宽成本，改善慢速连接客户端的页面加载时间。数据面会在将响应发送给客户端之前对其进行压缩——无需修改后端。
+
+## 压缩工作原理
+
+压缩在数据面层面启用，而非按路由配置。数据面检查客户端的 `Accept-Encoding` 请求头，并选择客户端和网关共同支持的最优压缩算法。
+
+```text
+客户端发送: Accept-Encoding: gzip, br, deflate
+网关选择: br（优先 brotli）或 gzip
+网关压缩响应体并添加 Content-Encoding: br
+```
+
+如果客户端未发送 `Accept-Encoding`，或者响应已经被压缩（如图片、预压缩资源），网关会原样透传响应。
+
+## 启用压缩
+
+压缩通过数据面配置控制：
+
+```yaml
+dataplane:
+  config:
+    runtime:
+      compression:
+        enabled: true
+        algorithms:
+          - gzip
+          - brotli
+        minResponseBytes: 1024
+        contentTypes:
+          - text/html
+          - text/css
+          - text/javascript
+          - application/json
+          - application/javascript
+          - application/xml
+          - text/plain
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----------|------|---------|-------------|
+| `enabled` | bool | `false` | 是否启用 HTTP 响应压缩 |
+| `algorithms` | list | `["gzip"]` | 压缩算法：`gzip`、`brotli` |
+| `minResponseBytes` | int | `1024` | 触发压缩的最小响应大小（字节）。小于此值的响应不压缩以避免开销。 |
+| `contentTypes` | list | 见上 | 可被压缩的 MIME 类型 |
+
+## 选择算法
+
+| 算法 | 压缩率 | CPU 开销 | 浏览器支持 |
+|-----------|-----------------|----------|----------------|
+| **gzip** | ~70% 缩减 | 低 | 全平台通用 |
+| **brotli** | ~80% 缩减 | 中等 | 所有现代浏览器（97%+） |
+
+Brotli 比 gzip 压缩率高 10-20%，但 CPU 开销略高。对于 API 响应（JSON），两者表现相近，因为 JSON 本身已较紧凑。对于 HTML 和文本密集型响应，brotli 优势明显。
+
+当同时列出 `gzip` 和 `brotli` 时，网关在客户端支持的情况下优先使用 brotli。若仅列出一种算法，则网关仅使用该算法。
+
+## 哪些响应会被压缩
+
+- `Content-Type` 匹配 `contentTypes` 列表的响应
+- 大小超过 `minResponseBytes` 的响应
+- 来自客户端请求的响应（通过代理拉取）
+
+以下情况不会被压缩：
+
+- 已带有 `Content-Encoding` 头的响应（如来自上游 CDN）
+- 二进制格式（图片、视频、字体）——这些格式本身已被压缩
+- 小于 `minResponseBytes` 的响应
+- 来自[语义缓存](/zh/features/ai-gateway/semantic-cache/)的响应（缓存响应可能已预压缩）
+
+## 性能
+
+压缩会增加每次响应的 CPU 开销，与响应大小和算法成正比。以一个典型的 10KB JSON 响应为例：
+
+| 算法 | 压缩时间 | 压缩后大小 | 开销 |
+|-----------|-----------------|----------------|----------|
+| 无 | 0ms | 10,000 字节 | 可忽略 |
+| gzip | &lt;1ms | ~3,200 字节 | 可忽略 |
+| brotli | ~1ms | ~2,800 字节 | 可忽略 |
+
+带宽节省通常远超 CPU 成本。对于超大响应（>1MB），压缩时间线性增长。设置 `minResponseBytes` 可跳过对微小负载的压缩。
+
+## 故障排查
+
+### 响应未被压缩
+
+检查响应是否满足所有条件：
+1. `Content-Type` 在 `contentTypes` 列表中
+2. 响应大小超过 `minResponseBytes`
+3. 客户端发送了 `Accept-Encoding` 请求头
+4. 响应未包含 `Content-Encoding`
+
+验证数据面配置中压缩已启用：
+
+```bash
+kubectl exec -n nantian-gw deploy/nantian-gw-dataplane -- \
+  curl -s http://localhost:19080/v1/summary | jq '.config.compression'
+```
+
+### 测试压缩
+
+```bash
+curl -H "Accept-Encoding: gzip, br" \
+     -H "Host: api.example.com" \
+     --compressed \
+     -o /dev/null -w "Size: %{size_download}, Encoding: %{content_encoding}" \
+     https://gateway/api/health
+```
+
+## 相关页面
+
+- [性能调优](/zh/configuration/tuning/) — 连接池、缓冲区大小和吞吐量优化
+- [数据面配置](/zh/configuration/dataplane/) — 完整的数据面配置参考
+- [HTTP/2 配置](/zh/guides/http2-config/) — HTTP/2 设置指南
