@@ -30,7 +30,7 @@
     "astro-pagefind": "^2.0.0",
     "mermaid": "^11.4.1",
     "rehype-mermaid": "^3.0.0",
-    "sharp": "^0.35.2",
+    "sharp": "^0.35.3",
     "starlight-versions": "^0.9.0",
     "tailwindcss": "^4.0.0"
   },
@@ -43,7 +43,7 @@
     "eslint-plugin-astro": "^1.7.0",
     "markdownlint-cli2": "^0.22.1",
     "playwright": "^1.61.1",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "overrides": {
     "js-yaml": "4.3.0"
