@@ -28,7 +28,7 @@
     "@tailwindcss/vite": "^4.3.1",
     "astro": "^6.4.8",
     "astro-pagefind": "^2.0.0",
-    "mermaid": "^11.4.1",
+    "mermaid": "^11.16.0",
     "rehype-mermaid": "^3.0.0",
     "sharp": "^0.35.2",
     "starlight-versions": "^0.9.0",
