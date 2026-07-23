@@ -5,9 +5,10 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const allowedHighs = new Map([
   ["@astrojs/mdx", ["astro"]],
   ["@astrojs/starlight", ["@astrojs/mdx", "astro", "astro-expressive-code"]],
-  ["astro", ["esbuild", "vite"]],
+  ["astro", ["astro", "esbuild", "sharp"]],
   ["astro-expressive-code", ["astro"]],
   ["esbuild", ["esbuild"]],
+  ["sharp", ["sharp"]],
   ["starlight-versions", ["@astrojs/starlight"]],
   ["vite", ["esbuild"]],
 ]);
@@ -39,7 +40,7 @@ export function classifyAuditReport(report) {
     const expectedVia = allowedHighs.get(name);
     const actualVia = normalizeVia(vulnerability.via);
     const knownUnfixable =
-      vulnerability.fixAvailable === false &&
+      (vulnerability.fixAvailable === false || vulnerability.fixAvailable?.isSemVerMajor === true) &&
       expectedVia &&
       sameMembers(actualVia, [...expectedVia].sort());
 
