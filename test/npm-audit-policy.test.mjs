@@ -12,7 +12,7 @@ test("allows the known unfixable Astro-stack high vulnerabilities", () => {
         fixAvailable: false,
         via: ["@astrojs/mdx", "astro", "astro-expressive-code"],
       },
-      astro: { severity: "high", fixAvailable: false, via: ["esbuild", "vite"] },
+      astro: { severity: "high", fixAvailable: false, via: ["astro", "esbuild", "sharp"] },
       "astro-expressive-code": { severity: "high", fixAvailable: false, via: ["astro"] },
       esbuild: {
         severity: "high",
