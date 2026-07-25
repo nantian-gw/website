@@ -167,8 +167,8 @@ tr:hover td {
 /* Links in content */
 .content a {
   color: var(--sl-color-accent-high, #22d3ee);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   transition: border-color 0.2s;
 }
 
