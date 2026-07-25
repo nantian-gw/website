@@ -61,7 +61,7 @@ The chart defaults are intentionally conservative:
 - Control plane, data plane, and dashboard each run two replicas by default.
 - The chart runs in `featureMode: standard` by default.
 - The chart does not render Gateway API CRDs by default: `gatewayAPI.installCRDs: false` and `gatewayAPI.channel: standard`.
-- The chart pins the `v2026.06.0` release tag (with `pullPolicy: IfNotPresent`) for control plane, data plane, and dashboard by default; production environments should still pin a specific release tag or digest explicitly in their values files.
+- The chart defaults to `latest` image tags with `pullPolicy: IfNotPresent` for control plane, data plane, and dashboard; production environments should pin a specific release tag or digest explicitly in their values files.
 - HPA is disabled by default with `hpa.enabled: false`.
 - Prometheus Operator ServiceMonitor resources are disabled by default with `serviceMonitor.enabled: false`.
 - NetworkPolicies are enabled by default with `networkPolicies.enabled: true`.

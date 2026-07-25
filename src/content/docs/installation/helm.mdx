@@ -123,7 +123,7 @@ controlplane:
       enableAiGateway: false
 ```
 
-The chart pins an immutable release tag (`v2026.06.0`) with `pullPolicy: IfNotPresent` by default. In production, override this with a specific release tag or an image digest in your values file.
+The chart defaults to `latest` image tags with `pullPolicy: IfNotPresent`. In production, override this with a specific release tag or an image digest in your values file.
 
 The control plane service split is:
 
@@ -188,7 +188,7 @@ dashboard:
     pullPolicy: IfNotPresent
 ```
 
-The chart pins the `v2026.06.0` release tag for control plane, data plane, and dashboard by default. Production environments should still pin a specific release tag or digest explicitly in their values files.
+The chart defaults to `latest` image tags for control plane, data plane, and dashboard. Production environments should pin a specific release tag or digest explicitly in their values files.
 
 Disable the dashboard when you do not need the web UI:
 
