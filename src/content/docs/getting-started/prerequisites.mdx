@@ -103,6 +103,10 @@ Install the Gateway API CRDs using the standard upstream channel:
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/standard-install.yaml
 ```
 
+:::tip[Offline environments]
+For clusters without internet access, download the manifest and transfer it manually. See [Air-Gapped Installation](/installation/#air-gapped-and-offline-installations) for details.
+:::
+
 Verify the CRDs are installed:
 
 ```bash

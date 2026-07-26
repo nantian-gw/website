@@ -179,11 +179,18 @@ spec:
 
 ## Applying
 
+The base `kustomization.yaml` references config files outside the kustomize root directory, which requires relaxed load restrictions:
+
 ```bash
-kubectl apply -k deploy/kubernetes/overlays/production
+kustomize build deploy/kubernetes/overlays/production \
+  --load-restrictor LoadRestrictionsNone | kubectl apply -f -
 ```
 
 Kustomize merges the base with the overlay patches, builds the final manifests, and applies them to the cluster.
+
+:::note
+`kubectl apply -k` does not support `--load-restrictor`. Use `kustomize build` and pipe to `kubectl apply` as shown above.
+:::
 
 ## GitOps integration
 

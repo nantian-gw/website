@@ -14,6 +14,10 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/downloa
 kubectl get crd gateways.gateway.networking.k8s.io
 ```
 
+:::tip[Offline environments]
+If your cluster cannot reach GitHub, download the manifest first and transfer it. See [Air-Gapped Installation](/installation/#air-gapped-and-offline-installations).
+:::
+
 You also need Helm 3.x and `kubectl` access to the target cluster.
 
 ## Add The Chart Repository
