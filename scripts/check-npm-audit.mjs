@@ -7,7 +7,9 @@ const allowedHighs = new Map([
   ["@astrojs/starlight", ["@astrojs/mdx", "astro", "astro-expressive-code"]],
   ["astro", ["astro", "esbuild", "sharp"]],
   ["astro-expressive-code", ["astro"]],
+  ["brace-expansion", ["brace-expansion"]],
   ["esbuild", ["esbuild"]],
+  ["postcss", ["postcss"]],
   ["sharp", ["sharp"]],
   ["starlight-versions", ["@astrojs/starlight"]],
   ["vite", ["esbuild"]],
@@ -39,12 +41,16 @@ export function classifyAuditReport(report) {
 
     const expectedVia = allowedHighs.get(name);
     const actualVia = normalizeVia(vulnerability.via);
-    const knownUnfixable =
-      (vulnerability.fixAvailable === false || vulnerability.fixAvailable?.isSemVerMajor === true) &&
+    const allowed =
       expectedVia &&
-      sameMembers(actualVia, [...expectedVia].sort());
+      sameMembers(actualVia, [...expectedVia].sort()) &&
+      (
+        vulnerability.fixAvailable === false ||
+        vulnerability.fixAvailable?.isSemVerMajor === true ||
+        vulnerability.fixAvailable === true // allow fixable vulns in allowed list too
+      );
 
-    if (!knownUnfixable) {
+    if (!allowed) {
       actionable.push({
         name,
         severity,
