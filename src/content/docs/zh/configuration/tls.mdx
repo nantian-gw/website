@@ -106,6 +106,42 @@ xds_tls:
 
 生产部署推荐使用 cert-manager。它无需人工干预即可处理证书签发、续期和轮换。
 
+## 自动回退 TLS 证书
+
+当您在 Gateway 上配置 HTTPS 监听器但**未设置** `certificateRefs` 时，Nantian Gateway 控制平面将自动生成自签 TLS 证书，使监听器能立即提供 HTTPS 服务。
+
+:::note
+这是开发阶段的便捷功能。回退证书提供**加密**（TLS），但**不提供身份验证**——证书是自签的，不经过任何 CA 信任。生产环境请务必通过 `certificateRefs` 配置正式证书。
+:::
+
+### 工作原理
+
+1. 启动时，控制平面创建持久化 CA 证书，存储在 Kubernetes Secret `nantian-gw-fallback-ca` 中（命名空间与控制平面相同）
+2. 对每个未配置 `certificateRefs` 的 HTTPS 监听器，使用该 CA 签发叶子证书，监听器的 hostname 作为 SAN 条目
+3. 证书和密钥通过 xDS 协议推送到数据平面，与用户配置的证书处理方式一致
+4. CA 证书在重启后保持不变——重启前签发的叶子证书继续有效
+
+### 回退 CA Secret
+
+控制平面创建并管理以下 Secret：
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nantian-gw-fallback-ca
+  namespace: nantian-gw
+  labels:
+    app.kubernetes.io/managed-by: nantian-gw
+    nantian.dev/component: fallback-ca
+type: kubernetes.io/tls
+data:
+  tls.crt: <CA certificate PEM>
+  tls.key: <CA private key PEM>
+```
+
+请勿在有回退证书监听器处于活跃状态时删除该 Secret——删除会导致下一次控制平面重启时生成新的 CA，使之前签发的所有叶子证书失效。
+
 ## 下一步
 
 - [配置概述](/zh/configuration/) — 通用配置结构

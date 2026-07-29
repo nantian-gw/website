@@ -107,6 +107,52 @@ Certificates can be provisioned through several approaches:
 
 For production deployments, cert-manager is recommended. It handles certificate issuance, renewal, and rotation without manual intervention.
 
+## Automatic Fallback TLS Certificates
+
+When you configure an HTTPS listener on a Gateway **without** `certificateRefs`, the Nantian Gateway control plane automatically generates a self-signed TLS certificate so the listener can serve HTTPS immediately.
+
+:::note
+This is a development convenience. Fallback certificates provide **encryption** (TLS) but **no authentication** — the certificate is self-signed and not trusted by any CA. For production, always configure real certificates via `certificateRefs`.
+:::
+
+### How It Works
+
+1. On startup, the control plane creates a persistent CA certificate stored in a Kubernetes Secret `nantian-gw-fallback-ca` (namespace: same as the control plane)
+2. For each HTTPS listener without `certificateRefs`, it issues a leaf certificate signed by that CA, with the listener's hostnames as SAN entries
+3. The certificate and key are pushed to data planes via the xDS protocol, just like user-configured certificates
+4. The CA persists across restarts — leaf certificates issued before a restart remain valid
+
+### Security Model
+
+| Property | Fallback | User-Configured Cert |
+|----------|----------|---------------------|
+| TLS encryption | ✅ | ✅ |
+| Hostname validation | ✅ (SAN match) | ✅ |
+| Trusted CA | ❌ (self-signed) | ✅ |
+| MITM resistance | ❌ | ✅ |
+| Production use | ❌ Not recommended | ✅ Required |
+
+### Fallback CA Secret
+
+The control plane creates and manages a Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nantian-gw-fallback-ca
+  namespace: nantian-gw
+  labels:
+    app.kubernetes.io/managed-by: nantian-gw
+    nantian.dev/component: fallback-ca
+type: kubernetes.io/tls
+data:
+  tls.crt: <CA certificate PEM>
+  tls.key: <CA private key PEM>
+```
+
+Do not delete this Secret while any fallback-certified listeners are active — deleting it causes the next control plane restart to generate a new CA, invalidating all previously issued leaf certificates.
+
 ## Next Steps
 
 - [Configuration Overview](/configuration/) — general configuration structure
