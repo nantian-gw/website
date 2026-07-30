@@ -26,7 +26,7 @@ Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总
 | GatewayHTTPSListenerDetectMisdirectedRequests | standard | Yes | Yes | 已支持 |
 | GatewayInfrastructurePropagation | standard | Yes | Yes | 已支持 |
 | GatewayAddressEmpty | standard | Yes | Yes | 已支持 |
-| ListenerSet | standard | No | Yes | 仅实验性运行时 |
+| ListenerSet | standard | No | Yes | 已支持 |
 | GatewayBackendClientCertificate | standard | Yes | Yes | 已支持 |
 | GatewayFrontendClientCertificateValidation | standard | No | No | 不支持 |
 | GatewayFrontendClientCertificateValidationInsecureFallback | standard | No | No | 不支持 |
@@ -70,8 +70,8 @@ Nantian Gateway 目标对齐 Kubernetes Gateway API v1.5.1 规范。本页汇总
 
 | 功能 | 通道 | 默认 | 实验性 | 状态 |
 |------|------|------|--------|------|
-| TLSRouteModeTerminate | experimental | No | Yes | 仅实验性运行时 |
-| TLSRouteModeMixed | experimental | No | Yes | 仅实验性运行时 |
+| TLSRouteModeTerminate | experimental | No | Yes | 已支持 (通过共享 TLS 运行时) |
+| TLSRouteModeMixed | experimental | No | Yes | 已支持 |
 
 ### UDPRoute 扩展功能
 
