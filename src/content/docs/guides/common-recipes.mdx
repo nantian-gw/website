@@ -70,6 +70,36 @@ EOF
 
 Verify: `curl -v https://api.example.com/` should show a valid certificate.
 
+## HTTPS with Fallback Certificate
+
+If you need HTTPS without managing certificates, Nantian Gateway automatically provisions a self-signed certificate. This is ideal for development or internal environments.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: https-gateway
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: dont-exist   # Gateway API requires a name; gateway substitutes fallback cert
+    allowedRoutes:
+      namespaces:
+        from: All
+```
+
+The control plane creates a self-signed CA (stored in `Secret/nantian-gw-fallback-ca`), issues a leaf certificate for the listener, and pushes it to data planes — zero configuration beyond the Gateway manifest.
+
+:::caution
+Fallback certificates are **not suitable for production**. They provide TLS encryption but no trust. Use [cert-manager](#https-with-cert-manager) or manual certificate provisioning for production deployments.
+:::
+
 ## Path-Based Routing
 
 Route different URL paths to different backends.
@@ -332,15 +362,18 @@ spec:
 
 ## Backend TLS with Custom CA
 
-Verify the backend's certificate against a custom CA stored in a ConfigMap.
+Verify the backend's certificate against a custom CA. The CA can be stored in a **ConfigMap** or **Secret**.
 
 ```bash
-# 1. Store the CA certificate
+# Option A: ConfigMap (recommended for simplicity)
 kubectl create configmap backend-ca -n default --from-file=ca.crt=/path/to/ca.pem
 
-# 2. Create BackendTLSPolicy
+# Option B: Secret
+kubectl create secret generic backend-ca-secret -n default --from-file=ca.crt=/path/to/ca.pem
+
+# Create BackendTLSPolicy
 kubectl apply -f - <<EOF
-apiVersion: gateway.networking.k8s.io/v1alpha3
+apiVersion: gateway.networking.k8s.io/v1
 kind: BackendTLSPolicy
 metadata:
   name: backend-tls
@@ -355,10 +388,9 @@ spec:
     caCertificateRefs:
     - name: backend-ca
       group: ""
-      kind: ConfigMap
+      kind: ConfigMap      # or "Secret" for Secret-based CA
     subjectAltNames:
     - DNS: secure-backend.default.svc
-    - DNS: secure-backend
 EOF
 ```
 
