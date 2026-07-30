@@ -13,6 +13,8 @@ Nantian Gateway combines standard Kubernetes Gateway API routing with experiment
 | Route gRPC traffic by service and method | [GRPCRoute](/features/traffic-management/) |
 | Handle raw TCP or UDP connections | [TCPRoute, UDPRoute](/features/traffic-management/) |
 | Pass through TLS without termination | [TLSRoute](/features/traffic-management/) |
+| Terminate TLS at the proxy | [HTTPS Listener](/configuration/tls/#gateway-listener-tls) |
+| Auto-generate TLS certs for HTTPS | [Fallback TLS Cert](/configuration/tls/#automatic-fallback-tls-certificates) |
 | Encrypt backend connections with custom CAs | [BackendTLSPolicy](/configuration/tls/#backend-tls) |
 | Distribute traffic across multiple backends | [Traffic Splitting](/features/traffic-management/#traffic-splitting) |
 | Protect backends from overload | [Circuit Breaker](/guides/circuit-breaker/) |
@@ -78,6 +80,7 @@ Features move from experimental to stable on independent timelines. Use this tab
 | HTTP/HTTPS Routing | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
 | GRPCRoute | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
 | TLS Passthrough | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
+| TLS Terminate (HTTPS) | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
 | TCP/UDP Routing | **Alpha** | `gateway.networking.k8s.io/v1alpha2` | ⚠️ With testing |
 | BackendTLSPolicy | **Stable** | `gateway.networking.k8s.io/v1` | ✅ Yes |
 | AI Gateway | **Experimental** | `gateway.nantian.dev/v1alpha1` | ⚠️ Production evaluation |

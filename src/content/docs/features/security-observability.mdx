@@ -10,6 +10,7 @@ Security and observability are part of the gateway path, not separate add-ons. N
 Nantian Gateway supports several TLS patterns:
 
 - TLS termination on `Gateway` listeners for standard HTTPS ingress.
+- **Automatic fallback TLS certificates** when a listener has no `certificateRefs` configured — development convenience with zero-config HTTPS.
 - TLS passthrough with `TLSRoute` when backend workloads terminate TLS.
 - Backend TLS validation with `BackendTLSPolicy`.
 - Mixed listener designs when different routes require different TLS behavior.
