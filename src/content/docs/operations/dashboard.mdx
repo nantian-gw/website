@@ -147,3 +147,164 @@ See the [Admin API](/architecture/admin-api) reference for the endpoints the das
 ## NetworkPolicy
 
 When `dashboard.networkPolicy.enabled` is `true`, the chart creates a Kubernetes NetworkPolicy that allows the dashboard pod to reach the control plane admin API. Customize this if your cluster has additional network restrictions.
+
+## Using the Dashboard
+
+After logging in, the dashboard presents a sidebar navigation organized into three plugin groups.
+Which items appear depends on the capabilities your control plane exposes (see [Experimental Features](/configuration/experimental-features)).
+
+### Overview Page
+
+The default landing page shows a high-level summary of your gateway fleet:
+
+- **KPI cards**: total gateways, HTTP/gRPC/stream routes, connected data plane nodes, and request rate
+- **Listener health donut**: distribution of healthy, degraded, and unhealthy listeners across all gateways
+- **Node status donut**: connected vs. disconnected data plane nodes
+- **Traffic card**: current request volume from the data plane
+- **Snapshot info**: current snapshot version, generation, and age
+
+### Gateways
+
+The **Gateways** page lists all managed Gateway API Gateway resources.
+
+- **List view**: KPI cards (total, accepted, not accepted), search bar, batch select/delete
+- **Create**: form-based gateway creation (name, namespace, listener configuration)
+- **Detail view**: tabs for listeners, routes, backend policies, and status conditions
+- **Edit**: modify existing gateway configuration
+
+### Routes
+
+The **Routes** page provides a unified view of all route kinds:
+
+- **Filterable list**: filter by kind (HTTPRoute, GRPCRoute, TCPRoute, TLSRoute, UDPRoute), namespace, and status
+- **Search**: free-text search across route names
+- **Create**: dedicated forms for each route kind with YAML editing support
+- **Detail view**: route spec, rules, backend refs, and status conditions
+
+### Nodes
+
+The **Nodes** page shows all connected data plane instances:
+
+- **Connection status**: connected, disconnected, or draining
+- **Readiness**: ready vs. not-ready
+- **ACK state**: last acknowledged snapshot version for each node
+- **Drift detection**: nodes whose snapshot version differs from the current control plane snapshot
+
+### Diagnostics
+
+Aggregates warnings and errors from the control plane, infrastructure layer, and data plane into a single view.
+Useful for troubleshooting configuration issues, missing CRDs, or connectivity problems.
+
+### Observability
+
+Prometheus-powered metrics dashboard with time-series charts:
+
+- **P95/P99 latency**: histogram of request latency
+- **RPS**: requests per second over time
+- **Success rate**: percentage of successful (non-5xx) responses
+- **Time range selector**: presets from 5m to 7d
+
+Requires a [Prometheus](/operations/prometheus-setup) instance configured in Settings.
+
+### Circuit Breaker
+
+Displays backends with active circuit breaker state, enriched with Prometheus metrics:
+
+- Inflight request count
+- Rejected request count
+- Health status
+
+### Backend TLS Policies
+
+Manage BackendTLSPolicy resources:
+
+- **List**: all BackendTLSPolicies with target backend references
+- **Create**: form-based or YAML-based creation
+- **Detail**: CA certificate, SAN validation, and status conditions
+
+### Backend LB Policies
+
+Manage BackendLBPolicy resources for session persistence and load balancing configuration:
+
+- **List**: all BackendLBPolicy resources
+- **Create**: configure session persistence mode, TTL, and load balancing algorithm
+- **Detail**: policy spec and status
+
+### Reference Grants
+
+Manage cross-namespace ReferenceGrant resources:
+
+- **List**: all ReferenceGrants
+- **Create**: specify from/to namespace and resource type
+- **Detail**: grant spec and status
+
+### AI Gateway Features
+
+When the AI gateway is enabled, the sidebar shows an AI section with:
+
+- **AI Overview**: total services, tokens consumed, requests, latency, and active model distribution
+- **AI Services**: manage AI service configurations (model, provider, rate limits)
+- **AI Token Policies**: rate limit policies for AI tokens
+- **AI Cost**: cost tracking by model, time range, and trend view
+- **AI Traces**: request traces with model, duration, token count, and status
+- **AI Usage**: token usage charts and trends
+
+### Wasm Plugins
+
+Manage Wasm plugins deployed to the data plane:
+
+- **List**: all registered Wasm plugins
+- **Create**: upload or configure Wasm plugin (name, file, configuration)
+- **Detail**: plugin spec, execution metrics, and status
+
+### Settings
+
+Configure dashboard integrations:
+
+- **Prometheus**: set the Prometheus URL for observability charts
+- **LLM**: configure LLM endpoint for the AI Chatbot feature
+- **Export/Import**: download or upload the full gateway configuration as YAML
+- **Alerts**: configure alert rules and notification channels
+
+### AI Chatbot
+
+A streaming chat interface that lets you inspect gateway state and diagnose issues
+using natural language. The chatbot queries the control plane's RAG (Retrieval-Augmented Generation)
+system, which indexes gateway resources, node status, and snapshot data.
+
+The chatbot is available from the sidebar when the AI features are enabled.
+
+### Global Search
+
+The search bar at the top of the sidebar performs a cross-resource search across:
+
+- Gateways (by name, namespace)
+- Routes (by name, kind, hostname)
+- Reference Grants, Backend TLS Policies, Backend LB Policies
+- Data plane nodes (by ID, address)
+- Diagnostics entries
+
+Results are scored by relevance and grouped by resource type.
+
+### Common Tasks
+
+| Task | Steps |
+|------|-------|
+| View all routes for a gateway | Navigate to the gateway detail page and open the Routes tab |
+| Check node drift | Go to **Nodes** and look for version mismatches |
+| Create an HTTPRoute | Navigate to **Routes → Create → HTTPRoute** |
+| Delete multiple gateways | Use the batch select checkboxes on the **Gateways** page |
+| Export configuration | Go to **Settings → Export** |
+| Monitor AI costs | Navigate to **AI → Cost** |
+| Troubleshoot data plane connectivity | Check **Diagnostics** and **Nodes** pages |
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AUTH_SECRET` | Yes | — | NextAuth encryption key. Generate with `openssl rand -base64 32`. |
+| `CONTROLPLANE_ADMIN_URL` | No | `http://localhost:18081` | Control plane admin API base URL. |
+| `DATAPLANE_ADMIN_URL` | No | `http://localhost:19080` | Data plane admin API base URL. |
+| `DATAPLANE_BEARER_TOKEN` | No | — | Bearer token for data plane admin API access. |
+| `DASHBOARD_ENABLE_HSTS` | No | `false` | Enable HSTS response header. |
+| `AUTH_TRUST_HOST` | No | — | Required when running behind a reverse proxy. |

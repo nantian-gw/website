@@ -49,6 +49,40 @@ Each release produces the following artifacts:
 | Helm Chart | Deployment package | `tgz` format |
 | Source archive | Full source code tar.gz | `tar.gz` |
 
+### Platform Release Coordination
+
+Nantian Gateway uses a **platform release** workflow to coordinate version-locked releases across all component repositories.
+The [`platform-release`](https://github.com/nantian-gw/platform-release) repository manages the process.
+
+#### Platform Release Flow
+
+1. **Component tags are created** in each managed repository (`gateway`, `dataplane`, `dashboard`, `helm-charts`)
+   using the calendar version format (e.g., `v2026.06.0-rc.1`).
+
+2. **Candidate is resolved** via `platform-release/scripts/resolve-release.sh`, which validates the platform version format,
+   resolves exact commits, and writes `releases/<version>/manifest.yaml`.
+
+3. **Candidate is validated** via `platform-release/scripts/run-validation.sh`, which runs `releasectl.py` to:
+   - Validate the manifest and summary against JSON schemas
+   - Clone each component at the exact commit from the manifest
+   - Run component validation commands from `components/components.yaml`
+   - Run cross-component platform checks (conformance, install validation)
+
+4. **Results are collected** via `platform-release/scripts/collect-results.sh`, producing human-readable
+   `test-matrix.md`, `conformance.md`, and `artifacts.yaml`.
+
+5. **Candidate is promoted** via `platform-release/scripts/promote-release.sh` once `summary.yaml`
+   reports `status: passed`, copying the candidate tree to a final release tree.
+
+6. **Final release is published** via the `publish-release.yaml` GitHub Actions workflow that:
+   - Commits the final release trees
+   - Creates the git tag
+   - Pushes main
+   - Publishes the GitHub Release
+
+See the [`platform-release` repository](https://github.com/nantian-gw/platform-release) for the complete workflow definitions,
+validation schemas, and release scripts.
+
 ## Release Workflow
 
 ### 1. Preparation

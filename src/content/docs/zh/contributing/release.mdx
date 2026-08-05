@@ -48,6 +48,39 @@ Nantian Gateway 维护最近两个月度版本的安全和关键 Bug 修复：
 | Helm Chart | 部署包 | `tgz` 格式 |
 | 源码归档 | 完整的源码 tar.gz | `tar.gz` |
 
+### 平台发布协调
+
+Nantian Gateway 使用**平台发布**流程来协调所有组件仓库的版本锁定发布。
+[`platform-release`](https://github.com/nantian-gw/platform-release) 仓库管理该流程。
+
+#### 平台发布流程
+
+1. **组件标签创建**：在每个托管仓库（`gateway`、`dataplane`、`dashboard`、`helm-charts`）中
+   使用日历版本格式创建标签（如 `v2026.06.0-rc.1`）。
+
+2. **候选版本解析**：通过 `platform-release/scripts/resolve-release.sh` 验证平台版本格式，
+   解析精确的 commit，并写入 `releases/<version>/manifest.yaml`。
+
+3. **候选版本验证**：通过 `platform-release/scripts/run-validation.sh` 运行 `releasectl.py` 来：
+   - 验证 manifest 和 summary 是否符合 JSON schema
+   - 克隆每个组件到 manifest 中指定的精确 commit
+   - 运行 `components/components.yaml` 中注册的组件验证命令
+   - 运行跨组件平台检查（conformance、安装验证）
+
+4. **结果收集**：通过 `platform-release/scripts/collect-results.sh` 生成可读的
+   `test-matrix.md`、`conformance.md` 和 `artifacts.yaml`。
+
+5. **候选版本提升**：一旦 `summary.yaml` 报告 `status: passed`，通过 `platform-release/scripts/promote-release.sh`
+   将候选版本树复制到最终发布树。
+
+6. **最终发布**：通过 `publish-release.yaml` GitHub Actions 工作流：
+   - 提交最终发布树
+   - 创建 git 标签
+   - 推送 main 分支
+   - 发布 GitHub Release
+
+完整的 workflow 定义、验证 schema 和发布脚本请参见 [`platform-release` 仓库](https://github.com/nantian-gw/platform-release)。
+
 ## 发布流程
 
 ### 1. 准备阶段
