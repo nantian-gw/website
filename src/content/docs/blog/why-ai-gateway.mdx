@@ -1,0 +1,156 @@
+---
+title: Why We Built an AI Gateway Into Our Kubernetes Gateway API Implementation
+description: "Nantian Gateway is a Kubernetes Gateway API implementation with a built-in AI gateway module — no separate AI proxy needed. Here's why we chose this approach, how it works, and what it costs."
+---
+
+Nantian Gateway is a Kubernetes Gateway API implementation with a Rust data plane, 59 declared Gateway API features, and full conformance pass. The附带 feature is a built-in AI gateway module that runs model routing, token rate limiting, semantic caching, and PII masking in the same data plane process — no separate LiteLLM or Portkey deployment needed.
+
+This post explains why we built it this way and what the trade-offs are.
+
+## Architecture
+
+```
+Gateway API resources (CRDs)
+       ↓
+  Go control plane (Kubernetes reconciler + translator)
+       ↓
+  gRPC/xDS snapshot push
+       ↓
+  Rust data plane (Pingora framework)
+       ├── HTTP/HTTPS proxy
+       ├── gRPC proxy
+       ├── TCP/UDP/TLS proxy
+       ├── AI gateway (ntgw-ai crate, ~3,500 LOC)
+       └── Wasm runtime (wasmtime)
+```
+
+The control plane and data plane are separated. The control plane watches Kubernetes resource changes, translates them into an internal IR (Intermediate Representation), and pushes snapshots via gRPC/xDS. The data plane operates independently once it receives a snapshot — no control plane involvement in request processing.
+
+The AI gateway is a crate (`ntgw-ai`, ~3,500 lines of Rust) that runs as a filter stage in the HTTP proxy pipeline. Requests go through normal route matching first. If the matched backend is an `AIService`, the request passes through the AI filter chain. Otherwise it's forwarded directly to the regular backend.
+
+## Why In-Process, Not Sidecar
+
+Our initial design was a sidecar — an AI proxy process alongside each Pod, similar to Istio's approach. We abandoned it for three reasons:
+
+**Resource overhead.** Each Pod gets an extra container. AI proxy work isn't cheap — token counting, semantic caching, and PII detection all have memory footprints. Doubling the container count per Pod doubles the baseline overhead.
+
+**Latency.** The sidecar path is `gateway → sidecar → provider`, one extra hop. On the same machine this is 1-3ms, but at high concurrency the connection pool management becomes more complex.
+
+**Lifecycle management.** Sidecar startup ordering, hot upgrades, and fault isolation are all problems that the proxy framework already solves. Embedding the AI module lets the framework handle these uniformly.
+
+The cost of embedding is coupling. A panic in the AI module takes down the entire proxy. Rust helps here — the type system eliminates an entire class of issues at compile time, and `catch_unwind` provides a safety net for the rest.
+
+## Performance
+
+10-minute vegeta benchmark, 100 concurrent connections, HTTP/1.1 GET, single-node Kind cluster:
+
+| Metric | Without AI | With AI routing + token counting |
+|--------|-----------|----------------------------------|
+| RPS | 9,000-11,000 | 9,000-10,500 |
+| P50 latency | 3-4ms | 3-5ms |
+| P99 latency | 11-15ms | 12-16ms |
+| Memory | ~105 MiB | ~110 MiB |
+| CPU | ~1,100 millicores | ~1,200 millicores |
+
+The AI filter chain is only executed for requests matching an `AIService` backend. Regular HTTP traffic pays zero overhead. The delta above is only for AI-routed requests.
+
+## Module Breakdown
+
+The AI module is ~3,500 lines across 12 files:
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `filter.rs` | 764 | Filter chain orchestration, request/response processing |
+| `pii.rs` | 367 | Regex + rule-engine PII detection and redaction |
+| `multitenant.rs` | 287 | Tenant isolation and quota management |
+| `token.rs` | 276 | Token counting (OpenAI and Anthropic formats) |
+| `content_safety.rs` | 272 | Response content safety filtering |
+| `semantic_cache.rs` | 246 | Embedding-based semantic caching |
+| `ab_test.rs` | 254 | Percentage-based traffic splitting between models |
+| `ratelimit.rs` | 170 | Token-based and request-based rate limiting |
+| `prompt_guard.rs` | 163 | Injection detection |
+| `cost.rs` | 143 | Per-model, per-tenant cost tracking |
+| `model_router.rs` | 97 | Model-to-provider routing |
+| `fallback.rs` | 85 | Provider failover |
+
+Each module is an independent filter. The `filter.rs` orchestrates them in order — request filters run on the inbound path, response filters on the outbound path. Each can be enabled or disabled independently.
+
+## Configuration
+
+Declare models and providers via the `AIService` CRD:
+
+```yaml
+apiVersion: gateway.nantian.dev/v1alpha1
+kind: AIService
+metadata:
+  name: openai-router
+spec:
+  models:
+  - name: gpt-4o
+    provider:
+      name: openai
+      apiKeySecretRef:
+        name: openai-key
+        key: api-key
+  - name: claude-3.5-sonnet
+    provider:
+      name: anthropic
+      apiKeySecretRef:
+        name: anthropic-key
+        key: api-key
+  rateLimit:
+    tokensPerMinute: 100000
+```
+
+Reference it from an `HTTPRoute`:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai-route
+spec:
+  parentRefs:
+  - name: ai-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1/chat
+    backendRefs:
+    - name: openai-router
+      group: gateway.nantian.dev
+      kind: AIService
+```
+
+No extra configuration needed. The `AIService` is translated into the internal IR alongside regular backends and pushed via xDS.
+
+## Limitations
+
+1. **Provider support is limited.** Currently supports OpenAI, Anthropic, and Ollama. LiteLLM supports 200+ providers. This gap won't close quickly.
+2. **v1alpha1.** The `AIService` CRD is alpha. API may change.
+3. **Semantic cache needs an embedding service.** The cache depends on an external embedding API, not built-in. You need to deploy a separate embedding service.
+4. **No management UI.** The dashboard has AI overview and token usage pages, but model management is kubectl-only.
+
+## Comparison With Standalone AI Proxies
+
+| Dimension | Nantian Gateway (embedded) | LiteLLM/Portkey (standalone) |
+|-----------|---------------------------|------------------------------|
+| Deployment | One helm install | Gateway + AI proxy, two installs |
+| Latency | In-process, no extra hop | One extra hop, 1-5ms |
+| Monitoring | Single Prometheus metrics | Two monitoring stacks |
+| Provider support | 3 providers | 200+ providers |
+| Maturity | v1alpha1 | Production-verified |
+| Flexibility | Tightly coupled | Loosely coupled, independent upgrades |
+
+If you're already running LiteLLM with dozens of providers, migrating is not worth it. If you're starting from scratch or only need 2-3 mainstream providers, the embedded approach saves operational overhead.
+
+## Code
+
+GitHub: [github.com/nantian-gw/gateway](https://github.com/nantian-gw/gateway)
+Docs: [https://nantian.dev](https://nantian.dev)
+
+```bash
+helm repo add nantian-gw https://chart.nantian.dev
+helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace
+```

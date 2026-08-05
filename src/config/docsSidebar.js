@@ -166,4 +166,11 @@ export const docsSidebar = [
       { label: 'Frequently Asked Questions', link: 'faq/', translations: { 'zh-CN': '常见问题' } },
     ],
   },
+  {
+    label: 'Blog',
+    translations: { 'zh-CN': '博客' },
+    items: [
+      { label: 'Why We Built an AI Gateway Into Our Gateway', link: 'blog/why-ai-gateway', translations: { 'zh-CN': '为什么把 AI 网关做到网关里' } },
+    ],
+  },
 ];
