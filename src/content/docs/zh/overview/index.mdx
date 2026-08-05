@@ -1,60 +1,109 @@
 ---
 title: 什么是 Nantian Gateway
-description: "Nantian Gateway的分离式平面架构、核心组件、实验性能力与运维入口概览。"
+description: "内置 AI 网关的 Kubernetes Gateway API 实现 —— 无需额外部署独立 AI 代理。Rust 数据面，标准 Gateway API，Wasm 可扩展。"
 ---
 
-Nantian Gateway 是一个基于 Kubernetes Gateway API 的分离式网关栈。Go 控制面监听 Kubernetes 资源，把 Gateway API 和 Nantian 扩展资源转换为内部路由状态，写入状态，并通过 gRPC/xDS 发布运行时快照。Rust 数据面接收这些快照并处理真实流量。
+Nantian Gateway 是一个**内置 AI 网关的 Kubernetes Gateway API 实现**。
 
-当你需要以 Kubernetes 原生方式管理入口流量和 API 路由，并希望同时具备标准 Gateway API 资源、运维 API、可观测性资产，以及面向 AI 和 Wasm 工作负载的实验性扩展点时，可以使用 Nantian Gateway。
+与其他网关项目不同——它们要求你在 Ingress 之外再部署一个独立的 AI 代理（LiteLLM、Portkey 等）——Nantian Gateway 在**处理 HTTP 流量的同一个代理进程内**完成 AI 供应商路由、Token 计数、速率限制、Prompt 防护和成本追踪。无需额外一跳，无需增加运维复杂度。
 
-## 这组仓库包含什么
-
-Nantian Gateway 拆分为多个组件仓库，每个组件可以用自己的构建、测试和发布流程演进。
-
-| 仓库 | GitHub | 用途 |
-|------|--------|------|
-| `gateway/` | [nantian-gw/gateway](https://github.com/nantian-gw/gateway) | Go 控制面、Kubernetes reconciler、translator、CRD 清单、Admin API 和一致性工具 |
-| `dataplane/` | [nantian-gw/dataplane](https://github.com/nantian-gw/dataplane) | Rust 数据面 workspace，负责接收运行时快照并处理流量 |
-| `helm-charts/` | [nantian-gw/helm-charts](https://github.com/nantian-gw/helm-charts) | 打包可安装的 Helm chart，发布地址是 `https://chart.nantian.dev` |
-| `dashboard/` | [nantian-gw/dashboard](https://github.com/nantian-gw/dashboard) | 面向运维人员的 Web 管理界面 |
-| `website/` | [nantian-gw/website](https://github.com/nantian-gw/website) | 当前 Astro/Starlight 文档站 |
-| `proto/` | [nantian-gw/proto](https://github.com/nantian-gw/proto) | 维护组件之间共享的 protobuf 契约 |
-
-## 它如何工作
-
-Gateway API 资源是系统的事实来源。用户创建 `Gateway`、`HTTPRoute`、`GRPCRoute`、`TCPRoute`、`UDPRoute`、`TLSRoute`、`ReferenceGrant` 和 Gateway API policy 等资源。启用实验功能后，Nantian 扩展资源也可以参与同一套工作流。
-
-```text
-Gateway API resources -> Go control plane -> internal snapshot -> gRPC/xDS -> Rust data plane -> backends
+```
+# 一次安装。一个代理。网关 + AI 网关。
+helm repo add nantian-gw https://chart.nantian.dev
+helm install nantian-gw nantian-gw/nantian-gw --namespace nantian-gw --create-namespace
 ```
 
-控制面监听 Kubernetes 资源，把可接受的对象转换为运行时快照格式，更新状态条件，并暴露 Admin API 与 metrics 端点供排查。数据面连接控制面，通过 gRPC/xDS 接收快照，并在运行时监听端口处理流量。Dashboard 和 Admin API 为运维人员提供运行中系统的可见性。
+## 为什么
 
-## 稳定能力与实验能力
+需要 AI 网关能力的团队目前有两个选择：
 
-Gateway API 路由是主要能力。请通过 Gateway API support 页面和 gateway 仓库中生成的支持声明来理解支持范围，不要依赖宽泛的营销式表述。
+1. **使用独立的 AI 代理**（LiteLLM、Portkey、AI Gateway）—— 增加了一跳，管理复杂度翻倍，引入独立的认证和可观测性面。
+2. **使用 Kubernetes 网关**（Istio、Envoy Gateway、Contour）—— 完全没有 AI 功能，仍然需要独立的 AI 代理。
 
-Nantian 还包含实验性 API：
+Nantian Gateway 是唯一**将两者合并在一个进程**中的选择：
 
-- `AIService` 使用 `gateway.nantian.dev/v1alpha1`，描述一个 AI provider/model 目标。
-- `TokenPolicy` 使用 `gateway.nantian.dev/v1alpha1`，把 token 或请求限额附加到本地 Gateway API 目标资源。
-- `WasmPlugin` 使用 `gateway.nantian.dev/v1alpha1`，把 Wasm 模块绑定到目标资源。
-- `BackendLBPolicy` 使用 Gateway API 实验版本 `gateway.networking.k8s.io/v1alpha2`，配置后端负载均衡行为。
+- **Gateway API** 路由：处理常规 HTTP/gRPC/TCP/UDP 流量
+- **AI 网关** 功能：处理 LLM 流量——模型路由、语义缓存、PII 脱敏、内容安全、A/B 测试、故障转移、成本追踪、Langfuse 可观测性
+- **Wasm 可扩展**：用 Rust 编写自定义过滤器，通过 CRD 部署
 
-实验功能默认关闭。创建这些资源前，需要先开启对应的控制面和数据面 feature flag；在 API 仍处于实验阶段时，也要预期 schema 或运行时行为可能变化。
+一次 Helm 安装，一个控制面，一个数据面二进制文件。
 
-## 运维入口
+## 快速示例
 
-Helm 是推荐给用户和运维人员的安装路径。Chart 会安装控制面、数据面、dashboard、Service、RBAC、NetworkPolicy，以及一个默认名为 `nantian-gw` 的 `GatewayClass`。仓库内也提供 Kustomize overlays，用于开发和自定义部署。
+```bash
+# 1. 安装网关
+helm repo add nantian-gw https://chart.nantian.dev
+helm install nantian-gw nantian-gw/nantian-gw \
+  --namespace nantian-gw --create-namespace
 
-控制面在 `18080` 暴露 gRPC，在 `18081` 暴露 Admin API，在 `18082` 暴露 metrics，在 `18083` 暴露健康检查。数据面的运行时 HTTP 监听地址是 `0.0.0.0:80`，Admin API 与 metrics Service 端口是 `19080`。Dashboard Service 在 Helm chart 中使用端口 `3000`。
+# 2. 创建 Gateway（入口点）
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: my-gateway
+  namespace: default
+spec:
+  gatewayClassName: nantian-gw
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+EOF
 
-日常运维可以先查看 Kubernetes Pod 状态、`GatewayClass` 状态、Route 绑定状态、控制面和数据面日志、Prometheus metrics、Grafana dashboard，以及 Admin API。
+# 3. 创建 HTTPRoute（路由规则）
+kubectl apply -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: my-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: my-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: my-backend-service
+      port: 8080
+EOF
+```
+
+现在 `/api` 的流量已被路由到 `my-backend-service:8080`。无需自定义 CRD，无需专有配置语言。
+
+## 架构
+
+Nantian Gateway 采用分离式平面架构：
+
+```text
+Gateway API 资源 -> Go 控制面 -> 内部快照 -> gRPC/xDS -> Rust 数据面 -> 后端服务
+```
+
+**Go 控制面** 监听 Kubernetes 资源，将 Gateway API 和 Nantian 扩展资源翻译为内部路由状态，上报状态，并通过 gRPC/xDS 发布运行时快照。
+**Rust 数据面** 接收这些快照并处理实时流量——HTTP、gRPC、TCP、UDP、TLS 和 AI 供应商请求。
+
+控制面和数据面是独立的二进制文件，位于不同的仓库中，各自拥有独立的构建、测试和发布周期。
+
+## 能力概览
+
+| 能力 | 详情 |
+|------|------|
+| **Gateway API** | v1.5.1，60+ 特性，全量 conformance 测试通过 |
+| **AI 网关** | 模型路由、语义缓存、PII 脱敏、内容安全、A/B 测试、故障转移、成本追踪、Langfuse、Token 策略 |
+| **Wasm 插件** | 用 Rust 编写自定义过滤器，wasmtime 沙箱，通过 CRD 部署 |
+| **服务网格** | Gateway API Mesh 模型，无需 Sidecar |
+| **仪表盘** | Next.js 管理界面，30+ 页面 |
+| **可观测性** | Prometheus 指标、Grafana 仪表盘、OpenTelemetry 追踪、结构化日志 |
+| **性能** | 9,000-11,000 RPS，P50 3-4ms，P99 11-15ms，~105 MiB 内存 |
+| **运维** | Helm Chart、HA 配置、PDB、拓扑分布、告警规则、备份流程 |
 
 ## 下一步
 
 - [快速开始](/zh/getting-started/quick-start/)
 - [Helm 安装](/zh/installation/helm/)
-- [实验功能](/zh/configuration/experimental-features/)
-- [运维](/zh/operations/)
+- [AI 网关功能](/zh/features/ai-gateway/)
+- [运维指南](/zh/operations/)
 - [API 参考](/zh/api-reference/)
