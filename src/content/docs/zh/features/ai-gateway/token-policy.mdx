@@ -92,6 +92,6 @@ spec:
 
 ## 指标
 
-速率限制命中通过 `ntgw_ai_token_rate_limit_hits_total` Prometheus 计数器追踪，标签为 `model` 和 `scope`。这让你能够构建仪表盘，显示哪些模型最常触发限制，以及瓶颈是在模型级别还是在 API 密钥级别。
+速率限制命中通过 `nantian_gw_ai_token_rate_limit_hits_total` Prometheus 计数器追踪，标签为 `model` 和 `scope`。这让你能够构建仪表盘，显示哪些模型最常触发限制，以及瓶颈是在模型级别还是在 API 密钥级别。
 
-一个独立的 `ntgw_ai_tenant_denied_total` 计数器（`reason="quota_exceeded"`）追踪租户级别配额执行导致的拒绝，这是与速率限制器不同的机制。
+一个独立的 `nantian_gw_ai_tenant_denied_total` 计数器（`reason="quota_exceeded"`）追踪租户级别配额执行导致的拒绝，这是与速率限制器不同的机制。

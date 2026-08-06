@@ -92,6 +92,6 @@ An `AIService` without a `tokenPolicyRef` has no rate limiting. The gateway skip
 
 ## Metrics
 
-Rate limit hits are tracked through the `ntgw_ai_token_rate_limit_hits_total` Prometheus counter, labeled by `model` and `scope`. This lets you build dashboards that show which models are hitting limits the most and whether the bottleneck is at the model level or at the API key level.
+Rate limit hits are tracked through the `nantian_gw_ai_token_rate_limit_hits_total` Prometheus counter, labeled by `model` and `scope`. This lets you build dashboards that show which models are hitting limits the most and whether the bottleneck is at the model level or at the API key level.
 
-A separate `ntgw_ai_tenant_denied_total` counter with `reason="quota_exceeded"` tracks denials from tenant-level quota enforcement, which is a distinct mechanism from the rate limiter.
+A separate `nantian_gw_ai_tenant_denied_total` counter with `reason="quota_exceeded"` tracks denials from tenant-level quota enforcement, which is a distinct mechanism from the rate limiter.
