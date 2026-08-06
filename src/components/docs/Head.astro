@@ -98,4 +98,17 @@ const org = {
     await mermaid.run({ nodes });
   }
   document.addEventListener('astro:page-load', renderMermaid);
-</script>
+  // Preserve scroll position during client-side navigation
+  if (history.scrollRestoration) {
+    history.scrollRestoration = 'manual';
+  }
+  let scrollPositions = new Map();
+  document.addEventListener('astro:before-swap', () => {
+    scrollPositions.set(location.pathname, { x: window.scrollX, y: window.scrollY });
+  });
+  document.addEventListener('astro:after-swap', () => {
+    const pos = scrollPositions.get(location.pathname);
+    if (pos) {
+      window.scrollTo(pos.x, pos.y);
+    }
+  });
