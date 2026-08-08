@@ -9,6 +9,9 @@ import { docsSidebar } from './src/config/docsSidebar.js';
 
 export default defineConfig({
   site: 'https://nantian.dev',
+  build: {
+    inlineStylesheets: 'auto',
+  },
   markdown: {
     processor: unified({
       rehypePlugins: [[rehypeMermaid, { strategy: 'pre-mermaid' }]],
