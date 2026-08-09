@@ -120,6 +120,7 @@ test('versioned English and Chinese docs stay path-mirrored', () => {
 
 test('current and versioned docs only differ by the approved drift set', () => {
   const expectedCurrentOnly = [
+    'blog/why-ai-gateway.mdx',
     'concepts/gateway-api-support.mdx',
     'concepts/glossary.mdx',
     'concepts/ir.mdx',
