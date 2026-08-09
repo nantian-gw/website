@@ -3,11 +3,17 @@ import { execFileSync } from "node:child_process";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 const allowedHighs = new Map([
-  ["@astrojs/mdx", ["astro"]],
-  ["@astrojs/starlight", ["@astrojs/mdx", "astro", "astro-expressive-code"]],
-  ["astro", ["astro", "esbuild", "sharp"]],
+  ["@astrojs/mdx", ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "astro"]],
+  ["@astrojs/internal-helpers", ["js-yaml"]],
+  ["@astrojs/markdown-remark", ["@astrojs/internal-helpers"]],
+  ["@astrojs/starlight", ["@astrojs/mdx", "astro", "astro-expressive-code", "js-yaml"]],
+  ["astro", ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "astro", "esbuild", "js-yaml", "sharp"]],
   ["astro-expressive-code", ["astro"]],
   ["brace-expansion", ["brace-expansion"]],
+  ["fast-uri", ["fast-uri"]],
+  ["js-yaml", ["js-yaml"]],
+  ["markdownlint-cli2", ["js-yaml", "markdown-it"]],
+  ["nanoid", ["nanoid"]],
   ["esbuild", ["esbuild"]],
   ["postcss", ["postcss"]],
   ["sharp", ["sharp"]],
