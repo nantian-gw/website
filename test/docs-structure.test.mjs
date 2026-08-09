@@ -153,7 +153,10 @@ test('current and versioned docs only differ by the approved drift set', () => {
     'operations/prometheus-setup.mdx',
     'operations/scaling.mdx',
   ];
-  const expectedArchivedOnly = [];
+  const expectedArchivedOnly = [
+    'overview/v1.5-comparison.mdx',
+    'overview/v1.5-use-cases.mdx',
+  ];
 
   assertIntentionalDrift(
     currentEnglishDocs(),
