@@ -6,26 +6,30 @@ import { classifyAuditReport } from "../scripts/check-npm-audit.mjs";
 test("allows the known unfixable Astro-stack high vulnerabilities", () => {
   const result = classifyAuditReport({
     vulnerabilities: {
-      "@astrojs/internal-helpers": { severity: "high", fixAvailable: false, via: ["js-yaml"] },
+      "@astrojs/internal-helpers": {
+        severity: "high",
+        fixAvailable: { name: "astro", version: "7.2.0", isSemVerMajor: true },
+        via: ["js-yaml"],
+      },
       "@astrojs/markdown-remark": {
         severity: "high",
-        fixAvailable: false,
+        fixAvailable: { name: "astro", version: "7.2.0", isSemVerMajor: true },
         via: ["@astrojs/internal-helpers"],
       },
       "@astrojs/mdx": {
         severity: "high",
-        fixAvailable: false,
+        fixAvailable: { name: "@astrojs/starlight", version: "0.41.7", isSemVerMajor: true },
         via: ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "astro"],
       },
       "@astrojs/starlight": {
         severity: "high",
-        fixAvailable: false,
+        fixAvailable: { name: "@astrojs/starlight", version: "0.41.7", isSemVerMajor: true },
         via: ["@astrojs/mdx", "astro", "astro-expressive-code", "js-yaml"],
       },
       astro: {
         severity: "high",
-        fixAvailable: false,
-        via: ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "esbuild", "js-yaml", "sharp"],
+        fixAvailable: { name: "astro", version: "7.2.0", isSemVerMajor: true },
+        via: ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "astro", "astro", "astro", "esbuild", "js-yaml", "sharp"],
       },
       "astro-expressive-code": { severity: "high", fixAvailable: false, via: ["astro"] },
       esbuild: {
@@ -35,18 +39,18 @@ test("allows the known unfixable Astro-stack high vulnerabilities", () => {
       },
       "js-yaml": {
         severity: "high",
-        fixAvailable: false,
-        via: [{ name: "js-yaml", severity: "high" }],
+        fixAvailable: { name: "astro", version: "7.2.0", isSemVerMajor: true },
+        via: ["js-yaml"],
       },
       "markdownlint-cli2": {
         severity: "high",
-        fixAvailable: false,
+        fixAvailable: { name: "markdownlint-cli2", version: "0.23.2", isSemVerMajor: true },
         via: ["js-yaml", "markdown-it"],
       },
       sharp: {
         severity: "high",
-        fixAvailable: false,
-        via: [{ name: "sharp", severity: "high" }],
+        fixAvailable: { name: "astro", version: "7.2.0", isSemVerMajor: true },
+        via: ["sharp"],
       },
     },
   });
