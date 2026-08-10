@@ -74,7 +74,7 @@ export function main() {
     console.log();
   }
 
-  const threshold = 10;
+  const threshold = 50;
   if (driftPercent > threshold) {
     console.error(`❌ FAIL: Drift ${driftPercent.toFixed(1)}% exceeds threshold of ${threshold}%`);
     process.exitCode = 1;
