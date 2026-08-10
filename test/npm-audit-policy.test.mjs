@@ -6,25 +6,48 @@ import { classifyAuditReport } from "../scripts/check-npm-audit.mjs";
 test("allows the known unfixable Astro-stack high vulnerabilities", () => {
   const result = classifyAuditReport({
     vulnerabilities: {
-      "@astrojs/mdx": { severity: "high", fixAvailable: false, via: ["astro"] },
+      "@astrojs/internal-helpers": { severity: "high", fixAvailable: false, via: ["js-yaml"] },
+      "@astrojs/markdown-remark": {
+        severity: "high",
+        fixAvailable: false,
+        via: ["@astrojs/internal-helpers"],
+      },
+      "@astrojs/mdx": {
+        severity: "high",
+        fixAvailable: false,
+        via: ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "astro"],
+      },
       "@astrojs/starlight": {
         severity: "high",
         fixAvailable: false,
-        via: ["@astrojs/mdx", "astro", "astro-expressive-code"],
+        via: ["@astrojs/mdx", "astro", "astro-expressive-code", "js-yaml"],
       },
-      astro: { severity: "high", fixAvailable: false, via: ["astro", "esbuild", "sharp"] },
+      astro: {
+        severity: "high",
+        fixAvailable: false,
+        via: ["@astrojs/internal-helpers", "@astrojs/markdown-remark", "esbuild", "js-yaml", "sharp"],
+      },
       "astro-expressive-code": { severity: "high", fixAvailable: false, via: ["astro"] },
       esbuild: {
         severity: "high",
         fixAvailable: false,
         via: [{ name: "esbuild", severity: "high" }],
       },
-      "starlight-versions": {
+      "js-yaml": {
         severity: "high",
         fixAvailable: false,
-        via: ["@astrojs/starlight"],
+        via: [{ name: "js-yaml", severity: "high" }],
       },
-      vite: { severity: "high", fixAvailable: false, via: ["esbuild"] },
+      "markdownlint-cli2": {
+        severity: "high",
+        fixAvailable: false,
+        via: ["js-yaml", "markdown-it"],
+      },
+      sharp: {
+        severity: "high",
+        fixAvailable: false,
+        via: [{ name: "sharp", severity: "high" }],
+      },
     },
   });
 
