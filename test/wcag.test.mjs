@@ -144,7 +144,7 @@ test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", a
     const allResults = [];
 
     for (const { path, label } of TEST_PAGES) {
-      await t.test(label, async (st) => {
+      await t.test(label, async (_st) => {
         const url = `${BASE_URL}${path}`;
         const page = await context.newPage();
 
