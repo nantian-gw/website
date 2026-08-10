@@ -73,6 +73,11 @@ export default defineConfig({
           tag: 'meta',
           attrs: { name: 'robots', content: 'index, follow, max-image-preview:large' },
         },
+        {
+          tag: 'script',
+          attrs: { type: 'module' },
+          content: 'document.addEventListener("DOMContentLoaded",()=>{document.querySelectorAll("[style*=\\"overflow-x:auto\\"],.starlight-table-wrapper,.sl-markdown-content table").forEach(el=>{if(el.scrollWidth>el.clientWidth&&!el.hasAttribute("tabindex")){el.setAttribute("tabindex","0")}})})',
+        },
       ],
       customCss: ['./src/styles/custom.css'],
     }),

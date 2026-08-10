@@ -28,6 +28,8 @@
     "@tailwindcss/vite": "^4.3.1",
     "astro": "^6.4.8",
     "astro-pagefind": "^2.0.0",
+    "cheerio": "^1.2.0",
+    "jsdom": "^30.0.1",
     "mermaid": "^11.4.1",
     "rehype-mermaid": "^3.0.0",
     "sharp": "^0.35.2",
@@ -36,13 +38,16 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^10.0.1",
     "@typescript-eslint/eslint-plugin": "^8.61.1",
     "@typescript-eslint/parser": "^8.61.1",
     "eslint": "^10.7.0",
     "eslint-plugin-astro": "^1.7.0",
     "markdownlint-cli2": "^0.22.1",
+    "pixelmatch": "^7.2.0",
     "playwright": "^1.61.1",
+    "pngjs": "^7.0.0",
     "typescript": "^6.0.3"
   },
   "overrides": {

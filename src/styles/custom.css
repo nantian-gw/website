@@ -47,7 +47,7 @@
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
+  --color-text-muted: #64748b;
 }
 
 /* ===== Starlight Overrides ===== */
@@ -105,9 +105,20 @@
   --sl-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', monospace;
 }
 
-/* Sidebar link hover */
+/* Sidebar link text — increase contrast for WCAG 2.2 AA */
+.sidebar a {
+  color: #94a3b8;
+}
+
 .sidebar a:hover {
-  background: rgba(6, 182, 212, 0.08);
+  color: #cbd5e1;
+}
+
+/* Sidebar active link — ensure span inside inherits color */
+.sidebar a[aria-current="page"] span,
+.sidebar a[aria-current="page"] .sidebar-link-text,
+.sidebar a[aria-current="page"] .large {
+  color: inherit !important;
 }
 
 /* Sidebar active link */
@@ -117,7 +128,12 @@
   color: var(--sl-color-white, #f1f5f9) !important;
 }
 
-/* Light theme sidebar active */
+/* Light theme sidebar active — ensure span inside inherits color */
+[data-theme="light"] .sidebar a[aria-current="page"] span,
+[data-theme="light"] .sidebar a[aria-current="page"] .sidebar-link-text {
+  color: inherit !important;
+}
+
 [data-theme="light"] .sidebar a[aria-current="page"] {
   background: rgba(8, 145, 178, 0.12) !important;
   color: var(--sl-color-black, #0f172a) !important;
@@ -164,16 +180,43 @@ tr:hover td {
   background: rgba(6, 182, 212, 0.03);
 }
 
-/* Links in content */
+/* Scrollable tables — ensure keyboard access for WCAG 2.2 AA scrollable-region-focusable */
+.starlight-table-wrapper,
+.sl-markdown-content :where(table) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.starlight-table-wrapper:focus,
+.sl-markdown-content :where(table):focus {
+  outline: 2px solid var(--sl-color-accent, #06b6d4);
+  outline-offset: 2px;
+}
+
+/* Links in Starlight content — always underline for WCAG 2.2 AA link-in-text-block */
+.sl-markdown-content a {
+  color: var(--sl-color-accent-high, #22d3ee);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s;
+}
+
+.sl-markdown-content a:hover {
+  color: var(--sl-color-accent, #06b6d4);
+}
+
+/* Legacy content class fallback */
 .content a {
   color: var(--sl-color-accent-high, #22d3ee);
   text-decoration: underline;
   text-underline-offset: 2px;
-  transition: border-color 0.2s;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s;
 }
 
 .content a:hover {
-  border-bottom-color: var(--sl-color-accent-high, #22d3ee);
+  color: var(--sl-color-accent, #06b6d4);
 }
 
 /* Blockquotes */

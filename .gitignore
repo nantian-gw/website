@@ -5,3 +5,5 @@ dist/
 *.log
 .sisyphus/
 .astro/
+test/screenshots/actual/
+test/screenshots/diff/
