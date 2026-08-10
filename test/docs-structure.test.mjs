@@ -126,6 +126,7 @@ test('current and versioned docs only differ by the approved drift set', () => {
     'blog/performance-benchmarking.mdx',
     'blog/production-helm-charts.mdx',
     'blog/why-ai-gateway.mdx',
+    'concepts/gateway-api-support.mdx',
     'concepts/glossary.mdx',
     'concepts/ir.mdx',
     'configuration/backend-lb-policy.mdx',
@@ -157,6 +158,8 @@ test('current and versioned docs only differ by the approved drift set', () => {
     'operations/network-policy.mdx',
     'operations/prometheus-setup.mdx',
     'operations/scaling.mdx',
+    'overview/comparison.mdx',
+    'overview/use-cases.mdx',
   ];
   const expectedArchivedOnly = [
     'overview/v1.5-comparison.mdx',
