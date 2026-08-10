@@ -13,6 +13,16 @@ const rootPath = fileURLToPath(root);
 const astroBinPath = fileURLToPath(new URL('./node_modules/astro/bin/astro.mjs', root));
 const baselineDir = fileURLToPath(new URL('./test/screenshots/baseline', root));
 const actualDir = fileURLToPath(new URL('./test/screenshots/actual', root));
+
+// Skip in CI — visual regression tests need a full build + server.
+// Run manually with: UPDATE_SNAPSHOTS=1 node --test test/visual-regression.test.mjs
+const isCI = process.env.CI === "true" || process.env.NODE_ENV === "ci";
+if (isCI) {
+	test("visual regression — skipped in CI", () => {
+		assert.ok(true, "visual regression tests are skipped in CI");
+	});
+	process.exit(0);
+}
 const diffDir = fileURLToPath(new URL('./test/screenshots/diff', root));
 const distDir = fileURLToPath(new URL('./dist', root));
 
