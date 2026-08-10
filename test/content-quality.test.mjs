@@ -253,13 +253,11 @@ test('no MDX files contain placeholder text patterns', () => {
 test('no code blocks have invalid language tags', () => {
   const mdxFiles = collectMdxFiles(docsRoot);
   const untagged = [];
-  const badLanguages = [];
 
   for (const filePath of mdxFiles) {
     const content = readFileSync(filePath, 'utf8');
     const lines = content.split('\n');
     let inCodeBlock = false;
-    let codeBlockStartLine = 0;
 
     for (let i = 0; i < lines.length; i++) {
       const trimmed = lines[i].trim();
@@ -269,13 +267,12 @@ test('no code blocks have invalid language tags', () => {
       if (!inCodeBlock) {
         // Opening fence
         inCodeBlock = true;
-        codeBlockStartLine = i + 1;
 
         const language = getFenceLanguage(trimmed);
         if (!language) {
           untagged.push({
             file: filePath.replace(docsRoot + '/', ''),
-            line: codeBlockStartLine,
+            line: i + 1,
             fence: trimmed,
           });
         }
