@@ -1,0 +1,154 @@
+---
+title: "Production-Ready Helm Charts: Lessons from the Trenches"
+description: "Helm chart design decisions, values schema best practices, and lessons from hardening our charts for production use."
+date: 2026-07-22
+tags: ["helm", "kubernetes", "production", "devops", "packaging"]
+authors: ["Nantian Engineering Team"]
+---
+
+Helm charts are the standard way to deploy Kubernetes applications. But writing a chart that works in production is harder than it looks. This post covers the design decisions we made for our Helm chart, the values schema patterns we follow, and the lessons we learned from production deployments.
+
+## Chart Structure
+
+Our chart is at `helm-charts/charts/nantian-gw/`. It deploys three components: the control plane deployment, the data plane DaemonSet, and supporting resources like RBAC, ServiceAccounts, and ConfigMaps.
+
+The chart layout follows the standard Helm convention:
+
+```
+nantian-gw/
+  Chart.yaml
+  values.yaml
+  templates/
+    _helpers.tpl
+    controlplane-deployment.yaml
+    dataplane-daemonset.yaml
+    rbac.yaml
+    serviceaccount.yaml
+    configmap.yaml
+    service.yaml
+    servicemonitor.yaml
+    hpa.yaml
+    pdb.yaml
+  charts/
+    crds/
+```
+
+## Values Schema Design
+
+The `values.yaml` file is the public API of your chart. Getting it right determines whether users can configure your application without reading the template code.
+
+### Use a Flat Structure for Common Values
+
+Our first version had deeply nested values: `controlplane.config.logging.level`. Users had to dig through layers to find the settings they needed. We flattened the structure for common values:
+
+```yaml
+# Before
+controlplane:
+  config:
+    logging:
+      level: info
+
+# After
+logging:
+  level: info
+  format: json
+```
+
+Common values that apply to the whole application should be at the top level. Component-specific values stay nested under the component name.
+
+### Provide Sensible Defaults
+
+Every value should have a default that works in a basic Kind cluster. Production users override what they need, but the default should be deployable with `helm install` and no custom values.
+
+This means defaults that work on a single node with limited resources. Small resource requests, single replicas, and minimal feature flags enable users to evaluate the project without reading the values reference.
+
+### Use JSON Schema Validation
+
+Helm supports JSON Schema for values validation. We maintain a `values.schema.json` that validates types, required fields, and value constraints. The schema catches common mistakes before the chart is deployed:
+
+```json
+{
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of control plane replicas"
+    },
+    "image": {
+      "properties": {
+        "tag": {
+          "type": "string",
+          "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+",
+          "description": "Image tag in semver format"
+        }
+      }
+    }
+  }
+}
+```
+
+## Production Hardening
+
+### Pod Disruption Budgets
+
+A production gateway must survive node failures and cluster upgrades. We added a PDB that requires at least one data plane Pod to be available during voluntary disruptions:
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nantian-gw-dataplane
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: dataplane
+```
+
+### Horizontal Pod Autoscaling
+
+Traffic patterns change. The HPA scales the control plane based on CPU and memory, and the data plane based on a custom metric for active connections:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nantian-gw-dataplane
+spec:
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: nantian_gw_dataplane_active_connections
+      target:
+        type: AverageValue
+        averageValue: 1000
+```
+
+### Resource Limits and Requests
+
+Setting resource limits correctly is hard. Too low and the Pod gets OOMKilled. Too high and you waste cluster capacity. We calibrated our defaults based on benchmark results and production experience:
+
+- Control plane: 500m CPU, 512Mi memory request; 2 CPU, 2Gi limit.
+- Data plane: 1 CPU, 256Mi memory request; 4 CPU, 1Gi limit.
+
+## Lessons Learned
+
+**Version your CRDs.** Early versions of our chart did not version CRDs properly. Upgrading the chart would overwrite CRDs, potentially breaking existing resources. We now include CRDs in the `crds/` directory and handle schema migrations carefully.
+
+**Test upgrade paths.** An initial install works fine. An upgrade from an older version breaks in surprising ways. We now test upgrade paths in CI: install the previous chart version, apply custom values, then upgrade to the current version and verify everything still works.
+
+**Document every value.** Our values reference in the [Helm Values](/configuration/helm-values) page documents every value, its type, default, and what it does. This was a significant effort but it pays off every time a user configures the chart without asking questions.
+
+---
+
+*About the authors: The Nantian Engineering Team maintains the Helm chart and deployment infrastructure. We believe good packaging is the foundation of a good user experience.*
+
+### Read more
+
+- [Helm Values Reference](/configuration/helm-values) — Complete values documentation
+- [Installation Guide](/installation/helm) — Helm installation instructions
+- [Production Deployment](/installation/production) — Production deployment guide
+- [High Availability](/installation/ha) — High availability configuration

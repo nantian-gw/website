@@ -1,0 +1,67 @@
+---
+title: "Our Journey to Gateway API Conformance"
+description: "The story of achieving full Gateway API conformance, the challenges we faced, and the lessons we learned along the way."
+date: 2026-06-28
+tags: ["gateway-api", "conformance", "kubernetes", "testing"]
+authors: ["Nantian Engineering Team"]
+---
+
+Gateway API conformance is a badge of compatibility. It means your implementation passes the official conformance test suite, proving that it handles Gateway API resources correctly. This post covers our journey to achieve conformance, the hard parts, and what we learned.
+
+## Why Conformance Matters
+
+The Kubernetes Gateway API is a specification with multiple implementations — Istio, Contour, Kong, Traefik, and many more. Each implementation makes its own choices about which features to support and how to implement them. The conformance test suite ensures that a user's Gateway API resources work the same way across implementations.
+
+For us, conformance was a milestone that signaled the project was ready for real users. If someone reads our docs and deploys a Gateway resource, it should behave as the spec defines.
+
+## The Testing Infrastructure
+
+The conformance suite runs against a live Kubernetes cluster. It creates Gateway API resources, sends traffic through the gateway, and verifies the responses. We run it in CI using Kind, which creates a local Kubernetes cluster inside a Docker container.
+
+The setup involves:
+
+1. Spin up a Kind cluster with the gateway controller and data plane.
+2. Deploy test backends (simple HTTP servers).
+3. Run the conformance test suite binary.
+4. Collect results and report feature support.
+
+We run the v1.2 conformance suite, which covers 59 declared features. The full run takes about 15 minutes in CI.
+
+## The Hard Parts
+
+### Route Matching Edge Cases
+
+The spec defines precise rules for path matching, header matching, and query parameter matching. The edge cases are where the spec gets subtle. For example, when multiple routes match a request, the spec defines a specific precedence order. Getting this right required careful implementation and several test-driven iterations.
+
+### Cross-Namespace References
+
+Gateway API allows references across namespaces, controlled by ReferenceGrant resources. This is a powerful feature, but it requires careful validation. A misconfigured reference can expose services unintentionally. We had to implement thorough validation on the control plane side and ensure the data plane enforced the same rules.
+
+### Backend TLS
+
+The Gateway API spec supports TLS origination from the gateway to backends. This means the data plane must establish TLS connections to backends using certificates configured in the API resources. We found several edge cases in certificate rotation and validation that the conformance tests caught.
+
+## Lessons Learned
+
+**Test early, test often.** We started running conformance tests late in the development cycle. Many features worked in our manual testing but failed in the conformance suite. Running conformance from the start would have saved time.
+
+**The spec is the source of truth.** When our implementation disagreed with the conformance suite, we assumed the spec was right and our code was wrong. This was almost always correct. The spec is well written and unambiguous.
+
+**Feature discovery is valuable.** The conformance suite reports which features an implementation supports. This forced us to be honest about our feature set. We now maintain a detailed support matrix that maps Gateway API features to their implementation status.
+
+## Current Status
+
+We declare 59 Gateway API features and pass all applicable conformance tests. The full feature matrix is documented in our [Gateway API Support](/concepts/gateway-api-support) page. We track spec changes and update our implementation as the Gateway API evolves.
+
+Conformance is not a one-time achievement. Each new spec version adds features and tests. We run conformance in CI on every pull request to catch regressions immediately.
+
+---
+
+*About the authors: The Nantian Engineering Team maintains the gateway implementation and runs the conformance pipeline. We contribute to the Gateway API upstream when we find spec gaps or issues.*
+
+### Read more
+
+- [Gateway API Support](/concepts/gateway-api-support) — Full feature support matrix
+- [Gateway API Concepts](/concepts/gateway-api) — Gateway API overview
+- [Testing Guide](/contributing/testing) — How we test the gateway
+- [Development Setup](/contributing/development) — Set up a development environment

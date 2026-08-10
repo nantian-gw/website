@@ -1,0 +1,77 @@
+---
+title: "Building an AI Gateway on Top of a Modern Proxy"
+description: "How we built AI-specific features — token counting, model routing, semantic cache, and multi-provider support — into our Rust data plane."
+date: 2026-07-01
+tags: ["ai-gateway", "llm", "semantic-cache", "model-routing", "rust"]
+authors: ["Nantian Engineering Team"]
+---
+
+AI gateways are the new API gateways. They sit between applications and LLM providers, handling routing, rate limiting, caching, and observability. Instead of deploying a separate AI proxy, we built these capabilities directly into our data plane. This post covers the AI-specific features we built and the design decisions behind them.
+
+## The AI Filter Chain
+
+The AI gateway is a Rust crate called `ntgw-ai`, about 3,500 lines across 12 files. It runs as a filter chain in the HTTP proxy pipeline. When a request matches an `AIService` backend, the request passes through the AI filter chain. Otherwise it goes to the regular backend with zero AI overhead.
+
+The filter chain processes requests and responses in order:
+
+1. **Model Router** — Picks the provider and model based on the request.
+2. **Token Policy** — Checks token limits and rate limits.
+3. **Prompt Guard** — Scans for injection attempts.
+4. **PII Masking** — Redacts sensitive information.
+5. **Semantic Cache** — Checks for cached responses.
+6. **A/B Testing** — Routes traffic between model variants.
+7. **Cost Tracking** — Records per-request costs.
+8. **Content Safety** — Filters unsafe responses.
+
+Each filter is independent. You enable only the ones you need.
+
+## Model Routing
+
+The model router maps incoming requests to providers. The routing logic is straightforward: each `AIService` resource declares a list of models and their providers. The router matches the requested model name against the declared list and forwards the request to the corresponding provider.
+
+We support OpenAI, Anthropic, and Ollama. The router handles the provider-specific API format differences, including authentication headers, request body formats, and streaming responses.
+
+## Semantic Cache
+
+LLM API calls are expensive and slow. Semantic caching reduces both cost and latency by serving cached responses for semantically similar requests.
+
+The cache works by:
+
+1. Computing an embedding vector for the incoming request.
+2. Searching the cache for vectors above a similarity threshold.
+3. Returning the cached response if a match is found.
+4. Storing the response (and its embedding) in the cache on cache miss.
+
+The cache depends on an external embedding service. We recommend using a local embedding model for latency, but any OpenAI-compatible embedding API works. The cache size is configurable, and entries have a TTL.
+
+## Token Counting and Rate Limiting
+
+Token counting is surprisingly complex. Different providers use different tokenization algorithms. OpenAI uses cl100k_base. Anthropic uses their own tokenizer. Counting tokens accurately requires running the provider's tokenizer on the request.
+
+We implemented token counters for both OpenAI and Anthropic formats. The token policy filter uses these counters to enforce per-model and per-tenant rate limits. Rate limits can be specified as tokens per minute or requests per minute.
+
+## Multi-Tenant Isolation
+
+For SaaS deployments, the AI gateway supports multi-tenant isolation. Each tenant gets their own quota, rate limits, and cost tracking. The isolation is enforced at the filter level, not at the process level, so tenants share the same data plane process without extra overhead.
+
+Tenant identity is extracted from the request headers or the xDS configuration. The multitenant filter validates the tenant's quota before forwarding the request to the provider.
+
+## Production Considerations
+
+Running AI workloads through a gateway introduces latency and reliability requirements that differ from regular HTTP traffic. LLM responses are streaming and can take minutes. The gateway must handle long-lived connections without exhausting resources.
+
+We use Pingora's streaming proxy support for this. The data plane maintains a connection pool to each provider, reuses connections when possible, and handles backpressure from both the client and provider sides.
+
+The AI gateway also includes a fallback chain. If the primary provider returns a 5xx error or times out, the gateway tries the next provider in the chain. This ensures availability even when individual providers are degraded.
+
+---
+
+*About the authors: The Nantian Engineering Team designs and builds the AI gateway module. We focus on making AI infrastructure simple, fast, and reliable.*
+
+### Read more
+
+- [AI Gateway Overview](/features/ai-gateway) — Full AI gateway documentation
+- [Model Routing](/features/ai-gateway/model-routing) — Model routing configuration
+- [Semantic Cache](/features/ai-gateway/semantic-cache) — Semantic cache setup
+- [Token Policies](/features/ai-gateway/token-policy) — Token rate limiting and policies
+- [Multi-Tenant](/features/ai-gateway/multitenant) — Multi-tenant isolation

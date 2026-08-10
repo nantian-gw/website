@@ -1,0 +1,81 @@
+---
+title: "Architecture Deep Dive: Control Plane + Data Plane Separation"
+description: "Why we chose Go for the control plane, Rust for the data plane, and how xDS connects them into a single coherent gateway."
+date: 2026-07-15
+tags: ["architecture", "control-plane", "data-plane", "xDS", "design"]
+authors: ["Nantian Engineering Team"]
+---
+
+Nantian Gateway's defining architectural decision is the split-plane design. A Go control plane manages Kubernetes resources and translates them into configuration. A Rust data plane processes every byte of traffic. They communicate over gRPC using the xDS protocol. This post explains why we chose this separation, what each side does, and how the two connect.
+
+## Why Split Planes
+
+Monolithic gateways embed configuration logic and traffic processing in a single process. This works at small scale, but as the configuration surface grows, the coupling creates problems. A configuration reload can disrupt active connections. A traffic spike can starve the configuration loop.
+
+The split-plane pattern solves this by separating concerns. The control plane owns state, reconciliation, and translation. The data plane owns connections, bytes, and performance. Each can scale independently, fail independently, and evolve at its own pace.
+
+## The Go Control Plane
+
+We chose Go for the control plane for three reasons.
+
+**Kubernetes ecosystem.** The client-go library, controller-runtime, and the reconciliation pattern are idiomatic Go. Writing a Kubernetes controller in Go means using the same tools as the ecosystem around it.
+
+**Goroutines for concurrency.** The control plane watches multiple resource types, manages a work queue, and pushes xDS snapshots. Goroutines make this concurrent without the complexity of thread pools or async runtimes.
+
+**Fast iteration.** Go compiles in seconds. For a component that evolves rapidly with the Kubernetes API, this matters.
+
+The control plane's core loop is:
+
+1. Watch Gateway API resources (Gateway, HTTPRoute, etc.) and custom CRDs (AIService).
+2. Translate them into an internal Intermediate Representation (IR).
+3. Diff the IR against the last pushed snapshot.
+4. Push the full snapshot via xDS when something changes.
+
+## The Rust Data Plane
+
+The data plane is built on Pingora, a Rust framework from Cloudflare. Rust gives us predictable performance, no garbage collection pauses, and a type system that eliminates memory safety issues at compile time.
+
+The data plane's responsibilities are:
+
+- Accept connections from clients (HTTP/1.1, HTTP/2, gRPC, TCP, UDP, TLS).
+- Match requests against the xDS snapshot's route table.
+- Forward to backends with load balancing, retries, and circuit breakers.
+- Execute filter chains for AI gateway features, Wasm plugins, and observability.
+
+Because it runs independently once it receives a snapshot, the data plane doesn't need to contact the control plane during request processing. This isolation means a control plane outage doesn't affect traffic flow.
+
+## xDS: The Bridge
+
+xDS is the Envoy discovery service protocol. We use it for the control plane to data plane communication. The control plane implements the Aggregated Discovery Service (ADS) endpoint, and the data plane connects as a client.
+
+Each xDS push sends a complete snapshot, not a delta. This simplifies the data plane's state management: it replaces its entire configuration on each update. For a gateway managing thousands of routes, the snapshot size is a few megabytes, and the push completes in milliseconds.
+
+The snapshot includes:
+
+- **Listener discovery (LDS):** Which ports and protocols to listen on.
+- **Route discovery (RDS):** How to match and route requests.
+- **Cluster discovery (CDS):** Where backends are and how to load balance.
+- **Endpoint discovery (EDS):** Individual backend instances and their health.
+
+## Lifecycle Independence
+
+The data plane starts with a bootstrap configuration that points to the control plane's xDS endpoint. It connects, receives its first snapshot, and begins serving traffic. If the control plane restarts, the data plane continues serving from the last snapshot. When the control plane comes back, the data plane reconnects and gets the latest configuration.
+
+This lifecycle decoupling is the most important operational property of the split-plane design. You can upgrade the control plane without draining traffic. You can restart the data plane without losing configuration state.
+
+## Trade-offs
+
+The split-plane design is not free. It adds operational complexity: two binaries to deploy, two sets of logs and metrics, and a network dependency between them. The gRPC connection and xDS protocol add moving parts that a monolithic gateway doesn't have.
+
+But for a gateway that aims to handle production traffic at scale, the benefits outweigh the costs. The control plane can be slow and deliberate while the data plane is fast and lean. Each team can optimize their component independently. And the xDS protocol is a standard — any xDS-compliant data plane can consume our control plane's output.
+
+---
+
+*About the authors: The Nantian Engineering Team builds and maintains the Nantian Gateway project. We work on Kubernetes ingress, service mesh, and AI gateway infrastructure.*
+
+### Read more
+
+- [Split-Plane Architecture](/concepts/split-plane) — Detailed documentation of the architecture
+- [Control Plane Design](/architecture/controlplane) — Control plane internals and design
+- [Data Plane Design](/architecture/dataplane) — Data plane internals and design
+- [xDS Protocol](/api-reference/xds-proto) — xDS protocol reference

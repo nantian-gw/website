@@ -171,6 +171,11 @@ export const docsSidebar = [
     translations: { 'zh-CN': '博客' },
     items: [
       { label: 'Why We Built an AI Gateway Into Our Gateway', link: 'blog/why-ai-gateway', translations: { 'zh-CN': '为什么把 AI 网关做到网关里' } },
+      { label: 'Architecture Deep Dive: Split-Plane Design', link: 'blog/architecture-deep-dive', translations: { 'zh-CN': '架构深度解析：分离式平面设计' } },
+      { label: 'Journey to Gateway API Conformance', link: 'blog/journey-to-gateway-api-conformance', translations: { 'zh-CN': 'Gateway API 一致性之旅' } },
+      { label: 'Building an AI Gateway on a Modern Proxy', link: 'blog/building-ai-gateway', translations: { 'zh-CN': '在现代化代理上构建 AI 网关' } },
+      { label: 'Performance Benchmarking', link: 'blog/performance-benchmarking', translations: { 'zh-CN': '性能基准测试' } },
+      { label: 'Production-Ready Helm Charts', link: 'blog/production-helm-charts', translations: { 'zh-CN': '生产级 Helm Chart 实践' } },
     ],
   },
 ];

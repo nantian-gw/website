@@ -1,0 +1,86 @@
+---
+title: "Performance Benchmarking: How We Measure and Optimize"
+description: "Our benchmark methodology, key performance results, and the optimization journey for the Rust data plane."
+date: 2026-07-08
+tags: ["performance", "benchmarking", "rust", "optimization"]
+authors: ["Nantian Engineering Team"]
+---
+
+Performance is a feature. A gateway that adds 1ms of latency to every request adds seconds of cumulative delay across millions of requests. We invest heavily in benchmarking and optimization to keep the data plane fast. This post covers how we measure performance, what we've found, and how we continue to improve.
+
+## Benchmark Methodology
+
+We run benchmarks in a controlled environment: dedicated bare-metal machines with no other workloads. The test setup uses a load generator that sends requests to the data plane, which forwards them to a backend server. We measure latency, throughput, and resource usage.
+
+The benchmark scenarios cover:
+
+- **HTTP/1.1 baseline:** Direct proxy without any filters.
+- **HTTP/2 multiplexing:** Multiple concurrent streams over a single connection.
+- **gRPC streaming:** Bidirectional streaming through the proxy.
+- **AI filter chain:** Proxy with model routing, token counting, and semantic cache enabled.
+- **Wasm filter:** Proxy with a simple Wasm plugin active.
+
+Each scenario runs for 10 minutes with a 60-second warmup period. We report P50, P99, and P99.9 latency, requests per second, and memory usage.
+
+## Key Results
+
+### Baseline Proxy Performance
+
+Without any filters, the data plane handles 80,000 to 100,000 requests per second on a single core. P50 latency is under 1ms. P99 latency is under 3ms.
+
+This is the cost of the proxy itself. Everything else adds to these numbers.
+
+### With AI Filter Chain
+
+When the AI filter chain is active for AI-routed requests, the numbers change:
+
+| Metric | Without AI | With AI Chain |
+|--------|-----------|--------------|
+| RPS | 9,000-11,000 | 9,000-10,500 |
+| P50 latency | 3-4ms | 3-5ms |
+| P99 latency | 11-15ms | 12-16ms |
+| Memory | ~105 MiB | ~110 MiB |
+| CPU | ~1,100 millicores | ~1,200 millicores |
+
+The AI filter chain adds 1-2ms of latency and about 10% CPU overhead. This is the cost of token counting, PII detection, and semantic cache lookups. For non-AI traffic, these filters are not executed, so the performance impact is zero.
+
+### With Wasm Filters
+
+Wasm filters add significant overhead. A simple Wasm filter that inspects each request adds 0.5-2ms of latency depending on the filter's complexity. Wasm startup time is also a factor — the first request through a new filter takes longer as the Wasm runtime initializes.
+
+We recommend using Wasm filters for infrequent operations and keeping the filter logic simple. For hot-path operations, native Rust filters are always faster.
+
+## Optimization Journey
+
+### Zero-Copy Request Handling
+
+Early versions of the data plane copied request data multiple times: once when reading from the socket, once when parsing headers, and once when forwarding. We eliminated these copies by using Pingora's zero-copy primitives and borrowing request data throughout the pipeline.
+
+### Connection Pool Tuning
+
+The connection pool to upstream backends was a source of contention. The default pool configuration used a single mutex-guarded pool, which caused lock contention at high concurrency. We switched to a sharded pool design where each worker thread has its own pool, reducing lock contention by 90%.
+
+### Allocation Profiling
+
+We used jemalloc's heap profiling to find allocation hot spots. The biggest gain came from pre-allocating request buffers and reusing them across requests instead of allocating new buffers each time. This reduced allocation rate by 40% and improved P99 latency by 2ms.
+
+### SIMD for Token Counting
+
+Token counting was the most expensive operation in the AI filter chain. We optimized the hottest loops using SIMD instructions, which gave us a 3x speedup for the tokenizer. This reduced the AI filter chain overhead from 4ms to 1-2ms.
+
+## Continuous Benchmarking
+
+Benchmarks are only useful if they stay current. We run our benchmark suite on every pull request and track results in a dashboard. If a PR introduces a regression, we catch it before it reaches main.
+
+The dashboard shows latency, throughput, and resource usage over time. We use statistical tests to detect regressions — a 5% change in P99 latency triggers a warning and requires investigation.
+
+---
+
+*About the authors: The Nantian Engineering Team runs the performance program and maintains the data plane. We benchmark everything, optimize the hot paths, and keep the proxy fast.*
+
+### Read more
+
+- [Benchmarks](/benchmarks) — Current benchmark results
+- [Performance Tuning](/configuration/tuning) — Tuning guide for production
+- [Data Plane Design](/architecture/dataplane) — Data plane architecture
+- [Metrics Reference](/operations/metrics) — Performance metrics reference
