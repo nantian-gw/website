@@ -86,11 +86,12 @@ These snippets match the current chart defaults.
 ```yaml
 featureMode: standard
 gatewayAPI:
-  installCRDs: false
+  installCRDs: true
   channel: standard
 ```
 
-`featureMode` controls Nantian Gateway runtime feature gates. `gatewayAPI.installCRDs` controls whether this chart renders official Gateway API CRDs. The production default keeps runtime mode standard and expects Gateway API CRDs to be managed before install.
+`featureMode` controls Nantian Gateway runtime feature gates. Set to `experimental` to enable AI Gateway, Wasm, TokenPolicy, and RoutePolicy features.
+`gatewayAPI.installCRDs` controls whether this chart renders official Gateway API CRDs. When `true`, the chart installs the standard Gateway API CRDs automatically.
 
 ### Global And GatewayClass
 
@@ -115,7 +116,7 @@ controlplane:
   replicas: 2
   image:
     repository: "nantian-gw/nantian-controlplane"
-    tag: "latest"
+    # tag: "v2026.08.0-alpha.1"  # defaults to appVersion
     pullPolicy: IfNotPresent
   config:
     grpcAddr: ":18080"
@@ -127,7 +128,8 @@ controlplane:
       enableAiGateway: false
 ```
 
-The chart defaults to `latest` image tags with `pullPolicy: IfNotPresent`. In production, override this with a specific release tag or an image digest in your values file.
+The image tag defaults to the chart's `appVersion`. Override with a specific release tag or an image digest for production.
+Release tags are published to `ghcr.io/nantian-gw/` (public, no auth needed).
 
 The control plane service split is:
 

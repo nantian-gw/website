@@ -50,11 +50,17 @@ Key improvements:
 helm repo add nantian-gw https://chart.nantian.dev
 helm repo update
 
-# Install the alpha release
+# Install the alpha release (standard mode)
 helm install nantian-gw nantian-gw/nantian-gw \
   --version 0.4.0-alpha.1 \
   --namespace nantian-gw \
   --create-namespace
+
+# For AI Gateway, Wasm, and experimental features:
+# helm install nantian-gw nantian-gw/nantian-gw \
+#   --version 0.4.0-alpha.1 \
+#   --namespace nantian-gw --create-namespace \
+#   --set featureMode=experimental
 ```
 
 ## Component Versions
