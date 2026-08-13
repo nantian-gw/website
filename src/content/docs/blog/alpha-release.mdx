@@ -1,0 +1,78 @@
+---
+title: "v2026.08.0-alpha.1 Released"
+description: "First alpha release of the v2026.08 cycle with Delta xDS, enhanced conformance, and infrastructure improvements."
+date: 2026-08-13
+tags: ["release", "alpha", "xds", "conformance"]
+authors: ["Nantian Engineering Team"]
+---
+
+We're pleased to announce the **v2026.08.0-alpha.1** release — the first alpha in the August 2026 cycle. This release includes significant improvements across all components since the v2026.06.0 GA.
+
+## What's New
+
+### Delta xDS
+
+The control plane now supports **incremental configuration delivery** (Delta xDS) alongside the existing State-of-the-World (SotW) protocol. This reduces bandwidth and latency for configuration updates by sending only the changed resources.
+
+- Diff engine (`delta_diff.go`) computes per-resource changes
+- gRPC handler (`delta_server.go`) streams DeltaDiscoveryResponses
+- Rust client (`delta.rs`) processes delta updates
+- Feature-gated behind `xdsProtocol: "delta"` in the gateway config
+
+### Conformance
+
+We've reached **594+ passing tests with 0 failures** in the Gateway API conformance suite. The only skipped tests are mesh-related (infrastructure not deployed in Kind clusters).
+
+Key improvements:
+- **BackendTLSPolicy** and **BackendTLSPolicyConflictResolution** — unskipped and passing
+- **ListenerSetAllowedRoutesSupportedKinds** — unskipped and passing
+- Conflict retry loop patched into upstream `apply.go` for resourceVersion conflicts
+
+### Platform & Infrastructure
+
+- **Docker builds** now support version tags; pushing a `v*` tag triggers image builds with the corresponding tag
+- **Helm chart** published to `https://chart.nantian.dev` automatically on version tags
+- **Release automation** with `resolve-release.sh`, `validate-release`, and `publish-release` workflows
+- **Version pattern** updated to support `-alpha.x` and `-beta.x` suffixes
+
+### Quality of Life
+
+- **WebSocket large-payload test** stabilized with retry logic for transient `BrokenPipe` errors
+- **Lint hygiene**: goconst threshold adjusted, constants extracted in `resource_kinds.go`
+- **Dashboard Docker build**: fixed `.dockerignore` context path
+- **Dataplane**: global allocator fix for benchmark tests, CI skip removed
+- **goconst** `min-occurrences` raised from 4 to 6, reducing noise by 72%
+
+## Installation
+
+```bash
+# Add the Helm repository
+helm repo add nantian-gw https://chart.nantian.dev
+helm repo update
+
+# Install the alpha release
+helm install nantian-gw nantian-gw/nantian-gw \
+  --version 0.4.0-alpha.1 \
+  --namespace nantian-gw \
+  --create-namespace
+```
+
+## Component Versions
+
+| Component | Version |
+|-----------|---------|
+| Control Plane | `v2026.08.0-alpha.1` |
+| Data Plane | `v2026.08.0-alpha.1` |
+| Dashboard | `v2026.08.0-alpha.1` |
+| Helm Chart | `0.4.0-alpha.1` |
+
+## What's Next
+
+We're targeting the **v2026.08.0 GA** release. Between now and then, we'll focus on:
+
+1. Conformance: continue reducing the skip list
+2. Performance: benchmark and optimize the Delta xDS path
+3. Documentation: update guides for new features
+4. Stability: address remaining flaky tests and lint issues
+
+Feedback and contributions are welcome via [GitHub Issues](https://github.com/nantian-gw/gateway/issues).
