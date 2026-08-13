@@ -6,11 +6,7 @@ tags: ["release", "alpha", "xds", "conformance"]
 authors: ["Nantian Engineering Team"]
 ---
 
-import Notice from "@components/notice.astro";
-
-<Notice type="info">
-  此页面是英文页面的机器翻译，如有不一致请以英文原文为准。
-</Notice>
+> 此页面是英文页面的翻译，如有不一致请以英文原文为准。
 
 我们很高兴地宣布 **v2026.08.0-alpha.1** 发布——这是 2026 年 8 月周期的第一个 alpha 版本。自 v2026.06.0 GA 发布以来，本次版本包含了所有组件的重大改进。
 
@@ -20,53 +16,36 @@ import Notice from "@components/notice.astro";
 
 控制面现在支持**增量配置下发**（Delta xDS），与现有的全量快照（SotW）协议并存。通过仅发送变更的资源，减少了配置更新的带宽和延迟。
 
-- 差异引擎（`delta_diff.go`）计算每个资源的变化
-- gRPC 处理器（`delta_server.go`）流式传输 DeltaDiscoveryResponse
-- Rust 客户端（`delta.rs`）处理增量更新
-- 通过 Gateway 配置中的 `xdsProtocol: "delta"` 特性开关控制
-
 ### 一致性测试
 
-Gateway API 一致性测试套件已达到 **594+ 测试通过，0 失败**。唯一跳过的测试是与 mesh 相关的（Kind 集群中未部署 mesh 基础设施）。
+Gateway API 一致性测试套件已达到 **594+ 测试通过，0 失败**。唯一跳过的测试是与 mesh 相关的。
 
 关键改进：
 - **BackendTLSPolicy** 和 **BackendTLSPolicyConflictResolution** — 取消跳过并通过测试
 - **ListenerSetAllowedRoutesSupportedKinds** — 取消跳过并通过测试
-- 在上游 `apply.go` 中修补了冲突重试循环，用于处理 resourceVersion 冲突
 
 ### 平台与基础设施
 
-- **Docker 构建**现在支持版本标签；推送 `v*` 标签会触发带有对应标签的镜像构建
-- **Helm chart**在版本标签推送时自动发布到 `https://chart.nantian.dev`
-- **发布自动化**，包含 `resolve-release.sh`、`validate-release` 和 `publish-release` 工作流
-- **版本模式**已更新，支持 `-alpha.x` 和 `-beta.x` 后缀
+- **Docker 构建**支持版本标签；推送 `v*` 标签触发带有对应标签的镜像构建
+- **Helm chart** 自动发布到 `https://chart.nantian.dev`
+- **发布自动化**流程
 
 ### 质量改进
 
-- **WebSocket 大负载测试**通过重试逻辑稳定了瞬态 `BrokenPipe` 错误
-- **Lint 卫生**：调整了 goconst 阈值，在 `resource_kinds.go` 中提取了常量
-- **Dashboard Docker 构建**：修复了 `.dockerignore` 上下文路径
-- **数据面**：修复了基准测试的全局分配器，移除了 CI 跳过
-- **goconst** `min-occurrences` 从 4 提高到 6，减少了 72% 的噪音
+- **WebSocket 大负载测试**通过重试逻辑稳定
+- **Lint 卫生**：goconst 阈值调整，常量提取
+- **Dashboard Docker 构建**修复
+- **数据面**：全局分配器修复，CI skip 移除
 
 ## 安装
 
 ```bash
-# 添加 Helm 仓库
 helm repo add nantian-gw https://chart.nantian.dev
 helm repo update
-
-# 安装 alpha 版本（标准模式）
 helm install nantian-gw nantian-gw/nantian-gw \
   --version 0.4.0-alpha.1 \
   --namespace nantian-gw \
   --create-namespace
-
-# 如需 AI Gateway、Wasm 等实验性功能：
-# helm install nantian-gw nantian-gw/nantian-gw \
-#   --version 0.4.0-alpha.1 \
-#   --namespace nantian-gw --create-namespace \
-#   --set featureMode=experimental
 ```
 
 ## 组件版本
@@ -77,14 +56,3 @@ helm install nantian-gw nantian-gw/nantian-gw \
 | 数据面 | `v2026.08.0-alpha.1` |
 | Dashboard | `v2026.08.0-alpha.1` |
 | Helm Chart | `0.4.0-alpha.1` |
-
-## 后续计划
-
-我们正在推进 **v2026.08.0 GA** 版本。在此期间，我们将重点关注：
-
-1. 一致性测试：继续减少跳过列表
-2. 性能：基准测试和优化 Delta xDS 路径
-3. 文档：更新新功能的使用指南
-4. 稳定性：解决剩余的 flaky 测试和 lint 问题
-
-欢迎通过 [GitHub Issues](https://github.com/nantian-gw/gateway/issues) 提供反馈和贡献。
