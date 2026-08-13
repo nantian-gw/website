@@ -122,7 +122,7 @@ test('current and versioned docs only differ by the approved drift set', () => {
   const expectedCurrentOnly = [
     'blog/alpha-release.mdx',
     'blog/architecture-deep-dive.mdx',
-    'blog/journey-to-gateway-api-conformance.mdx',
+    'blog/building-ai-gateway.mdx',
     'blog/performance-benchmarking.mdx',
     'blog/production-helm-charts.mdx',
     'blog/why-ai-gateway.mdx',
