@@ -11,108 +11,44 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const distDir = process.argv[2] || "dist";
+import { docsSidebar } from "../src/config/docsSidebar.js";
+
+const defaultDistDir = process.argv[2] || "dist";
 const siteUrl = "https://nantian.dev";
 
-// Page structure from sidebar — section labels and their pages
-const sidebarSections = [
-  {
-    label: "Concepts",
-    pages: ["concepts/", "concepts/gateway-api/", "concepts/split-plane/"],
-  },
-  {
-    label: "Overview",
-    pages: ["overview/", "comparison/", "use-cases/"],
-  },
-  {
-    label: "Features",
-    pages: [
-      "features/",
-      "features/ai-gateway/",
-      "features/wasm-plugins/",
-      "features/traffic-management/",
-      "features/security-observability/",
-    ],
-  },
-  {
-    label: "Getting Started",
-    pages: [
-      "getting-started/prerequisites/",
-      "getting-started/quick-start/",
-      "getting-started/first-route/",
-    ],
-  },
-  {
-    label: "Installation",
-    pages: [
-      "installation/",
-      "installation/helm/",
-      "installation/kustomize/",
-      "installation/production/",
-      "installation/ha/",
-      "installation/upgrade/",
-    ],
-  },
-  {
-    label: "Configuration",
-    pages: [
-      "configuration/",
-      "configuration/helm-values/",
-      "configuration/experimental-features/",
-      "configuration/controlplane/",
-      "configuration/dataplane/",
-      "configuration/tls/",
-      "configuration/xds/",
-      "configuration/observability/",
-      "configuration/tuning/",
-    ],
-  },
-  {
-    label: "Architecture",
-    pages: [
-      "architecture/",
-      "architecture/controlplane/",
-      "architecture/dataplane/",
-      "architecture/admin-api/",
-    ],
-  },
-  {
-    label: "Operations",
-    pages: [
-      "operations/",
-      "operations/metrics/",
-      "operations/grafana/",
-      "operations/alerting/",
-      "operations/troubleshooting/",
-      "operations/backup/",
-    ],
-  },
-  {
-    label: "API Reference",
-    pages: [
-      "api-reference/",
-      "api-reference/gateway-api/",
-      "api-reference/crds/",
-      "api-reference/admin-api/",
-      "api-reference/xds-proto/",
-    ],
-  },
-  {
-    label: "Contributing",
-    pages: [
-      "contributing/",
-      "contributing/development/",
-      "contributing/testing/",
-      "contributing/release/",
-    ],
-  },
-  {
-    label: "FAQ",
-    pages: ["faq/"],
-  },
-];
+function normalizePagePath(link) {
+  return link.replace(/^\/+/, "").replace(/\/?$/, "/");
+}
 
-function readHtml(path) {
+function flattenSidebarItems(items) {
+  const pages = [];
+
+  for (const item of items) {
+    if (item.link) {
+      pages.push({
+        label: item.label,
+        path: normalizePagePath(item.link),
+      });
+    }
+
+    if (item.items) {
+      pages.push(...flattenSidebarItems(item.items));
+    }
+  }
+
+  return pages;
+}
+
+export function sidebarSectionsFromConfig(sidebar = docsSidebar) {
+  return sidebar
+    .map((section) => ({
+      label: section.label,
+      pages: flattenSidebarItems(section.items ?? []),
+    }))
+    .filter((section) => section.pages.length > 0);
+}
+
+function readHtml(distDir, path) {
   try {
     return readFileSync(join(distDir, path, "index.html"), "utf8");
   } catch {
@@ -155,7 +91,8 @@ function extractText(html) {
     .trim();
 }
 
-function generateLlmsTxt() {
+export function generateLlmsTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
+  const sidebarSections = sidebarSectionsFromConfig(sidebar);
   let llms = `# Nantian Gateway
 > High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.
 
@@ -164,11 +101,11 @@ function generateLlmsTxt() {
   for (const section of sidebarSections) {
     llms += `## ${section.label}\n`;
     for (const page of section.pages) {
-      const html = readHtml(page);
+      const html = readHtml(distDir, page.path);
       const { title, description } = extractMeta(html);
-      const displayTitle = title || page.replace(/\/$/, "").split("/").pop();
+      const displayTitle = title || page.label || page.path.replace(/\/$/, "").split("/").pop();
       const desc = description ? `: ${description}` : "";
-      llms += `- [${displayTitle}](${siteUrl}/${page})${desc}\n`;
+      llms += `- [${displayTitle}](${siteUrl}/${page.path})${desc}\n`;
     }
     llms += "\n";
   }
@@ -178,17 +115,19 @@ function generateLlmsTxt() {
 
   writeFileSync(join(distDir, "llms.txt"), llms);
   console.log(`Generated ${join(distDir, "llms.txt")} (${llms.length} bytes)`);
+  return llms;
 }
 
-function generateLlmsFullTxt() {
+export function generateLlmsFullTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
+  const sidebarSections = sidebarSectionsFromConfig(sidebar);
   const parts = ["# Nantian Gateway — Full Documentation\n\n"];
 
   for (const section of sidebarSections) {
     for (const page of section.pages) {
-      const html = readHtml(page);
+      const html = readHtml(distDir, page.path);
       const text = extractText(html);
       if (text && text.length > 50) {
-        parts.push(`## ${page}\n\n${text}\n\n`);
+        parts.push(`## ${page.path}\n\n${text}\n\n`);
       }
     }
   }
@@ -198,13 +137,16 @@ function generateLlmsFullTxt() {
   console.log(
     `Generated ${join(distDir, "llms-full.txt")} (${full.length} bytes)`
   );
+  return full;
 }
 
-function main() {
+export function main(distDir = defaultDistDir) {
   console.log("Generating llms.txt files from built site...");
-  generateLlmsTxt();
-  generateLlmsFullTxt();
+  generateLlmsTxt(distDir);
+  generateLlmsFullTxt(distDir);
   console.log("Done.");
 }
 
-main();
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  main();
+}

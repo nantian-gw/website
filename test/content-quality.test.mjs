@@ -108,32 +108,9 @@ test('all internal HTML links resolve to existing build artifacts', () => {
   }
 
   // Filter out known false positives
-  // (pre-existing navigation links to pages that don't exist at those paths)
   const knownFalsePositivePatterns = [
     // Pagefind search results
     { href: '/search/' },
-    // Landing page links to /comparison/ and /use-cases/ (actual pages at /overview/comparison/ etc.)
-    { href: '/comparison/' },
-    { href: '/use-cases/' },
-    { href: '/zh/comparison/' },
-    { href: '/zh/use-cases/' },
-    // Versioned doc nav links to /1.5/comparison and /1.5/use-cases (actual: /1.5/overview/v1.5-*)
-    { href: '/1.5/comparison' },
-    { href: '/1.5/use-cases' },
-    { href: '/zh/1.5/comparison' },
-    { href: '/zh/1.5/use-cases' },
-    // Versioned page links to unversioned overview pages
-    { href: '/overview/v1.5-comparison/' },
-    { href: '/overview/v1.5-use-cases/' },
-    { href: '/zh/overview/v1.5-comparison/' },
-    { href: '/zh/overview/v1.5-use-cases/' },
-    // Wasm plugin dev guide link
-    { href: '/features/wasm-plugin-dev-guide/' },
-    // Use-cases relative links to sibling sections (wrong relative depth from MDX)
-    { href: '../installation/production/' },
-    { href: '../getting-started/quick-start/' },
-    { href: '../features/ai-gateway/' },
-    { href: '../features/wasm-plugins/' },
   ];
 
   const actual = brokenLinks.filter(

@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, posix } from 'node:path';
 import test from 'node:test';
 
 import { docsSidebar } from '../src/config/docsSidebar.js';
+import { DRIFT_THRESHOLD_PERCENT, computeDrift } from '../scripts/check-version-drift.mjs';
+import { sidebarSectionsFromConfig } from '../scripts/generate-llms-txt.mjs';
 
 const docsRoot = fileURLToPath(new URL('../src/content/docs', import.meta.url));
 const zhRoot = fileURLToPath(new URL('../src/content/docs/zh', import.meta.url));
@@ -94,6 +96,19 @@ function assertSidebarDocs(entries) {
   }
 }
 
+function versionedSlugFor(path, localePrefix = '') {
+  const withoutExt = path.replace(/\.mdx$/, '');
+  const normalized = withoutExt.endsWith('/index')
+    ? withoutExt.slice(0, -'/index'.length)
+    : withoutExt;
+  return `${localePrefix}1.5/${normalized}`;
+}
+
+function frontmatterSlug(root, path) {
+  const content = readFileSync(join(root, path), 'utf8');
+  return content.match(/^slug:\s*(.+)$/m)?.[1]?.trim() ?? null;
+}
+
 function assertIntentionalDrift(currentPaths, archivedPaths, expectedCurrentOnly, expectedArchivedOnly, currentLabel, archivedLabel) {
   const currentOnly = currentPaths.filter((path) => !archivedPaths.includes(path)).sort();
   const archivedOnly = archivedPaths.filter((path) => !currentPaths.includes(path)).sort();
@@ -159,13 +174,8 @@ test('current and versioned docs only differ by the approved drift set', () => {
     'operations/network-policy.mdx',
     'operations/prometheus-setup.mdx',
     'operations/scaling.mdx',
-    'overview/comparison.mdx',
-    'overview/use-cases.mdx',
   ];
-  const expectedArchivedOnly = [
-    'overview/v1.5-comparison.mdx',
-    'overview/v1.5-use-cases.mdx',
-  ];
+  const expectedArchivedOnly = [];
 
   assertIntentionalDrift(
     currentEnglishDocs(),
@@ -187,4 +197,42 @@ test('current and versioned docs only differ by the approved drift set', () => {
 
 test('sidebar links resolve to real docs files and keep zh-CN translations', () => {
   assertSidebarDocs(flattenSidebar(docsSidebar));
+});
+
+test('versioned docs declare explicit slugs that preserve the 1.5 route prefix', () => {
+  for (const path of collectMdxFiles(versionRoot)) {
+    assert.equal(frontmatterSlug(versionRoot, path), versionedSlugFor(path));
+  }
+
+  for (const path of collectMdxFiles(zhVersionRoot)) {
+    assert.equal(frontmatterSlug(zhVersionRoot, path), versionedSlugFor(path, 'zh/'));
+  }
+});
+
+test('LLM documentation index covers every current sidebar doc link', () => {
+  const sidebarDocLinks = flattenSidebar(docsSidebar)
+    .filter((entry) => entry.link)
+    .map((entry) => entry.link.endsWith('/') ? entry.link : `${entry.link}/`);
+
+  const indexedLinks = sidebarSectionsFromConfig(docsSidebar)
+    .flatMap((section) => section.pages)
+    .map((page) => page.path);
+
+  assert.deepEqual(indexedLinks, sidebarDocLinks);
+  assert.ok(indexedLinks.includes('overview/comparison/'));
+  assert.ok(indexedLinks.includes('overview/use-cases/'));
+  assert.ok(indexedLinks.includes('configuration/backend-lb-policy/'));
+  assert.ok(indexedLinks.includes('operations/dashboard/'));
+  assert.ok(indexedLinks.includes('features/ai-gateway/token-policy/'));
+  assert.ok(!indexedLinks.includes('comparison/'));
+  assert.ok(!indexedLinks.includes('use-cases/'));
+});
+
+test('version drift threshold matches the current approved drift level', () => {
+  const drift = computeDrift(collectMdxFiles(versionRoot), currentEnglishDocs());
+
+  assert.ok(
+    drift.driftPercent <= DRIFT_THRESHOLD_PERCENT,
+    `approved drift ${drift.driftPercent.toFixed(1)}% exceeds threshold ${DRIFT_THRESHOLD_PERCENT}%`,
+  );
 });

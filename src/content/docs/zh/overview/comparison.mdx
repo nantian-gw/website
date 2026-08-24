@@ -1,33 +1,34 @@
 ---
-title: Comparison
+title: 项目对比
+description: "从架构、功能覆盖、数据面、AI 网关和运维复杂度对比 Nantian Gateway 与 Envoy Gateway、Istio、Contour、NGINX Gateway Fabric。"
 ---
 
 选择 Kubernetes 网关需要在架构、性能、功能覆盖度和运维复杂度之间做出权衡。本页将 Nantian Gateway 与四个知名替代方案进行对比，帮助你了解各自适用的场景。
 
-:::caution[Experimental features]
+:::caution[实验功能]
 标记为 🧪 的功能（AI 网关、Wasm 插件）为实验性功能。API 和行为可能在后续版本中发生变化。
 :::
 
-## Comparison Matrix
+## 对比矩阵
 
-| Feature | Nantian Gateway | Envoy Gateway | Istio | Contour | NGINX Gateway |
+| 维度 | Nantian Gateway | Envoy Gateway | Istio | Contour | NGINX Gateway |
 |---------|----------------|---------------|-------|---------|---------------|
-| **Gateway API target** | v1.5.1 | v1.2.x | v1.2.x (via Gateway API) | v1.1.x | v1.2.x |
-| **Declared features** | 54 | ~40 | ~30 (Gateway API) | ~30 | ~35 |
-| **Control plane** | Go | Go | Go | Go | Go |
-| **Data plane** | Rust | C++ (Envoy) | C++ (Envoy) | C++ (Envoy) | C (NGINX) |
-| **Config protocol** | gRPC/xDS | gRPC/xDS | gRPC/xDS | gRPC/xDS | Custom |
-| **AI gateway** 🧪 | Built-in | No | No | No | No |
-| **Wasm runtime** 🧪 | wasmtime | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | wasmtime (proxy-wasm) | No |
-| **Service mesh** | Yes (Gateway API Mesh) | No | Yes (core) | No | No |
-| **TCP/UDP/TLS** | Yes | Yes | Yes | Yes | Yes |
-| **gRPC routing** | Yes (named rules) | Yes | Yes | Limited | Yes |
-| **Dashboard** | Next.js admin | No built-in | Kiali | No built-in | No built-in |
-| **HA config** | PDBs, anti-affinity | HPA, PDB | HPA, PDB | HPA, PDB | Manual |
-| **License** | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 |
-| **Hosted by** | Independent | CNCF | CNCF | CNCF | NGINX/F5 |
+| **Gateway API 目标版本** | v1.5.1 | v1.2.x | v1.2.x（通过 Gateway API） | v1.1.x | v1.2.x |
+| **声明支持特性数** | 54 | ~40 | ~30（Gateway API） | ~30 | ~35 |
+| **控制面** | Go | Go | Go | Go | Go |
+| **数据面** | Rust | C++（Envoy） | C++（Envoy） | C++（Envoy） | C（NGINX） |
+| **配置协议** | gRPC/xDS | gRPC/xDS | gRPC/xDS | gRPC/xDS | 自定义 |
+| **AI 网关** 🧪 | 内置 | 否 | 否 | 否 | 否 |
+| **Wasm 运行时** 🧪 | wasmtime | wasmtime（proxy-wasm） | wasmtime（proxy-wasm） | wasmtime（proxy-wasm） | 否 |
+| **服务网格** | 是（Gateway API Mesh） | 否 | 是（核心能力） | 否 | 否 |
+| **TCP/UDP/TLS** | 是 | 是 | 是 | 是 | 是 |
+| **gRPC 路由** | 是（命名规则） | 是 | 是 | 有限 | 是 |
+| **仪表盘** | Next.js 管理台 | 无内置 | Kiali | 无内置 | 无内置 |
+| **高可用配置** | PDB、反亲和 | HPA、PDB | HPA、PDB | HPA、PDB | 手动 |
+| **许可证** | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 |
+| **托管方** | 独立项目 | CNCF | CNCF | CNCF | NGINX/F5 |
 
-## Nantian Gateway vs Envoy Gateway
+## Nantian Gateway 与 Envoy Gateway
 
 **Envoy Gateway** 是一个 CNCF 项目，使用 Envoy 作为数据面提供 Kubernetes 原生网关。它成熟、文档完善，拥有广泛的社区支持。
 
@@ -41,7 +42,7 @@ Nantian Gateway 还在数据面中直接集成了 AI 网关模块。使用 Envoy
 
 两个项目都使用 gRPC/xDS 进行配置分发，因此控制面架构相似。两者都通过 wasmtime 支持 Wasm 插件。
 
-## Nantian Gateway vs Istio
+## Nantian Gateway 与 Istio
 
 **Istio** 是 Kubernetes 生态中部署最广泛的服务网格。它是一个功能全面的网格平台，基于 Envoy sidecar 构建，提供流量管理、安全和可观测性能力。
 
@@ -53,7 +54,7 @@ Nantian Gateway 通过 Gateway API Mesh 模型实现网格，不需要 sidecar�
 
 Nantian Gateway 的 AI 网关和仪表盘功能是其与 Istio 定位差异的体现。Istio 的可观测性更全面（Jaeger 追踪、Kiali 可视化），而 Nantian Gateway 的 Prometheus 和 Grafana 集成已覆盖大多数团队所需的网关级指标。
 
-## Nantian Gateway vs Contour
+## Nantian Gateway 与 Contour
 
 **Contour** 是一个 CNCF 入口控制器，在 Envoy 之上提供 Gateway API 实现。它以简洁性和与 [Contour ingress route](https://projectcontour.io/docs/main/config/fundamentals/) 模型的紧密集成而闻名。
 
@@ -65,7 +66,7 @@ Contour 使用 Envoy，因此同样面临数据面的权衡。Nantian Gateway �
 
 Nantian Gateway 额外提供了 AI 网关功能、Wasm 插件系统和网格支持。如果你的需求是简单的 HTTP 路由加 TLS 终止，Contour 在简洁性上表现优异。Nantian Gateway 面向需要多协议路由、AI 流量管理和单一代理可扩展性的团队。
 
-## Nantian Gateway vs NGINX Gateway Fabric
+## Nantian Gateway 与 NGINX Gateway Fabric
 
 **NGINX Gateway Fabric** 是 F5 旗下 NGINX 团队的 Kubernetes Gateway API 实现。它使用 NGINX 作为数据面，这是全球部署最广泛的 Web 服务器和反向代理。
 
@@ -77,7 +78,7 @@ NGINX Gateway Fabric 受益于 NGINX 庞大的安装基础和生态系统。其�
 
 Nantian Gateway 带来了 AI 网关能力、Wasm 插件系统和内置仪表盘——这些都是其超出 NGINX Gateway Fabric 范围的额外能力。如果你需要 AI 流量管理或代理层面的自定义插件逻辑，Nantian Gateway 提供了集成化的解决方案。
 
-## When to Choose Nantian Gateway
+## 何时选择 Nantian Gateway
 
 Nantian Gateway 非常适合以下场景：
 
@@ -92,7 +93,7 @@ Nantian Gateway 非常适合以下场景：
 Nantian Gateway 可以与现有基础设施良好协作。你可以将其作为入口网关部署，同时保留现有的网格方案，也可以将其作为专用 AI 网关部署在模型推理基础设施之前。
 :::
 
-## When to Consider Alternatives
+## 何时考虑替代方案
 
 其他网关可能更适合以下场景：
 

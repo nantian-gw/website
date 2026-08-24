@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const rootPath = fileURLToPath(root);
 const astroBinPath = fileURLToPath(new URL("./node_modules/astro/bin/astro.mjs", root));
+const distPath = fileURLToPath(new URL("./dist", root));
 
 // Skip in CI — WCAG tests need a full server, which is impractical in CI.
 // Run manually with: node --test test/wcag.test.mjs
@@ -45,14 +46,8 @@ let serverProcess = null;
 
 function build() {
   if (buildDone) return;
-  const distIndex = new URL("dist/index.html", root);
-  const distExists = existsSync(distIndex);
 
-  if (distExists) {
-    buildDone = true;
-    return;
-  }
-
+  rmSync(distPath, { recursive: true, force: true });
   execFileSync(process.execPath, [astroBinPath, "build"], {
     cwd: rootPath,
     stdio: "pipe",
@@ -221,7 +216,7 @@ test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", a
             }
           }
 
-          console.log(`  ✅ ${label}: ${results.passes} checks passed, ${results.violations.length} violations`);
+          console.log(`  ✅ ${label}: ${results.passes.length} checks passed, ${results.violations.length} violations`);
 
           assert.strictEqual(
             criticalSerious.length,

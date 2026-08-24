@@ -8,9 +8,9 @@ const en = {
       'Standard Gateway API routing · Go control plane · gRPC/xDS · Experimental AI and Wasm extensions',
     quickStartLabel: 'Quick Start',
     quickStartHref: '/getting-started/quick-start/',
-    comparisonHref: '/comparison/',
+    comparisonHref: '/overview/comparison/',
     faqHref: '/faq/',
-    useCasesHref: '/use-cases/',
+    useCasesHref: '/overview/use-cases/',
     comparisonLabel: 'Comparison',
     faqLabel: 'FAQ',
     useCasesLabel: 'Use Cases',
@@ -133,7 +133,7 @@ const en = {
     heading: 'Why Nantian Gateway?',
     subtitle: 'How Nantian compares to other Gateway API implementations',
     detailLinkText: '🔬 Full Comparison →',
-    detailLinkHref: '/comparison/',
+    detailLinkHref: '/overview/comparison/',
     rows: [
       { feature: 'Gateway API', nantian: '✅ v1.5.1', envoy: '✅', traefik: '✅', nginx: '✅' },
       { feature: 'Control Plane', nantian: 'Go', envoy: 'Go', traefik: 'Go', nginx: 'Go' },
@@ -151,7 +151,7 @@ const en = {
     heading: 'Use Cases',
     subtitle: 'From Kubernetes Ingress to AI Gateway — one platform for every scenario',
     linkText: '🎯 More Use Cases →',
-    linkHref: '/use-cases/',
+    linkHref: '/overview/use-cases/',
     cases: [
       {
         icon: '🚪',
@@ -215,9 +215,9 @@ const zh: LandingCopy = {
     tagline: '标准 Gateway API 路由 · Go 控制面 · gRPC/xDS · 实验性 AI 与 Wasm 扩展',
     quickStartLabel: '快速开始',
     quickStartHref: '/zh/getting-started/quick-start/',
-    comparisonHref: '/zh/comparison/',
+    comparisonHref: '/zh/overview/comparison/',
     faqHref: '/zh/faq/',
-    useCasesHref: '/zh/use-cases/',
+    useCasesHref: '/zh/overview/use-cases/',
     comparisonLabel: '功能对比',
     faqLabel: 'FAQ',
     useCasesLabel: '使用场景',
@@ -332,7 +332,7 @@ const zh: LandingCopy = {
     heading: '为什么选择 Nantian Gateway？',
     subtitle: '与主流 Gateway API 实现的对比',
     detailLinkText: '🔬 详细对比 →',
-    detailLinkHref: '/zh/comparison/',
+    detailLinkHref: '/zh/overview/comparison/',
     rows: [
       { feature: '标准 Gateway API', nantian: '✅ v1.5.1', envoy: '✅', traefik: '✅', nginx: '✅' },
       { feature: '控制面语言', nantian: 'Go', envoy: 'Go', traefik: 'Go', nginx: 'Go' },
@@ -350,7 +350,7 @@ const zh: LandingCopy = {
     heading: '使用场景',
     subtitle: '从 Kubernetes Ingress 到 AI 网关，一个平台覆盖所有需求',
     linkText: '🎯 更多场景 →',
-    linkHref: '/zh/use-cases/',
+    linkHref: '/zh/overview/use-cases/',
     cases: [
       {
         icon: '🚪',

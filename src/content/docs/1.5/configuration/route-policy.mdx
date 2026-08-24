@@ -1,6 +1,7 @@
 ---
 title: RoutePolicy
 description: "CRD reference for RoutePolicy. Configure per-route timeout, body limit, proxy buffering, and connection keepalive settings."
+slug: 1.5/configuration/route-policy
 ---
 
 The `RoutePolicy` CRD provides per-route overrides for HTTP traffic behavior, bringing nginx‑ingress annotation parity to the Gateway API model. It is a Gateway API local policy that attaches to `HTTPRoute` resources via `targetRefs`, with three‑level namespace → gateway → route inheritance.

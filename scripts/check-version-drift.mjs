@@ -6,6 +6,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const DOCS_ROOT = join(__dirname, "..", "src", "content", "docs");
 const VERSIONED_DIR = "1.5";
 const EXCLUDED_DIRS = new Set([VERSIONED_DIR, "zh"]);
+export const DRIFT_THRESHOLD_PERCENT = 50;
 
 /**
  * Recursively collect all file paths under a directory, relative to the root.
@@ -64,7 +65,7 @@ export function main() {
   console.log(`   Live docs files (excl. 1.5/ and zh/): ${total}`);
   console.log(`   Drifted (new in live, missing from snapshot): ${driftCount}`);
   console.log(`   Drift percentage: ${driftPercent.toFixed(1)}%`);
-  console.log(`   Threshold: 10.0%\n`);
+  console.log(`   Threshold: ${DRIFT_THRESHOLD_PERCENT.toFixed(1)}%\n`);
 
   if (drifted.length > 0) {
     console.log("Drifted files:");
@@ -74,12 +75,11 @@ export function main() {
     console.log();
   }
 
-  const threshold = 50;
-  if (driftPercent > threshold) {
-    console.error(`❌ FAIL: Drift ${driftPercent.toFixed(1)}% exceeds threshold of ${threshold}%`);
+  if (driftPercent > DRIFT_THRESHOLD_PERCENT) {
+    console.error(`❌ FAIL: Drift ${driftPercent.toFixed(1)}% exceeds threshold of ${DRIFT_THRESHOLD_PERCENT}%`);
     process.exitCode = 1;
   } else {
-    console.log(`✅ PASS: Drift ${driftPercent.toFixed(1)}% within threshold of ${threshold}%`);
+    console.log(`✅ PASS: Drift ${driftPercent.toFixed(1)}% within threshold of ${DRIFT_THRESHOLD_PERCENT}%`);
   }
 }
 

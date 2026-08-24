@@ -114,6 +114,14 @@
   color: #cbd5e1;
 }
 
+[data-theme="light"] .sidebar a {
+  color: #475569;
+}
+
+[data-theme="light"] .sidebar a:hover {
+  color: #0f172a;
+}
+
 /* Sidebar active link — ensure span inside inherits color */
 .sidebar a[aria-current="page"] span,
 .sidebar a[aria-current="page"] .sidebar-link-text,
@@ -136,7 +144,7 @@
 
 [data-theme="light"] .sidebar a[aria-current="page"] {
   background: rgba(8, 145, 178, 0.12) !important;
-  color: var(--sl-color-black, #0f172a) !important;
+  color: #0f172a !important;
 }
 
 /* Code blocks */

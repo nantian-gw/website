@@ -17,7 +17,7 @@
     "lint": "npm run lint:js && npm run lint:md && astro check",
     "lint:js": "eslint .",
     "lint:md": "markdownlint-cli2 'src/content/docs/**/*.mdx' 'src/pages/**/*.astro' 'README.md'",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test --test-concurrency=1 test/*.test.mjs"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",

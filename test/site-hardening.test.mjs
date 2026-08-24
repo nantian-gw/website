@@ -37,7 +37,7 @@ test("default build command runs the Astro build without a browser install step"
 
   assert.equal(pkg.scripts.build, "astro build && npm run build:llms && npm run build:markdown");
   assert.equal(pkg.scripts["build:astro"], "astro build");
-  assert.equal(pkg.scripts.test, "node --test test/*.test.mjs");
+  assert.equal(pkg.scripts.test, "node --test --test-concurrency=1 test/*.test.mjs");
   assert.equal(pkg.scripts["setup:browser"], undefined);
   assert.equal(pkg.scripts["setup:browser:ci"], undefined);
 

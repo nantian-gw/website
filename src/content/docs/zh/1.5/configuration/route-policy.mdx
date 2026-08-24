@@ -1,6 +1,7 @@
 ---
 title: RoutePolicy
 description: "RoutePolicy CRD 参考文档。配置按路由的超时、请求体限制、代理缓冲和连接保持设置。"
+slug: zh/1.5/configuration/route-policy
 ---
 
 `RoutePolicy` CRD 提供按路由的 HTTP 流量行为覆盖，将 nginx‑ingress 注解的等价功能引入 Gateway API 模式。它是一个 Gateway API 本地策略，通过 `targetRefs` 绑定到 `HTTPRoute` 资源，支持三级继承：命名空间 → 网关 → 路由。

@@ -1,9 +1,10 @@
 ---
-title: Use Cases
-slug: zh/1.5/overview/v1.5-use-cases
+title: 适用场景
+description: "了解 Nantian Gateway 在 AI 网关、Kubernetes Ingress、多协议代理、无 Sidecar 服务网格、Wasm 扩展和高性能边缘网关中的典型部署模式。"
+slug: zh/1.5/overview/use-cases
 ---
 
-Nantian Gateway的架构适用于多种不同的部署模式。本页介绍网关发挥独特价值的实际场景。
+Nantian Gateway 的架构适用于多种不同的部署模式。本页介绍网关发挥独特价值的实际场景。
 
 ## AI 网关：集中式 AI 流量管理
 
@@ -13,7 +14,7 @@ Nantian Gateway内置的 AI 网关模块在代理层处理这些问题。
 
 ### 多提供商协议适配
 
-AI 提供商使用不同的 API 格式。OpenAI、Anthropic 和 Ollama 各自拥有独立的请求和响应模式。Nantian Gateway规范化这些差异，让您的应用使用一种格式通信，而网关则将其转换为各后端期望的格式。
+AI 提供商使用不同的 API 格式。OpenAI、Anthropic 和 Ollama 各自拥有独立的请求和响应模式。Nantian Gateway 规范化这些差异，让您的应用使用一种格式通信，而网关则将其转换为各后端期望的格式。
 
 ```yaml
 apiVersion: gateway.nantian.dev/v1alpha1
@@ -38,7 +39,7 @@ spec:
 
 AI API 按 token 数量计费，而非按请求次数计费。一次包含 10,000 个 token 的提示词请求，其费用等同于一百次各含 100 个 token 的请求。传统的基于请求次数的速率限制完全无法应对这种情况。
 
-Nantian Gateway的 `TokenPolicy` CRD 基于实际 token 使用量来执行限制：
+Nantian Gateway 的 `TokenPolicy` CRD 基于实际 token 使用量来执行限制：
 
 ```yaml
 apiVersion: gateway.nantian.dev/v1alpha1
@@ -62,11 +63,11 @@ spec:
 
 ### PII 脱敏与安全
 
-将敏感数据发送到外部 AI 提供商会带来合规风险。Nantian Gateway可以在提示词离开您的网络之前脱敏其中的个人身份信息。脱敏在代理层完成，因此无需额外的独立服务。
+将敏感数据发送到外部 AI 提供商会带来合规风险。Nantian Gateway 可以在提示词离开您的网络之前脱敏其中的个人身份信息。脱敏在代理层完成，因此无需额外的独立服务。
 
 ### A/B 测试模型部署
 
-当上线新的模型版本或比较不同提供商时，您需要分流流量并对比结果。Nantian Gateway支持在 AI 后端之间按百分比分流流量，使用与常规 HTTP 流量相同的路由原语：
+当上线新的模型版本或比较不同提供商时，您需要分流流量并对比结果。Nantian Gateway 支持在 AI 后端之间按百分比分流流量，使用与常规 HTTP 流量相同的路由原语：
 
 ```yaml
 apiVersion: gateway.networking.k8s.io/v1
@@ -286,7 +287,7 @@ spec:
 
 ## Wasm 驱动的自定义扩展
 
-当内置过滤器不够用时，Nantian Gateway的 Wasm 插件系统让您能够在代理层注入自定义逻辑。
+当内置过滤器不够用时，Nantian Gateway 的 Wasm 插件系统让您能够在代理层注入自定义逻辑。
 
 ### Wasm 插件用例
 
@@ -326,7 +327,7 @@ Nantian Gateway附带一个 [Wasm SDK](https://github.com/nantian-gw/gateway)（
 
 ## 高性能边缘与可观测性
 
-对于延迟敏感的工作负载，Nantian Gateway的 Rust 数据面提供了可预测的性能和低尾部延迟。结合可观测性技术栈，您能全面洞察网关行为。
+对于延迟敏感的工作负载，Nantian Gateway 的 Rust 数据面提供了可预测的性能和低尾部延迟。结合可观测性技术栈，您能全面洞察网关行为。
 
 ### 关键指标
 
@@ -349,11 +350,11 @@ Nantian Gateway附带一个 [Wasm SDK](https://github.com/nantian-gw/gateway)（
 - **Grafana** 仪表盘用于集群级可见性
 - **Alertmanager** 规则用于监控网关健康、TLS 到期和错误率阈值
 
-完整过程请参阅[生产安装](../installation/production/)指南。
+完整过程请参阅[生产安装](/zh/1.5/installation/production/)指南。
 
 ## 组合用例
 
-Nantian Gateway的优势在于这些用例可以组合使用。单个部署可以：
+Nantian Gateway 的优势在于这些用例可以组合使用。单个部署可以：
 
 - 作为主要的 Kubernetes ingress 网关
 - 将 AI 流量路由到多个提供商并施加基于 token 的速率限制
@@ -365,7 +366,7 @@ Nantian Gateway的优势在于这些用例可以组合使用。单个部署可�
 
 ## 下一步
 
-- [快速开始：5 分钟部署](../getting-started/quick-start/)
-- [AI 网关功能指南](../features/ai-gateway/)
-- [Wasm 插件功能指南](../features/wasm-plugins/)
-- [生产部署指南](../installation/production/)
+- [快速开始：5 分钟部署](/zh/1.5/getting-started/quick-start/)
+- [AI 网关功能指南](/zh/1.5/features/ai-gateway/)
+- [Wasm 插件功能指南](/zh/1.5/features/wasm-plugins/)
+- [生产部署指南](/zh/1.5/installation/production/)

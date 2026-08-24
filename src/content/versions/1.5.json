@@ -44,14 +44,14 @@
         },
         {
           "label": "Comparison",
-          "link": "comparison",
+          "link": "overview/comparison",
           "translations": {
             "zh-CN": "项目对比"
           }
         },
         {
           "label": "Use Cases",
-          "link": "use-cases",
+          "link": "overview/use-cases",
           "translations": {
             "zh-CN": "适用场景"
           }
