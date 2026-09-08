@@ -13,9 +13,27 @@ if (
 ) {
   const mobileNavLinks = mobileMenu.querySelectorAll('.mobile-nav-link');
   let isMenuOpen = false;
+  let isScrolled = null;
+  let scrollFrame = null;
+  const scheduleFrame = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
 
-  const updateNavbarScroll = () => {
-    navbar.classList.toggle('scrolled', window.scrollY > 10);
+  const syncNavbarScroll = () => {
+    scrollFrame = null;
+    const nextScrolled = window.scrollY > 10;
+    if (nextScrolled === isScrolled) {
+      return;
+    }
+
+    isScrolled = nextScrolled;
+    navbar.classList.toggle('scrolled', nextScrolled);
+  };
+
+  const requestNavbarScrollUpdate = () => {
+    if (scrollFrame !== null) {
+      return;
+    }
+
+    scrollFrame = scheduleFrame(syncNavbarScroll);
   };
 
   const openMenu = () => {
@@ -34,8 +52,8 @@ if (
     menuToggle.setAttribute('aria-expanded', 'false');
   };
 
-  updateNavbarScroll();
-  window.addEventListener('scroll', updateNavbarScroll, { passive: true });
+  syncNavbarScroll();
+  window.addEventListener('scroll', requestNavbarScrollUpdate, { passive: true });
 
   menuToggle.addEventListener('click', () => {
     if (isMenuOpen) {

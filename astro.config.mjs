@@ -12,6 +12,11 @@ export default defineConfig({
   build: {
     inlineStylesheets: 'auto',
   },
+  vite: {
+    build: {
+      chunkSizeWarningLimit: 750,
+    },
+  },
   markdown: {
     processor: unified({
       rehypePlugins: [[rehypeMermaid, { strategy: 'pre-mermaid' }]],

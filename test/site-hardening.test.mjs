@@ -7,6 +7,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const rootPath = fileURLToPath(root);
 const astroBinPath = fileURLToPath(new URL("./node_modules/astro/bin/astro.mjs", root));
+const astroCliArgs = ["--disable-warning=DEP0205", astroBinPath];
 let buildArtifactsReady = false;
 
 function read(path) {
@@ -16,7 +17,7 @@ function read(path) {
 function buildArtifacts() {
   if (buildArtifactsReady) return;
 
-  execFileSync(process.execPath, [astroBinPath, "build"], {
+  execFileSync(process.execPath, [...astroCliArgs, "build"], {
     cwd: rootPath,
     stdio: "pipe",
   });
@@ -35,8 +36,10 @@ function readArtifact(path) {
 test("default build command runs the Astro build without a browser install step", () => {
   const pkg = JSON.parse(read("package.json"));
 
-  assert.equal(pkg.scripts.build, "astro build && npm run build:llms && npm run build:markdown");
-  assert.equal(pkg.scripts["build:astro"], "astro build");
+  assert.equal(pkg.scripts.build, "npm run build:astro && npm run build:llms && npm run build:markdown");
+  assert.equal(pkg.scripts["build:astro"], "node --disable-warning=DEP0205 ./node_modules/astro/bin/astro.mjs build");
+  assert.equal(pkg.scripts.check, "node --disable-warning=DEP0205 ./node_modules/astro/bin/astro.mjs check");
+  assert.equal(pkg.scripts.lint, "npm run lint:js && npm run lint:md && npm run check");
   assert.equal(pkg.scripts.test, "node --test --test-concurrency=1 test/*.test.mjs");
   assert.equal(pkg.scripts["setup:browser"], undefined);
   assert.equal(pkg.scripts["setup:browser:ci"], undefined);
@@ -48,6 +51,13 @@ test("default build command runs the Astro build without a browser install step"
       `${name} should not install a browser now that mermaid renders client-side`,
     );
   }
+});
+
+test("Vite build budget matches the lazy Mermaid documentation bundle", () => {
+  const config = read("astro.config.mjs");
+
+  assert.match(config, /vite:\s*\{/);
+  assert.match(config, /chunkSizeWarningLimit:\s*750/);
 });
 
 test("CI runs the hardening tests and build without a browser install step", () => {
@@ -356,6 +366,7 @@ test("landing layouts derive canonical metadata and navbar links from route cont
   assert.match(landingLayout, /Astro\.url\.pathname/);
   assert.doesNotMatch(navbar, /<a\s+href='"\/"'/);
   assert.doesNotMatch(navbar, /switchHref:\s*lang === 'zh' \? '\/' : '\/zh\/'/);
+  assert.match(navbar, /aria-label=\{primaryNavAria\}/);
   assert.match(navbar, /<script is:inline src=\{navbarScriptUrl\}><\/script>/);
 });
 

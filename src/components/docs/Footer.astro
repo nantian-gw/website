@@ -1,5 +1,6 @@
 ---
 import DefaultFooter from '@astrojs/starlight/components/Footer.astro';
+import docsLandmarksScriptUrl from './docs-landmarks.client.js?url&no-inline';
 
 const isZh = Astro.url.pathname.startsWith('/zh/');
 
@@ -18,6 +19,9 @@ const labels = isZh
       contact: '联系我们',
       privacy: '隐私政策',
       terms: '服务条款',
+      mobileToc: '移动端本页目录',
+      desktopToc: '桌面端本页目录',
+      codeRegion: '文档代码块',
     }
   : {
       aria: 'Documentation footer',
@@ -33,6 +37,9 @@ const labels = isZh
       contact: 'Contact',
       privacy: 'Privacy Policy',
       terms: 'Terms of Service',
+      mobileToc: 'Mobile table of contents',
+      desktopToc: 'Desktop table of contents',
+      codeRegion: 'Documentation code block',
     };
 
 const docsPrefix = isZh ? '/zh' : '';
@@ -55,7 +62,14 @@ const links = [
 
 <DefaultFooter />
 
-<footer class="ntgw-docs-footer" aria-label={labels.aria}>
+<footer
+  class="ntgw-docs-footer"
+  aria-label={labels.aria}
+  data-ntgw-docs-footer
+  data-mobile-toc-label={labels.mobileToc}
+  data-desktop-toc-label={labels.desktopToc}
+  data-code-region-label={labels.codeRegion}
+>
   <h2>{labels.heading}</h2>
   <nav aria-label={labels.aria}>
     {
@@ -71,6 +85,8 @@ const links = [
     }
   </nav>
 </footer>
+
+<script is:inline src={docsLandmarksScriptUrl}></script>
 
 <style>
   .ntgw-docs-footer {

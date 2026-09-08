@@ -11,6 +11,7 @@ import { PNG } from 'pngjs';
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
 const astroBinPath = fileURLToPath(new URL('./node_modules/astro/bin/astro.mjs', root));
+const astroCliArgs = ['--disable-warning=DEP0205', astroBinPath];
 const baselineDir = fileURLToPath(new URL('./test/screenshots/baseline', root));
 const actualDir = fileURLToPath(new URL('./test/screenshots/actual', root));
 
@@ -51,7 +52,7 @@ async function buildSite() {
   if (existsSync(distDir)) {
     rmSync(distDir, { recursive: true, force: true });
   }
-  execFileSync(process.execPath, [astroBinPath, 'build'], {
+  execFileSync(process.execPath, [...astroCliArgs, 'build'], {
     cwd: rootPath,
     stdio: 'pipe',
     timeout: 120_000,
@@ -59,7 +60,7 @@ async function buildSite() {
 }
 
 async function startPreview() {
-  const server = spawn(process.execPath, [astroBinPath, 'preview', '--port', '4322'], {
+  const server = spawn(process.execPath, [...astroCliArgs, 'preview', '--port', '4322'], {
     cwd: rootPath,
     stdio: 'pipe',
   });

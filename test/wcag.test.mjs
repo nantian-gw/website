@@ -9,6 +9,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const rootPath = fileURLToPath(root);
 const astroBinPath = fileURLToPath(new URL("./node_modules/astro/bin/astro.mjs", root));
+const astroCliArgs = ["--disable-warning=DEP0205", astroBinPath];
 const distPath = fileURLToPath(new URL("./dist", root));
 
 // Skip in CI — WCAG tests need a full server, which is impractical in CI.
@@ -48,7 +49,7 @@ function build() {
   if (buildDone) return;
 
   rmSync(distPath, { recursive: true, force: true });
-  execFileSync(process.execPath, [astroBinPath, "build"], {
+  execFileSync(process.execPath, [...astroCliArgs, "build"], {
     cwd: rootPath,
     stdio: "pipe",
   });
@@ -57,7 +58,7 @@ function build() {
 
 function startServer() {
   return new Promise((resolve, reject) => {
-    serverProcess = spawn(process.execPath, [astroBinPath, "preview", "--port", "4324", "--host", "0.0.0.0"], {
+    serverProcess = spawn(process.execPath, [...astroCliArgs, "preview", "--port", "4324", "--host", "0.0.0.0"], {
       cwd: rootPath,
       stdio: "pipe",
     });
@@ -126,7 +127,7 @@ function stopServer() {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", async (t) => {
+test("WCAG 2.2 AA compliance: no violations on key pages", async (t) => {
   // Build the site
   build();
 
@@ -192,6 +193,7 @@ test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", a
               help: v.help,
               helpUrl: v.helpUrl,
               nodes: v.nodes.length,
+              targets: v.nodes.map((n) => n.target).flat(),
             })),
             passes: results.passes.length,
             incomplete: results.incomplete.length,
@@ -213,6 +215,7 @@ test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", a
             console.log(`\n  ⚠️  ${label}: ${minorModerate.length} minor/moderate violations`);
             for (const v of minorModerate) {
               console.log(`     - ${v.id} (${v.impact}): ${v.help}`);
+              console.log(`       Targets: ${v.nodes.map((n) => n.target).join(", ")}`);
             }
           }
 
@@ -222,6 +225,11 @@ test("WCAG 2.2 AA compliance: no critical or serious violations on key pages", a
             criticalSerious.length,
             0,
             `${label} has ${criticalSerious.length} critical/serious accessibility violation(s)`,
+          );
+          assert.strictEqual(
+            minorModerate.length,
+            0,
+            `${label} has ${minorModerate.length} minor/moderate accessibility violation(s)`,
           );
         } finally {
           await page.close();

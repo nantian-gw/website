@@ -112,12 +112,106 @@ test("landing page JSON-LD scripts are explicitly inline", () => {
   assert.match(layout, /<script\b(?=[^>]*\bis:inline\b)(?=[^>]*\bset:html=\{JSON\.stringify\(orgJsonLd\)\})(?=[^>]*\btype="application\/ld\+json")[^>]*\/>/);
 });
 
+test("landing layout leaves landmark ownership to pages", () => {
+  const layout = read("src/layouts/LandingLayout.astro");
+  const home = read("src/pages/index.astro");
+  const zhHome = read("src/pages/zh/index.astro");
+  const contentLayout = read("src/layouts/ContentLayout.astro");
+
+  assert.doesNotMatch(layout, /<main>\s*<slot\s*\/>\s*<\/main>/);
+  assert.match(home, /<Navbar[\s\S]*<main>[\s\S]*<Hero[\s\S]*<\/main>[\s\S]*<Footer/);
+  assert.match(zhHome, /<Navbar[\s\S]*<main>[\s\S]*<Hero[\s\S]*<\/main>[\s\S]*<Footer/);
+  assert.match(contentLayout, /<Navbar[\s\S]*<main class="content-page">[\s\S]*<\/main>[\s\S]*<Footer/);
+});
+
 test("quick start copy logic no longer falls back to execCommand", () => {
   const client = read("src/components/landing/quickstart.client.js");
 
   assert.match(client, /navigator\.clipboard/);
   assert.match(client, /writeText/);
   assert.doesNotMatch(client, /document\.execCommand\s*\(/);
+});
+
+test("landing navbar scroll updates are frame-batched and state-guarded", () => {
+  const client = read("src/components/landing/navbar.client.js");
+
+  assert.match(client, /scheduleFrame\(syncNavbarScroll\)/);
+  assert.match(client, /scrollFrame !== null/);
+  assert.match(client, /nextScrolled === isScrolled/);
+  assert.match(client, /classList\.toggle\('scrolled', nextScrolled\)/);
+  assert.match(client, /addEventListener\('scroll', requestNavbarScrollUpdate, \{ passive: true \}\)/);
+});
+
+test("quick start copy button data is resolved before the click handler", () => {
+  const client = read("src/components/landing/quickstart.client.js");
+  const clickHandlerIndex = client.indexOf("button.addEventListener('click'");
+
+  assert.ok(clickHandlerIndex > 0, "missing copy button click handler");
+  for (const token of [
+    "const cmd = button.dataset.copy;",
+    "const copyLabel = button.dataset.copyLabel;",
+    "const copiedLabel = button.dataset.copiedLabel;",
+    "const label = button.querySelector('.code-copy-label');",
+  ]) {
+    const tokenIndex = client.indexOf(token);
+    assert.ok(tokenIndex > 0 && tokenIndex < clickHandlerIndex, `${token} should be resolved before click handling`);
+  }
+
+  const clickHandler = client.slice(clickHandlerIndex);
+  assert.doesNotMatch(clickHandler, /dataset\.(copy|copyLabel|copiedLabel)/);
+  assert.doesNotMatch(clickHandler, /querySelector\('\.code-copy-label'\)/);
+});
+
+test("LLM generation CLI reuses one pass of page data for both outputs", () => {
+  const script = read("scripts/generate-llms-txt.mjs");
+  const mainBlock = extractBlock(script, "export function main");
+
+  assert.match(script, /function collectSidebarPageData\(distDir, sidebar\)/);
+  assert.match(script, /export function generateLlmsFiles\(distDir = defaultDistDir, sidebar = docsSidebar\)/);
+  assert.match(script, /const sidebarSections = collectSidebarPageData\(distDir, sidebar\)/);
+  assert.match(mainBlock, /generateLlmsFiles\(distDir\)/);
+  assert.doesNotMatch(mainBlock, /generateLlmsTxt\(distDir\)/);
+  assert.doesNotMatch(mainBlock, /generateLlmsFullTxt\(distDir\)/);
+});
+
+test("docs table-of-contents landmarks receive unique accessible names", () => {
+  const footer = read("src/components/docs/Footer.astro");
+  const client = read("src/components/docs/docs-landmarks.client.js");
+
+  assert.match(footer, /mobileToc:\s*'Mobile table of contents'/);
+  assert.match(footer, /desktopToc:\s*'Desktop table of contents'/);
+  assert.match(footer, /codeRegion:\s*'Documentation code block'/);
+  assert.match(footer, /import docsLandmarksScriptUrl from '\.\/docs-landmarks\.client\.js\?url&no-inline'/);
+  assert.match(footer, /data-ntgw-docs-footer/);
+  assert.match(footer, /data-mobile-toc-label=\{labels\.mobileToc\}/);
+  assert.match(footer, /data-desktop-toc-label=\{labels\.desktopToc\}/);
+  assert.match(footer, /data-code-region-label=\{labels\.codeRegion\}/);
+  assert.match(footer, /<script is:inline src=\{docsLandmarksScriptUrl\}><\/script>/);
+  assert.doesNotMatch(footer, /<script is:inline define:vars=/);
+  assert.doesNotMatch(footer, /function annotateDocsLandmarks/);
+
+  assert.match(client, /document\.querySelector\('\[data-ntgw-docs-footer\]'\)/);
+  assert.match(client, /labels\.mobileTocLabel \|\| fallbackLabels\.mobileToc/);
+  assert.match(client, /labels\.desktopTocLabel \|\| fallbackLabels\.desktopToc/);
+  assert.match(client, /labels\.codeRegionLabel \|\| fallbackLabels\.codeRegion/);
+  assert.match(client, /mobile-starlight-toc nav/);
+  assert.match(client, /starlight-toc nav/);
+  assert.match(client, /nav\.setAttribute\('aria-label', label\)/);
+  assert.match(client, /nav\.removeAttribute\('aria-labelledby'\)/);
+  assert.match(client, /pre\[role="region"\]:not\(\[aria-label\]\):not\(\[aria-labelledby\]\):not\(\[title\]\)/);
+  assert.match(client, /region\.setAttribute\('aria-label', `\$\{codeRegionLabel\} \$\{index \+ 1\}\$\{suffix\}`\)/);
+  assert.match(client, /window\.requestAnimationFrame\?\.bind\(window\)/);
+  assert.match(client, /annotationPending/);
+  assert.match(client, /frame\(annotateDocsLandmarks\)/);
+  assert.match(client, /DOMContentLoaded', scheduleDocsLandmarkAnnotation, \{ once: true \}/);
+  assert.match(client, /new MutationObserver\(scheduleDocsLandmarkAnnotation\)/);
+  assert.match(client, /landmarkObserver\.observe\(document\.body \?\? document\.documentElement, \{/);
+  assert.match(client, /childList:\s*true/);
+  assert.match(client, /subtree:\s*true/);
+  assert.doesNotMatch(client, /attributeFilter/);
+  assert.doesNotMatch(client, /attributes:\s*true/);
+  assert.match(client, /document\.addEventListener\('astro:page-load', scheduleDocsLandmarkAnnotation\)/);
+  assert.match(client, /landmarkObserver\.disconnect\(\)/);
 });
 
 test("Starlight Banner override is removed while versioning stays enabled", () => {

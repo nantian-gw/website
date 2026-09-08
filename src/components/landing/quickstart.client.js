@@ -9,31 +9,37 @@ const copyText = async (value) => {
 const buttons = document.querySelectorAll('.code-copy-btn');
 
 buttons.forEach((button) => {
+  if (!(button instanceof HTMLElement)) {
+    return;
+  }
+
+  const cmd = button.dataset.copy;
+  const copyLabel = button.dataset.copyLabel;
+  const copiedLabel = button.dataset.copiedLabel;
+  const label = button.querySelector('.code-copy-label');
+
+  if (!cmd || !copyLabel || !copiedLabel || !(label instanceof HTMLElement)) {
+    return;
+  }
+
   let resetTimer;
 
+  const setCopied = (copied) => {
+    button.classList.toggle('copied', copied);
+    label.textContent = copied ? copiedLabel : copyLabel;
+  };
+
   button.addEventListener('click', async () => {
-    const cmd = button.dataset.copy;
-    const copyLabel = button.dataset.copyLabel;
-    const copiedLabel = button.dataset.copiedLabel;
-    const label = button.querySelector('.code-copy-label');
-
-    if (!cmd || !copyLabel || !copiedLabel || !label) {
-      return;
-    }
-
     try {
       await copyText(cmd);
-      button.classList.add('copied');
-      label.textContent = copiedLabel;
+      setCopied(true);
 
       window.clearTimeout(resetTimer);
       resetTimer = window.setTimeout(() => {
-        button.classList.remove('copied');
-        label.textContent = copyLabel;
+        setCopied(false);
       }, 2000);
     } catch {
-      button.classList.remove('copied');
-      label.textContent = copyLabel;
+      setCopied(false);
     }
   });
 });

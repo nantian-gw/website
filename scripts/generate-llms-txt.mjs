@@ -91,8 +91,21 @@ function extractText(html) {
     .trim();
 }
 
-export function generateLlmsTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
-  const sidebarSections = sidebarSectionsFromConfig(sidebar);
+function collectSidebarPageData(distDir, sidebar) {
+  return sidebarSectionsFromConfig(sidebar).map((section) => ({
+    label: section.label,
+    pages: section.pages.map((page) => {
+      const html = readHtml(distDir, page.path);
+      return {
+        ...page,
+        ...extractMeta(html),
+        text: extractText(html),
+      };
+    }),
+  }));
+}
+
+function writeLlmsTxt(distDir, sidebarSections) {
   let llms = `# Nantian Gateway
 > High-performance Kubernetes Gateway API implementation with Go control plane, Rust data plane, and built-in AI gateway capabilities.
 
@@ -101,10 +114,9 @@ export function generateLlmsTxt(distDir = defaultDistDir, sidebar = docsSidebar)
   for (const section of sidebarSections) {
     llms += `## ${section.label}\n`;
     for (const page of section.pages) {
-      const html = readHtml(distDir, page.path);
-      const { title, description } = extractMeta(html);
-      const displayTitle = title || page.label || page.path.replace(/\/$/, "").split("/").pop();
-      const desc = description ? `: ${description}` : "";
+      const displayTitle =
+        page.title || page.label || page.path.replace(/\/$/, "").split("/").pop();
+      const desc = page.description ? `: ${page.description}` : "";
       llms += `- [${displayTitle}](${siteUrl}/${page.path})${desc}\n`;
     }
     llms += "\n";
@@ -118,16 +130,13 @@ export function generateLlmsTxt(distDir = defaultDistDir, sidebar = docsSidebar)
   return llms;
 }
 
-export function generateLlmsFullTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
-  const sidebarSections = sidebarSectionsFromConfig(sidebar);
+function writeLlmsFullTxt(distDir, sidebarSections) {
   const parts = ["# Nantian Gateway — Full Documentation\n\n"];
 
   for (const section of sidebarSections) {
     for (const page of section.pages) {
-      const html = readHtml(distDir, page.path);
-      const text = extractText(html);
-      if (text && text.length > 50) {
-        parts.push(`## ${page.path}\n\n${text}\n\n`);
+      if (page.text && page.text.length > 50) {
+        parts.push(`## ${page.path}\n\n${page.text}\n\n`);
       }
     }
   }
@@ -140,10 +149,25 @@ export function generateLlmsFullTxt(distDir = defaultDistDir, sidebar = docsSide
   return full;
 }
 
+export function generateLlmsTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
+  return writeLlmsTxt(distDir, collectSidebarPageData(distDir, sidebar));
+}
+
+export function generateLlmsFullTxt(distDir = defaultDistDir, sidebar = docsSidebar) {
+  return writeLlmsFullTxt(distDir, collectSidebarPageData(distDir, sidebar));
+}
+
+export function generateLlmsFiles(distDir = defaultDistDir, sidebar = docsSidebar) {
+  const sidebarSections = collectSidebarPageData(distDir, sidebar);
+  return {
+    llms: writeLlmsTxt(distDir, sidebarSections),
+    full: writeLlmsFullTxt(distDir, sidebarSections),
+  };
+}
+
 export function main(distDir = defaultDistDir) {
   console.log("Generating llms.txt files from built site...");
-  generateLlmsTxt(distDir);
-  generateLlmsFullTxt(distDir);
+  generateLlmsFiles(distDir);
   console.log("Done.");
 }
 
